@@ -1,6 +1,6 @@
 # CodeStats
 
-odeStats 是一个完全自研的轻量级 Java Web 平台，底层基于迷你 Tomcat 和 IoC 容器，展示了从零构建企业级框架的核心技术。
+CodeStats 是一个完全自研的轻量级 Java Web 平台，底层基于迷你 Tomcat 和 IoC 容器，展示了从零构建企业级框架的核心技术。
 
 📦 分层架构
 表现层：HTML5/CSS3/JS 前端 + WebSocket

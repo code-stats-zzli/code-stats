@@ -1,0 +1,98 @@
+项目根目录/
+├── src/main/java/
+│   ├── com/
+│   │   ├── framework/
+│   │   │   ├── tomcat/
+│   │   │   │   ├── Bootstrap.java                      // 启动入口
+│   │   │   │   ├── Catalina.java                       // 服务器组装器（load/start）
+│   │   │   │   ├── connector/
+│   │   │   │   │   ├── Connector.java                  // 网络连接器（线程池 + ServerSocket）
+│   │   │   │   │   ├── Request.java                    // HTTP 请求解析
+│   │   │   │   │   └── Response.java                   // HTTP 响应构建与发送
+│   │   │   │   ├── container/
+│   │   │   │   │   ├── Container.java                  // 容器接口（层次结构基础）
+│   │   │   │   │   ├── ContainerBase.java              // 容器抽象基类
+│   │   │   │   │   ├── Context.java                    // Context 接口（Web 应用上下文）
+│   │   │   │   │   ├── Engine.java                     // Engine 接口（顶层处理引擎）
+│   │   │   │   │   ├── Host.java                       // Host 接口（虚拟主机）
+│   │   │   │   │   ├── Pipeline.java                   // 管道接口
+│   │   │   │   │   ├── Server.java                     // Server 接口（顶级容器）
+│   │   │   │   │   ├── Service.java                    // Service 接口（连接器 + 引擎）
+│   │   │   │   │   ├── Wrapper.java                    // Wrapper 接口（Servlet 包装器）
+│   │   │   │   │   ├── StandardContext.java            // 标准 Context 实现（含 servlet/filter 映射、类加载器）
+│   │   │   │   │   ├── StandardEngine.java             // 标准 Engine 实现
+│   │   │   │   │   ├── StandardHost.java               // 标准 Host 实现
+│   │   │   │   │   ├── StandardServer.java             // 标准 Server 实现
+│   │   │   │   │   ├── StandardService.java            // 标准 Service 实现
+│   │   │   │   │   ├── StandardWrapper.java            // 标准 Wrapper 实现（初始化 Servlet、构建过滤链）
+│   │   │   │   │   ├── SimplePipeline.java             // 管道默认实现（Valve 链式调用）
+│   │   │   │   │   └── Valve.java                      // 阀门接口（拦截器）
+│   │   │   │   ├── core/
+│   │   │   │   │   ├── Lifecycle.java                  // 生命周期接口
+│   │   │   │   │   ├── LifecycleEvent.java             // 生命周期事件
+│   │   │   │   │   ├── LifecycleListener.java          // 生命周期监听器接口
+│   │   │   │   │   └── LifecycleState.java             // 生命周期状态枚举
+│   │   │   │   ├── filter/
+│   │   │   │   │   ├── Filter.java                     // 过滤器接口
+│   │   │   │   │   ├── FilterChain.java                // 过滤器链接口
+│   │   │   │   │   ├── FilterConfig.java               // 过滤器配置
+│   │   │   │   │   └── ApplicationFilterChain.java     // 过滤器链实现
+│   │   │   │   ├── listener/
+│   │   │   │   │   ├── ServletContextListener.java     // Servlet 上下文监听器接口
+│   │   │   │   │   ├── ServletContextEvent.java        // Servlet 上下文事件
+│   │   │   │   │   └── ContextListenerDemo.java        // 内置示例监听器
+│   │   │   │   ├── loader/
+│   │   │   │   │   └── WebappClassLoader.java          // Web 应用类加载器
+│   │   │   │   ├── servlet/
+│   │   │   │   │   ├── Servlet.java                    // Servlet 接口
+│   │   │   │   │   ├── HttpServlet.java                // HttpServlet 抽象类
+│   │   │   │   │   └── HelloServlet.java               // 测试用 HelloServlet（框架示例）
+│   │   │   │   └── util/
+│   │   │   │       ├── PackageScanner.java             // 类扫描工具（支持通配符）
+│   │   │   │       └── ServletMapping.java             // Servlet 映射关系存储（静态容器）
+│   │   │   ├── spring/
+│   │   │   │   ├── annotation/
+│   │   │   │   │   ├── Autowired.java                  // @Autowired 自动注入
+│   │   │   │   │   ├── Controller.java                 // @Controller 控制器
+│   │   │   │   │   ├── Mapper.java                     // @Mapper MyBatis 映射器
+│   │   │   │   │   ├── Repository.java                 // @Repository 仓库层
+│   │   │   │   │   ├── RequestMapping.java             // @RequestMapping 请求映射
+│   │   │   │   │   ├── RequestParam.java               // @RequestParam 请求参数
+│   │   │   │   │   ├── ResponseBody.java               // @ResponseBody 响应体标记
+│   │   │   │   │   └── (Service.java)                  // @Service 注解（代码引用但未提供文件，推测存在）
+│   │   │   │   ├── config/
+│   │   │   │   │   └── ConfigLoader.java               // 配置文件加载器 (application.properties)
+│   │   │   │   ├── ioc/
+│   │   │   │   │   └── SimpleApplicationContext.java   // 简易 IoC 容器（扫描、创建 bean、注入）
+│   │   │   │   └── mvc/
+│   │   │   │       ├── DispatcherServlet.java          // 前端控制器（Handler 映射 + 反射调用）
+│   │   │   │       ├── HandlerMapping.java             // Handler 映射实体（备用）
+│   │   │   │       ├── ModelAndView.java               // 模型与视图对象
+│   │   │   │       └── ViewResolver.java               // 视图解析器（简单拼接 HTML）
+│   │   │   ├── mybatis/
+│   │   │   │   ├── annotation/
+│   │   │   │   │   └── Select.java                     // @Select 注解（SQL 查询 + 超时）
+│   │   │   │   └── proxy/
+│   │   │   │       └── MapperProxy.java                // Mapper 接口动态代理（JDK Proxy）
+│   │   │   ├── jdbc/
+│   │   │   │   ├── JdbcTemplate.java                   // JDBC 模板（查询、超时支持）
+│   │   │   │   └── DataSourceUtils.java                // 数据源工具（建表、初始化数据）
+│   │   │   └── pool/
+│   │   │       ├── SimpleDataSource.java               // 简易连接池（Builder 模式）
+│   │   │       └── PooledConnection.java               // 带归还逻辑的连接包装类
+│   │   └── demo/
+│   │       └── business/
+│   │           └── assistance/
+│   │               └── table/
+│   │                   └── mysql/
+│   │                       ├── controller/
+│   │                       │   ├── HelloController.java      // Hello 控制器示例
+│   │                       │   └── UserController.java       // User 控制器示例
+│   │                       ├── service/
+│   │                       │   └── UserService.java          // 用户服务层（调用 Repository 和 Mapper）
+│   │                       ├── repository/
+│   │                       │   └── UserRepository.java       // 用户仓库层（模拟数据）
+│   │                       └── mapper/
+│   │                           └── UserMapper.java            // 用户 Mapper 接口（@Select 注解）
+│   └── resources/
+│       └── application.properties                      // 外部配置文件（端口、数据库、扫描包等）

@@ -1,0 +1,13 @@
+package com.framework.tomcat.container;
+
+import com.framework.tomcat.connector.Request;
+import com.framework.tomcat.connector.Response;
+
+public interface Pipeline {
+    Valve getBasic();
+    void setBasic(Valve valve);
+    void addValve(Valve valve);
+    Valve[] getValves();
+    void removeValve(Valve valve);
+    void invoke(Request request, Response response) throws Exception;
+}

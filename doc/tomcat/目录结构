@@ -1,0 +1,42 @@
+com.codestats.tomcat/
+├── Bootstrap.java                 # 启动入口
+├── Catalina.java                  # 核心控制器（简化，直接构建容器）
+├── core/
+│   ├── Lifecycle.java             # 生命周期接口
+│   ├── LifecycleState.java        # 生命周期状态枚举
+│   ├── LifecycleEvent.java        # 生命周期事件
+│   └── LifecycleListener.java     # 生命周期监听器接口
+├── container/
+│   ├── Container.java             # 容器接口
+│   ├── Pipeline.java              # 管道接口
+│   ├── Valve.java                 # 阀门接口
+│   ├── StandardServer.java
+│   ├── StandardService.java
+│   ├── StandardEngine.java
+│   ├── StandardHost.java
+│   ├── StandardContext.java
+│   ├── StandardWrapper.java
+│   ├── SimplePipeline.java
+│   ├── AccessLogValve.java        # 示例阀门（记录请求）
+│   └── ContainerBase.java         # 容器抽象基类
+├── connector/
+│   ├── Connector.java
+│   ├── Request.java
+│   └── Response.java
+├── servlet/
+│   ├── Servlet.java               # Servlet 接口
+│   ├── HttpServlet.java           # 简单 HTTP Servlet 基类
+│   └── HelloServlet.java
+├── filter/
+│   ├── Filter.java
+│   ├── FilterChain.java
+│   ├── FilterConfig.java
+│   └── ApplicationFilterChain.java
+├── listener/
+│   ├── ServletContextListener.java
+│   ├── ServletContextEvent.java
+│   └── ContextListenerDemo.java   # 示例监听器
+├── loader/
+│   └── WebappClassLoader.java
+└── util/
+    └── ServletMapping.java        # 映射管理（扩展为 Context 级别）

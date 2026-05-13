@@ -1,0 +1,108 @@
+项目根目录/
+├── src/main/java/
+│   ├── com/
+│   │   ├── framework/
+│   │   │   ├── tomcat/
+│   │   │   │   ├── Bootstrap.java
+│   │   │   │   ├── Catalina.java
+│   │   │   │   ├── connector/
+│   │   │   │   │   ├── Connector.java
+│   │   │   │   │   ├── Request.java
+│   │   │   │   │   └── Response.java
+│   │   │   │   ├── container/
+│   │   │   │   │   ├── Container.java
+│   │   │   │   │   ├── ContainerBase.java
+│   │   │   │   │   ├── Context.java
+│   │   │   │   │   ├── Engine.java
+│   │   │   │   │   ├── Host.java
+│   │   │   │   │   ├── Pipeline.java
+│   │   │   │   │   ├── Server.java
+│   │   │   │   │   ├── Service.java
+│   │   │   │   │   ├── Wrapper.java
+│   │   │   │   │   ├── StandardContext.java
+│   │   │   │   │   ├── StandardEngine.java
+│   │   │   │   │   ├── StandardHost.java
+│   │   │   │   │   ├── StandardServer.java
+│   │   │   │   │   ├── StandardService.java
+│   │   │   │   │   ├── StandardWrapper.java
+│   │   │   │   │   ├── SimplePipeline.java
+│   │   │   │   │   └── Valve.java
+│   │   │   │   ├── core/
+│   │   │   │   │   ├── Lifecycle.java
+│   │   │   │   │   ├── LifecycleEvent.java
+│   │   │   │   │   ├── LifecycleListener.java
+│   │   │   │   │   └── LifecycleState.java
+│   │   │   │   ├── filter/
+│   │   │   │   │   ├── Filter.java
+│   │   │   │   │   ├── FilterChain.java
+│   │   │   │   │   ├── FilterConfig.java
+│   │   │   │   │   └── ApplicationFilterChain.java
+│   │   │   │   ├── listener/
+│   │   │   │   │   ├── ServletContextListener.java
+│   │   │   │   │   ├── ServletContextEvent.java
+│   │   │   │   │   └── ContextListenerDemo.java
+│   │   │   │   ├── loader/
+│   │   │   │   │   └── WebappClassLoader.java
+│   │   │   │   ├── servlet/
+│   │   │   │   │   ├── Servlet.java
+│   │   │   │   │   ├── HttpServlet.java
+│   │   │   │   │   └── HelloServlet.java
+│   │   │   │   └── util/
+│   │   │   │       ├── PackageScanner.java
+│   │   │   │       └── ServletMapping.java
+│   │   │   ├── spring/
+│   │   │   │   ├── annotation/
+│   │   │   │   │   ├── Autowired.java
+│   │   │   │   │   ├── Controller.java
+│   │   │   │   │   ├── Mapper.java
+│   │   │   │   │   ├── Repository.java
+│   │   │   │   │   ├── RequestMapping.java
+│   │   │   │   │   ├── RequestParam.java
+│   │   │   │   │   ├── ResponseBody.java
+│   │   │   │   │   └── Service.java
+│   │   │   │   ├── config/
+│   │   │   │   │   └── ConfigLoader.java
+│   │   │   │   ├── ioc/
+│   │   │   │   │   └── SimpleApplicationContext.java
+│   │   │   │   └── mvc/
+│   │   │   │       ├── DispatcherServlet.java
+│   │   │   │       ├── HandlerMapping.java
+│   │   │   │       ├── ModelAndView.java
+│   │   │   │       └── ViewResolver.java
+│   │   │   ├── mybatis/
+│   │   │   │   ├── annotation/
+│   │   │   │   │   └── Select.java
+│   │   │   │   └── proxy/
+│   │   │   │       └── MapperProxy.java
+│   │   │   ├── jdbc/
+│   │   │   │   ├── JdbcTemplate.java
+│   │   │   │   ├── DataSourceUtils.java
+│   │   │   │   └── metadata/
+│   │   │   │       ├── service/
+│   │   │   │       │   ├── DatabaseMetadataService.java         ✨ 新增
+│   │   │   │       │   └── SimpleDatabaseMetadataService.java   ✨ 新增（已修改）
+│   │   │   │       ├── model/
+│   │   │   │       │   ├── DatabaseInfo.java                   ✨ 新增
+│   │   │   │       │   ├── TableInfo.java                      ✨ 新增
+│   │   │   │       │   └── ColumnInfo.java                     ✨ 新增
+│   │   │   │       └── util/
+│   │   │   │           └── MetadataConverter.java              ✨ 新增
+│   │   │   └── pool/
+│   │   │       ├── SimpleDataSource.java
+│   │   │       └── PooledConnection.java
+│   │   └── demo/
+│   │       └── business/
+│   │           └── assistance/
+│   │               └── table/
+│   │                   └── mysql/
+│   │                       ├── controller/
+│   │                       │   ├── HelloController.java
+│   │                       │   └── UserController.java
+│   │                       ├── service/
+│   │                       │   └── UserService.java
+│   │                       ├── repository/
+│   │                       │   └── UserRepository.java
+│   │                       └── mapper/
+│   │                           └── UserMapper.java
+├── src/main/resources/
+│   └── application.properties

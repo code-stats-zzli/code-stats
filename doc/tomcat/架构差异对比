@@ -1,0 +1,37 @@
+不完全一致，但核心设计思路（多层容器、生命周期、Pipeline-Valve 责任链、过滤器链）高度相似。以下是详细对比：
+
+✅ 相同的核心逻辑
+方面	Tomcat 真实架构	本 Demo
+容器层次	Server → Service → Engine → Host → Context → Wrapper	✅ 完全一致（类名相同）
+生命周期	init()/start()/stop()/destroy() + 状态枚举 + 事件监听	✅ 实现了一致接口，并触发生命周期事件
+Pipeline + Valve 责任链	每个容器拥有 Pipeline，Valve 依次处理请求，最后调用下一层容器	✅ 结构相同，SimplePipeline + ValveChain 递归调用下层 Pipeline
+请求分发	Connector 接收请求 → Engine Pipeline → Host Pipeline → Context Pipeline → Wrapper → Servlet	✅ 完全一致的传递路径
+Filter 链	FilterChain 顺序执行 Filter，最后调用 Servlet	✅ ApplicationFilterChain 逻辑相同
+类加载器隔离	每个 Context 拥有独立的 WebappClassLoader	✅ StandardContext.init() 创建 WebappClassLoader，加载 Servlet
+监听器	ServletContextListener 等观察容器事件	✅ 实现了 ContextListenerDemo 监听 Context 启动/销毁
+❌ 不一样的关键差异
+差异点	真实 Tomcat	本 Demo	影响程度
+连接器（Connector）	支持 NIO/NIO2/APR，Keep-Alive，SSL，HTTP/2，AJP	仅简单 BIO，无连接复用，无 HTTPS	巨大
+Pipeline 默认阀门	每个容器都有内置阀门（如 StandardEngineValve、StandardHostValve 等）	没有内置 Valve，靠 else 分支硬编码递推逻辑	较大（缺少扩展性）
+请求解析	完整解析 HTTP 协议（Headers, Body, Parameters, Cookie, Multipart）	仅解析请求行（Method + URI），忽略 Headers/Body	巨大
+Servlet API 实现	完整实现 ServletRequest/ServletResponse（Session, Attributes, Dispatcher 等）	仅有 getUri()、write() 几个方法	巨大
+Wrapper 调用 Servlet	通过 FilterChain 后调用 WrapperValve 再调用 Servlet	直接在 StandardWrapper.invokeServlet() 中硬编码创建 FilterChain 并调用	中等（逻辑简化）
+Session 管理	完整 HttpSession（创建、持久化、钝化/活化）	无	巨大
+JSP/EL	Jasper 引擎编译 .jsp	无	巨大
+静态资源处理	DefaultServlet 处理静态文件、欢迎页面	无	较大
+热部署与重载	自动检测 WEB-INF/classes 或 lib 变化，重启 Context	无	较大
+配置方式	server.xml、web.xml 等声明式配置	硬编码在 Catalina.load() 中	较大
+JMX 管理	每个组件都是 MBean，可远程监控	无	中等
+错误处理	可配置错误页面，错误 Valve	固定 404 信息	中等
+异步 Servlet	支持 AsyncContext	无	较大
+安全（Realm/Login）	支持 JAAS、声明式安全约束	无	较大
+集群与会话复制	支持 DeltaManager、BackupManager	无	巨大
+📌 结论
+核心架构理念（容器层次 + 生命周期 + Pipeline-Valve + FilterChain + 类加载隔离）与 Tomcat 完全一致，是一个优秀的教学模型。
+
+执行逻辑（请求如何从 Connector 流入 Engine → Host → Context → Wrapper → Servlet）流程相同。
+
+具体实现细节（如连接器 I/O 模型、协议解析、默认阀门、Session、JSP 等）大量简化或缺失，因此不是完全一致。
+
+一句话概括：骨架相同，血肉缺失。如果将此 Demo 比作一个“Tomcat 的微缩模型”，它能够清晰展示 Tomcat 是如何将请求层层传递并最终交给 Servlet 处理的，但距离生产可用的 Tomcat 还差十万八千里。
+

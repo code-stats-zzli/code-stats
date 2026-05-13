@@ -1,0 +1,171 @@
+项目结构
+text
+com.codestats
+├── Application.java                     // 主入口，调用 CodestatsEngine.run()
+├── bootstrap
+│   └── CodestatsEngine.java             // 引擎：加载配置、判断 GUI/Console，启动 Launcher
+├── config
+│   ├── Config.java                      // 配置对象（Builder 模式），包含所有参数
+│   └── ConfigLoader.java                // 配置加载：yaml → 环境变量 → 命令行参数，优先级递增
+├── launcher
+│   ├── Launcher.java                    // 启动器接口
+│   ├── ConsoleLauncher.java             // 控制台启动器：构建默认 Pipeline 并执行
+│   └── GuiLauncher.java                 // GUI 启动器：打开 CodeStatsGUI 窗口
+├── gui
+│   └── CodeStatsGUI.java                // Swing GUI，包含配置面板、进度条、结果表格、摘要
+├── core
+│   ├── FileInfo.java                    // 文件统计信息：路径、语言、各类行数、复杂度
+│   ├── StatisticsResult.java            // 全局结果：文件列表、总计、按语言汇总，含 LanguageSummary 内部类
+│   ├── ProgressListener.java            // 进度监听接口
+│   └── ProgressMonitor.java             // 进度监控：原子计数器，通知监听器，控制台打印进度
+├── pipeline
+│   ├── Stage.java                       // 流水线阶段接口：T → R
+│   ├── Pipeline.java                    // 流水线：持有 Stage 列表，顺序执行；工厂方法 createDefault()
+│   ├── CollectStage.java                // 收集阶段：遍历目录，使用 FilterChain 过滤，返回 Path 列表
+│   ├── AnalyzeStage.java                // 分析阶段：单文件分析，检测语言、统计行/注释/空白/复杂度
+│   ├── ParallelAnalyzeStage.java        // 并行分析阶段：线程池并发执行 AnalyzeStage，可携带 ProgressMonitor
+│   ├── AggregateStage.java              // 聚合阶段：排序并构建 StatisticsResult
+│   └── OutputStage.java                 // 输出阶段：根据配置选择格式化器（Console/CSV/JSON）输出
+├── collector
+│   └── FileCollector.java               // 备用的文件收集器（未在主流程中使用，功能与 CollectStage 类似）
+├── filter
+│   ├── FileFilter.java                  // 过滤器接口
+│   ├── CompositeFilter.java             // 组合过滤器（全部满足才通过）
+│   ├── ExtensionFilter.java             // 扩展名过滤
+│   ├── ExcludePathFilter.java           // 排除路径关键字过滤
+│   ├── GitIgnoreFilter.java             // .gitignore 规则过滤
+│   └── FilterChain.java                 // 另一版过滤器链（与 CompositeFilter 重复，未在主流程使用）
+├── language
+│   ├── Language.java                    // 语言枚举（JAVA, PYTHON, GO…）
+│   ├── LanguageSpec.java                // 语言规格：单行/块注释符，关联扩展名
+│   └── LanguageDetector.java            // 语言检测：扩展名映射 + shebang 检测
+├── sorter
+│   ├── ResultSorter.java                // 排序器接口
+│   ├── SorterRegistry.java              // 排序器注册表：按名字获取 Comparator<FileInfo>
+│   ├── ByLinesSorter.java               // 按总行数降序
+│   ├── ByNameSorter.java                // 按文件名（路径）排序（与ByFileNameSorter重复）
+│   ├── ByFileNameSorter.java            // 按文件名排序
+│   └── ByLanguageSorter.java            // 按语言名排序
+├── statistics
+│   ├── StatisticStrategy.java           // 统计策略接口
+│   └── LineCountStrategy.java           // 行数统计策略（未在主流使用，逻辑与 AnalyzeStage 类似）
+├── output
+│   ├── OutputFormatter.java             // 抽象格式化器
+│   ├── OutputWriter.java                // 输出目标接口
+│   ├── ConsoleFormatter.java            // 控制台格式化输出
+│   ├── CsvFormatter.java                // CSV 格式化输出
+│   ├── JsonFormatter.java               // JSON 格式化输出
+│   ├── ConsoleWriter.java               // 控制台写入器（System.out）
+│   └── FileWriter.java                  // 文件写入器
+├── util
+│   └── GitIgnoreLoader.java             // .gitignore 文件加载器（生成 PathMatcher 列表）
+└── test
+    └── SimpleSwingApp.java              // 示例 Swing 程序（用于测试）
+完整执行流程
+1. 启动入口 (Application.main)
+调用 CodestatsEngine.run(Application.class, args)
+
+2. 引擎处理 (CodestatsEngine.run)
+调用 ConfigLoader.load(args) 获取配置对象 Config
+
+判断命令行是否包含 --gui：
+
+如果没有 --gui → guiMode = true → 使用 GuiLauncher
+
+如果有 --gui → guiMode = false → 使用 ConsoleLauncher
+
+调用相应 Launcher.launch(config) 启动
+
+3. 配置加载 (ConfigLoader.load)
+三层覆盖，优先级从低到高：
+
+读取默认配置文件 config.yaml（如果存在）
+读取环境变量（CODE_STATS_ROOT_DIR，CODE_STATS_EXTENSIONS 等）
+解析命令行参数（-d, -e, -x, -c, -t, -s, -o, -f, --no-gitignore）
+构建并返回 Config 对象
+
+4. 启动器执行
+A. 控制台模式 (ConsoleLauncher)
+调用 Pipeline.createDefault(config) 构建流水线
+
+流水线结构（按顺序）：
+
+CollectStage：使用 CompositeFilter（包含 ExtensionFilter、ExcludePathFilter、GitIgnoreFilter，若配置开启）递归收集文件，返回 List<Path>
+ParallelAnalyzeStage：使用固定线程池（线程数由配置决定），对每个 Path 并发执行 AnalyzeStage.process()，返回 List<FileInfo>。进度监控可选传入，当前传入 null 未监控。
+AggregateStage：将 List<FileInfo> 按配置的排序规则排序，然后逐个添加进 StatisticsResult 进行聚合，返回 StatisticsResult
+OutputStage：根据 outputFormat 选择 ConsoleFormatter、CsvFormatter 或 JsonFormatter，并写入目标（控制台或文件），返回 Void。
+调用 pipeline.execute(config.getRootDir())，触发整个流程
+
+B. GUI 模式 (GuiLauncher)
+在事件分发线程中创建并显示 CodeStatsGUI 窗口
+
+用户在 GUI 界面中手动调整参数（根目录、扩展名、排除路径、线程数、排序方式等）
+
+点击 “Start Analysis” 按钮触发 startAnalysis()
+
+GUI 内部构建与命令行类似的流水线，但通过 SwingWorker 异步执行：
+
+CollectStage 收集文件
+创建 ProgressMonitor 并绑定到进度条
+ParallelAnalyzeStage 并行分析（携带 monitor）
+执行排序和聚合（手动排序 + 构建 StatisticsResult）
+使用 tableModel 更新表格、在摘要区域显示统计信息
+进度条与列表实时更新
+
+5. 核心阶段详解
+收集阶段：通过 Files.walkFileTree 遍历目录，过滤器链进行扩展名、排除路径、.gitignore 判断，收集所有符合条件的文件路径。
+
+分析阶段（单文件）：
+
+创建 FileInfo 对象
+
+使用 LanguageDetector 检测语言（先通过扩展名，失败则读取首行 shebang）
+
+根据语言对应的 LanguageSpec 读取注释标记；如果都无法识别，仅统计总行数
+
+逐行读取文件，统计总行、空行、注释行（支持块注释跨行）、代码行，同时利用正则匹配统计复杂度关键字（if, else, for, while...）的出现次数作为复杂度
+
+并行分析：将文件列表分发到线程池，每个文件调用 AnalyzeStage，完成后通过 ProgressMonitor 更新进度
+
+聚合：依据配置的排序字段（lines/name/language/complexity）对 List<FileInfo> 排序，然后聚合到 StatisticsResult（累加各类行数、按语言汇总）
+
+输出格式化：
+
+ConsoleFormatter：表格风格文本输出
+
+CsvFormatter：CSV格式（带转义）
+
+JsonFormatter：使用 Jackson 输出结构化 JSON
+
+6. 关键设计点
+过滤器链：使用组合模式，支持灵活扩展（如 GitIgnoreFilter）
+
+流水线模式：Stage 接口统一处理步骤，Pipeline 顺序执行
+
+并行处理：ParallelAnalyzeStage 利用 CompletableFuture 和固定线程池
+
+进度可插拔：ProgressMonitor 支持监听器，在 GUI 和控制台均可复用
+
+配置优先级：YAML < 环境变量 < 命令行参数
+
+语言检测：扩展名映射为主，辅以 shebang 识别无扩展名脚本
+
+整体数据流
+text
+[CLI Args / YAML / Env] → Config
+                              ↓
+                       [Launcher]
+                       /          \
+              ConsoleLauncher    GuiLauncher
+                      |                |
+                     Pipeline       GUI (SwingWorker)
+                      |                |
+                CollectStage        手动构建流水线
+                      |                |
+                ParallelAnalyzeStage    |
+                      |                |
+                AggregateStage          |
+                      |                |
+                OutputStage            显示结果
+流程总结
+项目以配置驱动、流水线架构实现代码统计，支持多种输出格式（Console/CSV/JSON）和用户界面（CLI/GUI）。文件收集、并发分析、结果聚合和格式化输出各阶段独立解耦，易于扩展新的过滤器、语言支持和输出格式。

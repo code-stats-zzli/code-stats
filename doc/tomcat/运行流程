@@ -1,0 +1,169 @@
+该 Demo 完整运行类逻辑梳理
+下面按照启动顺序 → 请求处理链 → 生命周期事件 → 过滤器与监听器四个阶段，讲解代码的完整运行逻辑。
+
+一、启动阶段（Bootstrap + Catalina）
+入口：Bootstrap.main()
+
+创建 Catalina 实例，调用 load() → start()。
+
+加载配置 (Catalina.load())
+硬编码构建容器树（真实 Tomcat 解析 server.xml，这里手动组装）：
+
+text
+StandardServer
+  └─ StandardService ("Catalina")
+       ├─ Connector (port 8080)
+       └─ StandardEngine
+            └─ StandardHost ("localhost")
+                 └─ StandardContext ("/demo")
+                      ├─ 添加生命周期监听器 ContextListenerDemo
+                      ├─ 添加 Wrapper ("hello", HelloServlet)
+                      └─ 注册 Servlet 映射: "/hello" -> "hello"
+StandardServer、StandardService、StandardEngine、StandardHost、StandardContext、StandardWrapper 全部继承 ContainerBase，各自有 Pipeline。
+
+Connector 被设置到 Service，Service 持有 Engine。
+
+启动容器 (Catalina.start())
+调用 server.init() → server.start()，逐层递归：
+
+StandardServer.init() → 遍历 services 调用 init()
+
+StandardService.init() → 先 engine.init() 再 connector.init()
+
+StandardEngine.init() → 遍历 children（Host）调用 init()
+
+StandardHost.init() → 遍历 children（Context）调用 init()
+
+StandardContext.init() → 创建 WebappClassLoader，遍历 children（Wrapper）调用 init()
+
+StandardWrapper.init() → 使用父容器（Context）的类加载器加载 HelloServlet，实例化并调用 servlet.init()
+
+容器启动（start）
+同样的递归调用：start() 触发 START_EVENT 生命周期事件，并通知所有监听器。
+Connector.start() 启动 ServerSocket 监听线程。
+
+最终打印 Tomcat ready. Access http://localhost:8080/demo/hello，主线程永久 sleep。
+
+二、请求处理阶段（Connector → Pipeline → Valve → Filter → Servlet）
+连接器接收请求
+Connector 的 while(running) 循环中 serverSocket.accept()，每来一个连接，线程池执行 process(socket)。
+
+解析请求
+
+创建 Request 对象，调用 parse()：读取请求行，解析 method、uri、contextPath（例如 /demo/hello → contextPath=/demo，uri=/hello）。
+
+创建 Response 对象。
+
+定位 Engine 并调用始端 Pipeline
+service.getEngine() 得到 StandardEngine，调用 engine.getPipeline().invoke(request, response)。
+
+Pipeline 与 Valve 链的执行
+SimplePipeline.invoke() 创建一个 ValveChainImpl，按顺序执行：
+
+先执行所有普通 Valve（若有注册，示例中未添加）
+
+再执行 basic Valve（如果未设置，则进入默认处理逻辑）
+
+默认逻辑（在 ValveChainImpl.invokeNext() 的 else 分支中）根据当前容器类型递推：
+
+若容器是 Wrapper → 调用 wrapper.invokeServlet()（最终调用 Servlet）
+
+若容器是 Context → 根据 uri 找到 Servlet 映射名 → 找到子 Wrapper → wrapper.getPipeline().invoke()
+
+若容器是 Host → 根据 contextPath 找到子 Context → context.getPipeline().invoke()
+
+若容器是 Engine → 找到默认 Host（localhost） → host.getPipeline().invoke()
+
+以上形成了 Pipeline 嵌套调用，类似于责任链。
+
+StandardWrapper 处理
+
+invokeServlet() 方法中：
+
+从父容器 Context 中获取所有 Filter（context.findFilters()）
+
+创建 ApplicationFilterChain，将所有 Filter 加入，并设置 servletInstance
+
+调用 filterChain.doFilter(request, response)
+
+过滤器链执行
+
+ApplicationFilterChain.doFilter() 依次调用每个 Filter 的 doFilter()。
+
+若所有 Filter 执行完毕，则调用 servlet.service(request, response)。
+
+Servlet 处理
+
+HelloServlet 继承 HttpServlet，service() 方法根据 HTTP 方法分发到 doGet()。
+
+doGet() 获取 URI 中的名称，调用 response.write() 构建 HTML。
+
+执行完毕后，逐层返回。
+
+响应发送
+
+回到 Connector.process() 中，调用 response.send()：构造 HTTP 响应行、头部（Content-Type、Content-Length），写入 Socket 输出流。
+
+关闭连接
+断开 Socket，线程池线程归还。
+
+三、生命周期事件与监听器
+每个 Container 在 init()、start()、stop()、destroy() 方法中会调用 fireLifecycleEvent()，产生 LifecycleEvent 并通知所有注册的 LifecycleListener。
+
+示例中 StandardContext 添加了 ContextListenerDemo 监听器。
+当 Context 执行 start() 时，触发 START_EVENT，listener.lifecycleEvent() 调用 contextInitialized()，控制台打印 >>> Context Initialized: ...。
+停止时则调用 contextDestroyed。
+
+生命周期状态机：LifecycleState 枚举定义了从 NEW → INITIALIZING → INITIALIZED → STARTING_PREP → STARTING → STARTED → ... 等状态，getState() 可被外部查询。
+
+四、过滤器与监听器扩展点
+添加自定义 Filter：
+实现 Filter 接口，在 Catalina.load() 中创建实例，调用 init(FilterConfig) 初始化，然后 context.addFilter(filter, "filterName")。
+当请求到来，StandardWrapper.invokeServlet() 会将该 Filter 加入 ApplicationFilterChain，从而在 Servlet 前/后执行逻辑。
+
+添加自定义 Valve：
+实现 Valve 接口，调用 engine.getPipeline().addValve(new MyValve()) 或添加到任意容器的 Pipeline。
+Valve 中可以决定是否 chain.invokeNext() 继续传递，实现全局拦截（如访问日志、权限检查）。
+
+添加 Container 监听器：
+实现 LifecycleListener，观察任意容器的启动/停止事件。
+
+五、类加载器在请求处理中的作用
+初始化阶段：StandardContext.init() 创建 WebappClassLoader，指定 docBase 下的 WEB-INF/classes 和 lib。
+
+Wrapper 加载 Servlet：StandardWrapper.init() 调用 getLoader().loadClass(servletClass) → 返回 Class 并实例化。
+
+运行期：若 JSP 或动态类存在，也会通过该 ClassLoader 加载，实现应用隔离。
+
+（注：当前 Demo 未实现 JSP，但架构支持未来扩展）
+
+六、完整请求调用栈示例（URL /demo/hello）
+text
+Connector.process()
+  → Request.parse()  (uri="/hello", contextPath="/demo")
+  → service.getEngine().getPipeline().invoke()
+     → SimplePipeline 中 ValveChain 递归:
+         Engine.pipeline 未设置 basic → 找到 Host("localhost") → host.pipeline.invoke()
+           Host.pipeline 未设置 basic → 找到 Context("/demo") → context.pipeline.invoke()
+             Context.pipeline 未设置 basic → 找到 Wrapper("hello") → wrapper.pipeline.invoke()
+               Wrapper.pipeline 未设置 basic → wrapper.invokeServlet()
+                 → 创建 ApplicationFilterChain
+                 → 执行所有 Filter（若有）
+                 → servlet.service()
+                    → HelloServlet.doGet()
+                       → response.write(...)
+                 → 返回
+     → response.send()
+  → socket.close()
+七、总结：类逻辑分层
+层级	类/接口	职责
+启动层	Bootstrap, Catalina	组装容器树，触发生命周期
+容器层	Container, ContainerBase, Server, Service, Engine, Host, Context, Wrapper	定义父子关系，继承生命周期
+管道层	Pipeline, Valve, ValveChain, SimplePipeline	责任链模式处理请求，逐层传递
+连接层	Connector, Request, Response	接收 Socket，解析 HTTP，发送响应
+规范层	Servlet, HttpServlet, HelloServlet	业务逻辑
+过滤器层	Filter, FilterChain, ApplicationFilterChain	前置/后置处理
+监听器层	LifecycleListener, ServletContextListener, ContextListenerDemo	响应容器事件
+类加载器	WebappClassLoader	隔离 Web 应用类
+该 Demo 虽简陋，但完整演示了 Tomcat 的核心请求处理链条和容器生命周期模型。学习时建议结合调试模式，在关键方法（如 StandardWrapper.invokeServlet()、ValveChainImpl.invokeNext()）设置断点，观察调用栈。
+

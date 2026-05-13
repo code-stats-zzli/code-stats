@@ -1,0 +1,319 @@
+/* ========== 全局重置 ========== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: #f0f2f5;
+    color: #2c3e50;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ========== 顶部导航栏（页签加大） ========== */
+.topbar {
+    display: flex;
+    align-items: center;
+    background: #1e293b;
+    color: white;
+    padding: 0 32px;
+    height: 64px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 100;
+}
+.topbar-brand {
+    display: flex;
+    align-items: center;
+    margin-right: 40px;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+.brand-icon {
+    font-size: 28px;
+    margin-right: 10px;
+}
+.topbar-tabs {
+    display: flex;
+    flex: 1;
+    gap: 8px;
+}
+.topbar-tab {
+    background: none;
+    border: none;
+    color: #cbd5e1;
+    padding: 0 24px;
+    height: 64px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 3px solid transparent;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+}
+.topbar-tab:hover {
+    color: #ffffff;
+    background: rgba(255,255,255,0.05);
+}
+.topbar-tab.active {
+    color: #60a5fa;
+    border-bottom-color: #60a5fa;
+    background: rgba(96,165,250,0.1);
+}
+.tab-icon {
+    font-size: 20px;
+}
+.topbar-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+    font-size: 14px;
+    color: #94a3b8;
+}
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34,197,94,0.5);
+}
+
+/* ========== 主内容区 ========== */
+.main-content {
+    flex: 1;
+    overflow: hidden;
+}
+
+.tab-panel {
+    display: none;
+    height: 100%;
+}
+.tab-panel.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ========== 项目介绍 - 左右布局 ========== */
+.intro-layout {
+    display: flex;
+    height: 100%;
+}
+/* 左侧边栏 */
+.intro-sidebar {
+    width: 280px;
+    background: #ffffff;
+    border-right: 1px solid #e2e8f0;
+    padding: 24px 16px;
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+.sidebar-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 16px;
+    padding-left: 12px;
+    border-left: 4px solid #60a5fa;
+}
+.module-list {
+    list-style: none;
+}
+.module-list li {
+    padding: 14px 16px;
+    margin-bottom: 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 15px;
+    color: #475569;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+.module-list li:hover {
+    background: #f1f5f9;
+    color: #1e293b;
+}
+.module-list li.active {
+    background: #eff6ff;
+    color: #2563eb;
+    font-weight: 600;
+    box-shadow: inset 3px 0 0 #2563eb;
+}
+.module-icon {
+    font-size: 22px;
+    width: 30px;
+    text-align: center;
+}
+/* 右侧详细 */
+.intro-detail {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+#introIframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: white;
+}
+#introPlaceholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    overflow-y: auto;
+    z-index: 10;
+}
+.detail-placeholder {
+    text-align: center;
+}
+.detail-placeholder .placeholder-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+}
+/* 详细内容卡片（备用显示） */
+.detail-content {
+    max-width: 800px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    padding: 32px;
+}
+.detail-content h2 {
+    font-size: 28px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.detail-content p {
+    font-size: 15px;
+    line-height: 1.8;
+    color: #475569;
+    margin-bottom: 24px;
+}
+.detail-content .meta-info {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 20px;
+    margin-top: 20px;
+}
+.meta-info li {
+    list-style: none;
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: #64748b;
+}
+.tech-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+.tech-tag {
+    background: #e0f2fe;
+    color: #0369a1;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* ========== iframe 面板 ========== */
+.panel-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+}
+
+/* ========== 占位面板 ========== */
+.placeholder-panel {
+    text-align: center;
+    padding: 80px 20px;
+    margin: auto;
+    max-width: 500px;
+}
+.placeholder-icon {
+    font-size: 72px;
+    margin-bottom: 20px;
+}
+.placeholder-desc {
+    color: #64748b;
+    margin: 16px 0 24px;
+    font-size: 15px;
+}
+.placeholder-api {
+    margin: 25px auto;
+    text-align: left;
+    background: #f1f5f9;
+    padding: 20px;
+    border-radius: 10px;
+    font-family: 'Consolas', monospace;
+}
+.api-badge {
+    background: #2563eb;
+    color: white;
+    padding: 2px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-right: 8px;
+}
+.placeholder-api code {
+    display: block;
+    margin: 6px 0;
+    font-size: 13px;
+    color: #334155;
+}
+.btn-outline {
+    background: transparent;
+    border: 2px solid #2563eb;
+    color: #2563eb;
+    padding: 10px 28px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+.btn-outline:hover {
+    background: #2563eb;
+    color: white;
+}
+
+/* ========== Toast 提示 ========== */
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.toast {
+    background: #1e293b;
+    color: white;
+    padding: 14px 24px;
+    border-radius: 8px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+    font-size: 14px;
+    transition: opacity 0.3s;
+}
+.toast-error { background: #dc2626; }
+.toast-fade-out { opacity: 0; }

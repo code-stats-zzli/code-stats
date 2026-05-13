@@ -1,0 +1,40 @@
+com.codestats/
+├── engine/
+│   ├── CodeStatsEngine.java        // 主入口（类似 Spring Boot）
+│   └── EngineTemplate.java         // 模板方法（执行骨架）
+├── config/
+│   ├── Config.java                 // 配置对象（Builder + 加载器）
+│   ├── ConfigLoader.java           // 支持 CLI / YAML / 环境变量
+│   └── GitIgnoreLoader.java        // .gitignore 模式加载
+├── core/
+│   ├── FileInfo.java               // 文件统计信息（扩展，增加复杂度字段）
+│   ├── StatisticsResult.java       // 结果汇总（支持语言分组）
+│   └── ProgressMonitor.java        // 进度监控（可选）
+├── filter/
+│   ├── FileFilter.java             // 过滤器接口
+│   ├── CompositeFilter.java        // 责任链实现
+│   ├── ExtensionFilter.java        // 扩展名过滤
+│   ├── ExcludePathFilter.java      // 路径关键字排除
+│   └── GitIgnoreFilter.java        // .gitignore 模式过滤
+├── language/
+│   ├── Language.java               // 语言枚举
+│   ├── LanguageDetector.java       // 自动检测语言（扩展名+内容）
+│   ├── LanguageSpec.java           // 语言规范（注释语法、扩展名等）
+│   └── LanguageRegistry.java       // 内置 20+ 语言注册表
+├── statistics/
+│   ├── StatisticStrategy.java      // 统计策略接口
+│   ├── LineAndCommentCounter.java  // 基于状态机的精确计数
+│   ├── ComplexityEstimator.java    // 简易复杂度估算
+│   └── StatisticEngine.java        // 并行统计引擎（ForkJoin）
+├── output/
+│   ├── OutputFormatter.java        // 输出接口
+│   ├── ConsoleFormatter.java       // 控制台表格输出（无排序逻辑）
+│   ├── JsonFormatter.java          // JSON 输出
+│   ├── CsvFormatter.java           // CSV 输出
+│   └── OutputManager.java          // 工厂 + SPI 加载
+├── sorter/
+│   ├── ResultSorter.java           // 排序器接口
+│   ├── ByNameSorter.java
+│   ├── ByLinesSorter.java
+│   └── ByLanguageSorter.java       // 按语言分组排序
+└── Application.java                // 启动示例

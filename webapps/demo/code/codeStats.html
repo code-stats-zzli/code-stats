@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>代码分析 - CodeStats</title>
+    <link rel="stylesheet" href="../global-tech.css">
     <link rel="stylesheet" href="codeStats.css">
 </head>
 <body>
 <div class="layout">
-    <!-- 左侧模式选择栏 -->
     <aside class="sidebar">
         <h3 class="sidebar-title">分析模式</h3>
         <ul class="mode-list" id="modeList">
@@ -16,93 +16,29 @@
             <li class="mode-item disabled" data-mode="local">💻 本地分析（待实现）</li>
         </ul>
     </aside>
-
-    <!-- 右侧主区域 -->
     <main class="main">
-        <!-- 配置面板 -->
         <section class="config-panel" id="configPanel">
-            <!-- 原有配置内容保持不变 -->
             <h2>代码统计配置</h2>
             <div class="config-form">
-                <div class="form-row">
-                    <label>根目录:</label>
-                    <input type="text" id="rootDir" placeholder="例如: D:\work\space\CodeStats">
-                </div>
-                <div class="form-row">
-                    <label>扩展名 (逗号分隔):</label>
-                    <input type="text" id="extensions" value="java">
-                </div>
-                <div class="form-row">
-                    <label>排除路径 (逗号分隔):</label>
-                    <input type="text" id="excludePaths" placeholder="例如: test, target">
-                </div>
-                <div class="form-row">
-                    <label>排除注释:</label>
-                    <input type="checkbox" id="excludeComments" checked>
-                </div>
-                <div class="form-row">
-                    <label>线程数:</label>
-                    <input type="number" id="threadCount" min="1" max="32" value="4">
-                </div>
-                <div class="form-row">
-                    <label>排序方式:</label>
-                    <select id="sortBy">
-                        <option value="lines">行数</option>
-                        <option value="name">文件名</option>
-                        <option value="language">语言</option>
-                        <option value="complexity">复杂度</option>
-                    </select>
-                </div>
-                <div class="form-row">
-                    <label>启用文件合并:</label>
-                    <input type="checkbox" id="mergeEnabled">
-                </div>
-                <div class="form-row" id="mergeRow" style="display: none;">
-                    <label>合并输出文件:</label>
-                    <input type="text" id="mergeOutputFile" placeholder="例如: D:/output/merged.txt">
-                </div>
-                <div class="form-row">
-                <label>额外路径 (逗号分隔):</label>
-                <input type="text" id="extraPaths" placeholder="例如: D:/work/space/CodeStats/webapps/demo, C:/other">
-                 </div>
-
+                <div class="form-row"><label>根目录:</label><input type="text" id="rootDir" placeholder="例如: D:\work\space\CodeStats"></div>
+                <div class="form-row"><label>扩展名 (逗号分隔):</label><input type="text" id="extensions" value="java"></div>
+                <div class="form-row"><label>排除路径 (逗号分隔):</label><input type="text" id="excludePaths" placeholder="例如: test, target"></div>
+                <div class="form-row"><label>排除注释:</label><input type="checkbox" id="excludeComments" checked></div>
+                <div class="form-row"><label>线程数:</label><input type="number" id="threadCount" min="1" max="32" value="4"></div>
+                <div class="form-row"><label>排序方式:</label><select id="sortBy"><option value="lines">行数</option><option value="name">文件名</option><option value="language">语言</option><option value="complexity">复杂度</option></select></div>
+                <div class="form-row"><label>启用文件合并:</label><input type="checkbox" id="mergeEnabled"></div>
+                <div class="form-row" id="mergeRow" style="display: none;"><label>合并输出文件:</label><input type="text" id="mergeOutputFile" placeholder="例如: D:/output/merged.txt"></div>
+                <div class="form-row"><label>额外路径 (逗号分隔):</label><input type="text" id="extraPaths" placeholder="例如: D:/work/space/CodeStats/webapps/demo, C:/other"></div>
             </div>
-            <div class="action-bar">
-                <button id="analyzeBtn" class="btn-primary">开始分析</button>
-                <button id="resetBtn" class="btn-secondary">重置默认</button>
-            </div>
+            <div class="action-bar"><button id="analyzeBtn" class="btn-primary">开始分析</button><button id="resetBtn" class="btn-secondary">重置默认</button></div>
         </section>
-
-        <!-- 进度与结果区域 -->
         <section class="result-section">
-            <div class="progress-bar" id="progressBar" style="display: none;">
-                <div class="progress-fill" id="progressFill"></div>
-                <span id="progressText">分析中...</span>
-            </div>
-            <div class="result-tabs">
-                <button class="tab active" data-tab="files">文件列表</button>
-                <button class="tab" data-tab="summary">摘要统计</button>
-            </div>
-            <!-- 新增操作栏：导出表格CSV + 下载合并文件 -->
-            <div style="margin: 12px 0; display: flex; gap: 12px;" id="resultActions">
-                <button id="exportCsvBtn" class="btn-secondary" style="background:#10b981; color:white;">📎 导出表格为CSV</button>
-                <button id="downloadMergeBtn" class="btn-secondary" style="background:#3b82f6; color:white;" disabled>📥 下载合并文件</button>
-            </div>
+            <div class="progress-bar" id="progressBar" style="display: none;"><div class="progress-fill" id="progressFill"></div><span id="progressText">分析中...</span></div>
+            <div class="result-tabs"><button class="tab active" data-tab="files">文件列表</button><button class="tab" data-tab="summary">摘要统计</button></div>
+            <div style="margin: 12px 0; display: flex; gap: 12px;" id="resultActions"><button id="exportCsvBtn" class="btn-secondary" style="background:#10b981; color:white;">📎 导出表格为CSV</button><button id="downloadMergeBtn" class="btn-secondary" style="background:#3b82f6; color:white;" disabled>📥 下载合并文件</button></div>
             <div class="tab-content" id="tabContent">
-                <!-- 文件列表表格 -->
-                <div class="table-wrapper" id="filesTable" style="display: block;">
-                    <table>
-                        <thead>
-                        <tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr>
-                        </thead>
-                        <tbody id="fileTableBody"></tbody>
-                    </table>
-                </div>
-                <!-- 摘要统计 -->
-                <div class="summary-content" id="summaryContent" style="display: none;">
-                    <div id="summaryInfo"></div>
-                    <div id="languageInfo"></div>
-                </div>
+                <div class="table-wrapper" id="filesTable" style="display: block;"><table><thead><tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr></thead><tbody id="fileTableBody"></tbody></table></div>
+                <div class="summary-content" id="summaryContent" style="display: none;"><div id="summaryInfo"></div><div id="languageInfo"></div></div>
             </div>
         </section>
     </main>

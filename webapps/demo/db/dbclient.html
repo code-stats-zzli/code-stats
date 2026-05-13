@@ -3,40 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <title>Database Explorer</title>
+    <link rel="stylesheet" href="../global-tech.css">
     <link rel="stylesheet" href="dbclient.css">
 </head>
 <body>
 <div class="sidebar">
-    <!-- 树形导航 -->
     <div class="tree-nav">
         <h3>Connections</h3>
         <ul class="tree-root" id="treeRoot"></ul>
     </div>
 </div>
 <div class="main">
-    <!-- 选项卡标签 -->
     <div class="tab-header">
         <button class="tab-btn active" data-tab="properties">属性</button>
         <button class="tab-btn" data-tab="data">数据</button>
         <button class="tab-btn" data-tab="diagram">图</button>
     </div>
-    <!-- 选项卡内容 -->
     <div class="tab-content">
-        <div class="tab-pane active" id="tab-properties">
-            <div id="propertiesContent">
-                <h2>Select a table</h2>
-            </div>
-        </div>
-        <div class="tab-pane" id="tab-data">
-            <div id="dataContent">
-                <p>数据视图（暂无数据）</p>
-            </div>
-        </div>
-        <div class="tab-pane" id="tab-diagram">
-            <div id="diagramContent">
-                <p>ER图（未实现）</p>
-            </div>
-        </div>
+        <div class="tab-pane active" id="tab-properties"><div id="propertiesContent"><h2>Select a table</h2></div></div>
+        <div class="tab-pane" id="tab-data"><div id="dataContent"><p>数据视图（暂无数据）</p></div></div>
+        <div class="tab-pane" id="tab-diagram"><div id="diagramContent"><p>ER图（未实现）</p></div></div>
     </div>
 </div>
 <script src="dbclient.js"></script>

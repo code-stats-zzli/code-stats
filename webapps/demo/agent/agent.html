@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent - 部署与对话</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="agent.css">
+</head>
+<body>
+<div class="agent-container">
+    <aside class="agent-sidebar">
+        <div class="sidebar-header">
+            <h3>🧠 AI Agent</h3>
+        </div>
+        <ul class="menu-list">
+            <li class="menu-item active" data-view="chat">
+                <span class="menu-icon">💬</span>
+                <span>AI 对话</span>
+            </li>
+            <li class="menu-item" data-view="deploy">
+                <span class="menu-icon">⚙️</span>
+                <span>AI 部署</span>
+            </li>
+        </ul>
+    </aside>
+
+    <main class="agent-content">
+        <!-- AI 对话视图 -->
+        <div id="chatView" class="view-pane active">
+            <div class="chat-container">
+                <div class="chat-header">
+                    <div class="model-config">
+                        <label>模型：</label>
+                        <select id="chatModelSelect">
+                            <option value="deepseek-r1:1.5b">DeepSeek-R1 1.5B</option>
+                            <option value="deepseek-r1:7b" selected>DeepSeek-R1 7B (推荐)</option>
+                            <option value="deepseek-r1:8b">DeepSeek-R1 8B</option>
+                            <option value="deepseek-r1:14b">DeepSeek-R1 14B</option>
+                            <option value="deepseek-coder:6.7b">DeepSeek-Coder 6.7B</option>
+                        </select>
+                        <label>温度：</label>
+                        <input type="number" id="temperature" step="0.1" min="0" max="2" value="0.7">
+                        <button id="newChatBtn" class="btn-icon">🔄 新对话</button>
+                    </div>
+                    <div class="model-config" style="margin-top: 12px;">
+                        <label>后端服务：</label>
+                        <select id="backendType">
+                            <option value="ollama" selected>本地 Ollama</option>
+                            <option value="deepseek">DeepSeek 官网 API</option>
+                            <option value="custom">自定义 API</option>
+                        </select>
+                        <div id="customUrlGroup" style="display: none;">
+                            <label>API 地址：</label>
+                            <input type="text" id="customApiUrl" placeholder="https://api.deepseek.com/v1/chat/completions" size="40">
+                            <label>API Key：</label>
+                            <input type="password" id="customApiKey" placeholder="可选，如需认证">
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message assistant">
+                        <div class="message-avatar">🧠</div>
+                        <div class="message-content">你好！我是 DeepSeek AI 助手，支持多种后端（本地 Ollama / DeepSeek 官方 API / 自定义）。请问有什么可以帮助你的？</div>
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <textarea id="userInput" placeholder="输入你的问题..." rows="2"></textarea>
+                    <button id="sendBtn" class="btn-primary">发送</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI 部署视图 -->
+        <div id="deployView" class="view-pane">
+            <div class="card">
+                <h2>🚀 本地部署 DeepSeek 大模型</h2>
+                <p>通过 Ollama 一键部署 DeepSeek 系列模型，提供私有化 AI 能力。</p>
+            </div>
+            <div class="card">
+                <h3>1️⃣ 下载并安装 Ollama</h3>
+                <div class="button-group">
+                    <a href="https://ollama.com/download/windows" target="_blank" class="btn btn-primary">⬇️ Windows 下载</a>
+                    <a href="https://ollama.com/download/mac" target="_blank" class="btn btn-primary">🍎 macOS 下载</a>
+                    <a href="https://ollama.com/download/linux" target="_blank" class="btn btn-primary">🐧 Linux 下载</a>
+                </div>
+            </div>
+            <div class="card">
+                <h3>2️⃣ 检查 Ollama 状态</h3>
+                <button id="checkStatusBtn" class="btn btn-secondary">🔍 检查服务状态</button>
+                <div id="statusResult" class="status-area"></div>
+            </div>
+            <div class="card">
+                <h3>3️⃣ 安装大模型</h3>
+                <div class="form-row">
+                    <label>模型名称：</label>
+                    <input type="text" id="modelName" placeholder="例如: deepseek-r1:7b" value="deepseek-r1:7b">
+                    <button id="pullModelBtn" class="btn btn-primary">📥 下载并安装</button>
+                </div>
+                <div id="pullProgress" class="progress-area" style="display:none;">
+                    <div class="progress-bar"><div class="progress-fill"></div></div>
+                    <pre id="pullLog"></pre>
+                </div>
+            </div>
+            <div class="card">
+                <h3>4️⃣ 运行模型（测试）</h3>
+                <button id="runModelBtn" class="btn btn-secondary">▶️ 运行模型</button>
+                <div id="runResult" class="status-area"></div>
+            </div>
+        </div>
+    </main>
+</div>
+<script src="agent.js"></script>
+</body>
+</html>

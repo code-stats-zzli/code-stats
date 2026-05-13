@@ -1,135 +1,25 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Segoe UI', Arial, sans-serif; display: flex; height: 100vh; background: #f4f6f9; }
-
-/* 左侧栏 */
-.sidebar {
-    width: 280px;
-    background: #2c3e50;
-    color: white;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-    user-select: none;
-}
-.tree-nav h3 {
-    padding: 12px 15px;
-    background: #1a252f;
-    margin: 0;
-    font-size: 14px;
-    text-transform: uppercase;
-}
-.tree-root {
-    list-style: none;
-    padding: 0;
-}
-
-/* 树节点 */
-.tree-node {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-.tree-item {
-    cursor: pointer;
-    padding: 8px 10px 8px 20px;
-    border-bottom: 1px solid #34495e;
-    display: flex;
-    align-items: center;
-    transition: background 0.15s;
-}
-.tree-item:hover { background: #34495e; }
-.tree-item.active {
-    background: #2980b9;
-    font-weight: bold;
-}
-.tree-toggle {
-    width: 16px;
-    height: 16px;
-    margin-right: 5px;
-    font-size: 12px;
-    line-height: 16px;
-    text-align: center;
-    flex-shrink: 0;
-}
-.tree-toggle.expanded::before { content: "▾"; }
-.tree-toggle.collapsed::before { content: "▸"; }
-.tree-toggle.leaf::before { content: "•"; color: #7f8c8d; }
-.tree-children {
-    list-style: none;
-    padding-left: 20px;
-    display: none;
-}
-.tree-children.open {
-    display: block;
-}
-
-/* 右侧主区域 */
-.main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background: white;
-}
-.tab-header {
-    background: #f1f4f8;
-    border-bottom: 1px solid #dcdde1;
-    padding: 0 20px;
-    display: flex;
-}
-.tab-btn {
-    padding: 12px 24px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    font-size: 14px;
-    color: #636e72;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s;
-}
-.tab-btn:hover { color: #2d3436; }
-.tab-btn.active {
-    color: #2c3e50;
-    border-bottom-color: #2980b9;
-    font-weight: 600;
-}
-
-.tab-content {
-    flex: 1;
-    padding: 20px;
-    overflow-y: auto;
-}
-.tab-pane { display: none; }
-.tab-pane.active { display: block; }
-
-/* 表格 */
-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-    margin-top: 10px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-}
-th, td {
-    padding: 10px 15px;
-    text-align: left;
-    border-bottom: 1px solid #ecf0f1;
-}
-th {
-    background: #f8f9fa;
-    font-weight: 600;
-    color: #2c3e50;
-    font-size: 13px;
-}
-tr:last-child td { border-bottom: none; }
-tr:hover { background: #f1f6fc; }
-
-/* 属性页特定样式 */
-.props-table {
-    margin-bottom: 25px;
-}
-.props-table td:first-child {
-    font-weight: 600;
-    color: #2c3e50;
-    width: 180px;
-}
-.empty-state { color: #95a5a6; font-style: italic; padding: 20px; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Inter', sans-serif; display: flex; height:100vh; background: transparent; }
+.sidebar { width:280px; display:flex; flex-direction:column; overflow-y:auto; border-radius:0 20px 20px 0; }
+.tree-nav h3 { padding:12px 15px; background:rgba(0,200,255,0.15); margin:0; font-size:14px; color:var(--accent-primary); }
+.tree-root { list-style:none; }
+.tree-node { list-style:none; padding:0; margin:0; }
+.tree-item { cursor:pointer; padding:8px 10px 8px 20px; display:flex; align-items:center; gap:8px; transition:0.2s; margin:2px 8px; border-radius:12px; }
+.tree-item:hover { background:rgba(0,200,255,0.2); }
+.tree-item.active { background:var(--accent-primary); color:#0a0f1a; }
+.tree-toggle { width:16px; font-size:12px; }
+.tree-toggle.expanded::before { content:"▾"; }
+.tree-toggle.collapsed::before { content:"▸"; }
+.tree-toggle.leaf::before { content:"•"; color:var(--accent-primary); }
+.tree-children { list-style:none; padding-left:20px; display:none; }
+.tree-children.open { display:block; }
+.main { flex:1; display:flex; flex-direction:column; background:transparent; }
+.tab-header { background:rgba(0,0,0,0.3); border-bottom:1px solid rgba(0,200,255,0.3); padding:0 20px; display:flex; }
+.tab-btn { padding:12px 24px; border:none; background:transparent; cursor:pointer; font-size:14px; color:var(--text-muted); border-bottom:2px solid transparent; }
+.tab-btn.active { color:var(--accent-primary); border-bottom-color:var(--accent-primary); }
+.tab-content { flex:1; padding:20px; overflow-y:auto; }
+.tab-pane { display:none; }
+.tab-pane.active { display:block; }
+table { width:100%; margin-top:10px; }
+.props-table td:first-child { font-weight:600; width:180px; color:var(--accent-primary); }
+.empty-state, .error { padding:20px; color:var(--text-muted); font-style:italic; }

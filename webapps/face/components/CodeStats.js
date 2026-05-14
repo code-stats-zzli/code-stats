@@ -19,7 +19,7 @@ export const CodeStats = {
                 <button class="btn-secondary" @click="resetConfig">重置</button>
             </div>
             <div v-if="analyzing" class="progress-bar" style="margin-top: 20px;">
-                <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+                <div class="progress-fill" v-bind:style="'width:' + progressPercent + '%'"></div>
                 <div style="text-align:center;">{{ progressText }}</div>
             </div>
             <div v-if="resultData" style="margin-top: 24px;">
@@ -27,29 +27,10 @@ export const CodeStats = {
                     <button class="btn-secondary" @click="showFiles = true; showSummary = false">文件列表</button>
                     <button class="btn-secondary" @click="showFiles = false; showSummary = true">摘要统计</button>
                 </div>
-                <div v-if="showFiles">
-                    <table>
-                        <thead><tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr></thead>
-                        <tbody>
-                            <tr v-for="file in resultData.files">
-                                <td>{{ truncatePath(file.path) }}</td><td>{{ file.lines }}</td><td>{{ file.codeLines }}</td>
-                                <td>{{ file.commentLines }}</td><td>{{ file.blankLines }}</td><td>{{ file.language }}</td><td>{{ file.complexity }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div v-if="showSummary">
-                    <h3>总体统计</h3>
-                    <p>总文件数: {{ resultData.summary.totalFiles }}, 总行数: {{ resultData.summary.totalLines }}</p>
-                    <p>代码行: {{ resultData.summary.totalCodeLines }}, 注释行: {{ resultData.summary.totalCommentLines }}, 空行: {{ resultData.summary.totalBlankLines }}</p>
-                    <p>耗时: {{ resultData.summary.durationMs }} ms</p>
-                    <h3>语言分布</h3>
-                    <div v-for="(stat, lang) in resultData.languages" :key="lang">
-                        <strong>{{ lang }}</strong>: 文件 {{ stat.files }}, 行数 {{ stat.lines }}, 代码 {{ stat.code }}
-                    </div>
-                    <div v-if="resultData.mergeOutput">
-                        <button class="btn-secondary" @click="downloadMergeFile(resultData.mergeOutput)">📥 下载合并文件</button>
-                    </div>
+                <div id="filesPanel" v-bind:style="showFiles ? 'display:block' : 'display:none'"></div>
+                <div id="summaryPanel" v-bind:style="showFiles ? 'display:none' : 'display:block'"></div>
+                <div v-if="resultData.mergeOutput">
+                    <button class="btn-secondary" @click="downloadMergeFile(resultData.mergeOutput)">📥 下载合并文件</button>
                 </div>
             </div>
         </div>
@@ -108,6 +89,8 @@ export const CodeStats = {
                 const data = await resp.json();
                 if (data.error) throw new Error(data.error);
                 this.resultData = data;
+                this.renderFiles();
+                this.renderSummary();
                 this.progressPercent = 100;
                 this.progressText = '分析完成';
                 setTimeout(() => { this.analyzing = false; }, 1000);
@@ -116,11 +99,42 @@ export const CodeStats = {
                 this.analyzing = false;
             }
         },
+        renderFiles() {
+            const container = document.getElementById('filesPanel');
+            if (!container || !this.resultData) return;
+            const files = this.resultData.files || [];
+            let html = '<table><thead><tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr></thead><tbody>';
+            for (const f of files) {
+                html += `<tr>
+                    <td title="${escapeHtml(f.path)}">${truncatePath(f.path)}</td>
+                    <td>${f.lines}</td>
+                    <td>${f.codeLines}</td>
+                    <td>${f.commentLines}</td>
+                    <td>${f.blankLines}</td>
+                    <td>${f.language}</td>
+                    <td>${f.complexity}</td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        },
+        renderSummary() {
+            const container = document.getElementById('summaryPanel');
+            if (!container || !this.resultData) return;
+            const summary = this.resultData.summary || {};
+            const langs = this.resultData.languages || {};
+            let html = `<h3>总体统计</h3>
+                <p>总文件数: ${summary.totalFiles || 0}, 总行数: ${summary.totalLines || 0}</p>
+                <p>代码行: ${summary.totalCodeLines || 0}, 注释行: ${summary.totalCommentLines || 0}, 空行: ${summary.totalBlankLines || 0}</p>
+                <p>耗时: ${summary.durationMs || 0} ms</p>
+                <h3>语言分布</h3>`;
+            for (const [lang, stat] of Object.entries(langs)) {
+                html += `<div><strong>${escapeHtml(lang)}</strong>: 文件 ${stat.files}, 行数 ${stat.lines}, 代码 ${stat.code}, 注释 ${stat.comments}, 空行 ${stat.blanks}</div>`;
+            }
+            container.innerHTML = html;
+        },
         resetConfig() {
             this.fetchDefaultConfig();
-        },
-        truncatePath(path) {
-            return path.length > 50 ? '...' + path.slice(-47) : path;
         },
         async downloadMergeFile(filePath) {
             const encoded = btoa(encodeURIComponent(filePath));
@@ -132,3 +146,17 @@ export const CodeStats = {
         this.fetchDefaultConfig();
     }
 };
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}
+
+function truncatePath(path) {
+    return path.length > 60 ? '...' + path.slice(-57) : path;
+}

@@ -1,5 +1,5 @@
 # 分析根目录
-rootDir: D:\work\CodeStats\src\main\java
+rootDir: D:\work\git\CodeStats\src\main\java
 # 包含的扩展名
 extensions:
   - java
@@ -30,5 +30,5 @@ defaultOutputPath: 'D:\work\code\merge.txt'
 
 # ★ 额外要追加的其他代码文件路径（逗号分隔的目录或文件）
 extraPaths:
-  - D:/work/CodeStats/webapps/demo
+  - D:/work/git/CodeStats/webapps
 

@@ -36,17 +36,12 @@ export const Agent = {
                         <input v-if="backend === 'custom'" v-model="customUrl" placeholder="API URL">
                         <input v-if="backend === 'custom'" v-model="customKey" placeholder="API Key (可选)">
                     </div>
-                    <div class="chat-messages" style="height: 300px; overflow-y: auto; background: white; border-radius: 16px; padding: 12px;">
-                        <div v-for="(msg, idx) in messages" :key="idx" style="margin:8px 0;">
-                            <strong>{{ msg.role === 'user' ? '👤 我' : '🤖 助手' }}：</strong>
-                            <span>{{ msg.content }}</span>
-                        </div>
-                        <div v-if="loading">🤖 正在思考...</div>
-                    </div>
+                    <div id="chatMessages" class="chat-messages" style="height: 300px; overflow-y: auto; background: white; border-radius: 16px; padding: 12px;"></div>
                     <div style="margin-top: 12px; display: flex; gap: 8px;">
                         <textarea v-model="inputText" rows="2" style="flex:1;" placeholder="输入问题..."></textarea>
                         <button class="btn-primary" @click="sendMessage">发送</button>
                     </div>
+                    <div v-if="loading" style="margin-top: 8px;">🤖 正在思考...</div>
                 </div>
             </div>
         </div>
@@ -67,6 +62,17 @@ export const Agent = {
         };
     },
     methods: {
+        renderMessages() {
+            const container = document.getElementById('chatMessages');
+            if (!container) return;
+            container.innerHTML = this.messages.map(msg => `
+                <div style="margin:8px 0;">
+                    <strong>${msg.role === 'user' ? '👤 我' : '🤖 助手'}：</strong>
+                    <span>${escapeHtml(msg.content)}</span>
+                </div>
+            `).join('');
+            container.scrollTop = container.scrollHeight;
+        },
         async checkStatus() {
             try {
                 const resp = await fetch(apiUrl('/agent/api/ollama/status'));
@@ -122,11 +128,12 @@ export const Agent = {
             const userMsg = { role: 'user', content: this.inputText };
             this.messages.push(userMsg);
             this.inputText = '';
+            this.renderMessages();
             this.loading = true;
             try {
                 const payload = {
                     model: this.selectedModel,
-                    messages: this.messages.slice(), // 发送全部历史
+                    messages: this.messages.slice(),
                     temperature: parseFloat(this.temperature),
                     backend: this.backend
                 };
@@ -146,8 +153,10 @@ export const Agent = {
                     const reply = data.response || data.message || '无回复';
                     this.messages.push({ role: 'assistant', content: reply });
                 }
+                this.renderMessages();
             } catch (err) {
                 this.messages.push({ role: 'assistant', content: `❌ 请求失败: ${err.message}` });
+                this.renderMessages();
             } finally {
                 this.loading = false;
             }
@@ -155,5 +164,16 @@ export const Agent = {
     },
     mounted() {
         this.checkStatus();
+        this.renderMessages();
     }
 };
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}

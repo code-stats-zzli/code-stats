@@ -1,5 +1,5 @@
-// js/simple-vue/Watcher.js
-import { Dep } from './Observer.js';
+// webapps/vue/core/Watcher.js
+import { Dep } from './Dep.js';
 
 export class Watcher {
     constructor(vm, expOrFn, callback) {

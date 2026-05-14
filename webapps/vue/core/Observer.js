@@ -1,51 +1,46 @@
-// js/simple-vue/Observer.js
+// webapps/vue/core/Observer.js
 import { isObject } from './utils.js';
+import { Dep } from './Dep.js';      // 新增独立 Dep 文件
+
+export function observe(data) {
+    if (!isObject(data)) return data;
+    return new Observer(data);
+}
 
 export class Observer {
     constructor(data) {
-        this.dep = new Dep();
-        return this.walk(data);
+        return this._createReactive(data);
     }
 
-    walk(data) {
-        if (!isObject(data)) return data;
-        return new Proxy(data, {
-            get: (target, key, receiver) => {
+    _createReactive(obj) {
+        const depsMap = new Map();   // 每个 key 对应一个 Dep
+
+        const handler = {
+            get(target, key, receiver) {
                 if (Dep.target) {
-                    this.dep.depend();
+                    let dep = depsMap.get(key);
+                    if (!dep) {
+                        dep = new Dep();
+                        depsMap.set(key, dep);
+                    }
+                    dep.depend();
                 }
-                const val = Reflect.get(target, key, receiver);
-                // 深层响应
-                if (isObject(val)) {
-                    return new Observer(val);
+                const value = Reflect.get(target, key, receiver);
+                if (isObject(value)) {
+                    return observe(value);
                 }
-                return val;
+                return value;
             },
-            set: (target, key, value, receiver) => {
+            set(target, key, value, receiver) {
                 const oldVal = target[key];
                 const result = Reflect.set(target, key, value, receiver);
                 if (oldVal !== value) {
-                    this.dep.notify();
+                    let dep = depsMap.get(key);
+                    if (dep) dep.notify();
                 }
                 return result;
             }
-        });
+        };
+        return new Proxy(obj, handler);
     }
 }
-
-// 依赖管理
-export class Dep {
-    constructor() {
-        this.subscribers = new Set();
-    }
-    depend() {
-        if (Dep.target) {
-            this.subscribers.add(Dep.target);
-        }
-    }
-    notify() {
-        this.subscribers.forEach(sub => sub.update());
-    }
-}
-
-Dep.target = null;

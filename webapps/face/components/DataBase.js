@@ -4,35 +4,17 @@ export const Database = {
     template: `
         <div class="card" style="display: flex; gap: 20px; height: 70vh;">
             <div style="width: 280px; border-right: 1px solid rgba(0,102,255,0.2); overflow-y: auto;">
-                <div class="tree" id="dbTree"></div>
+                <div id="dbTree" class="tree"></div>
             </div>
             <div style="flex:1; overflow-y: auto;">
-                <div v-if="currentTable">
-                    <h3>{{ currentDb }}.{{ currentTable }}</h3>
-                    <div v-if="columns.length">
-                        <table>
-                            <thead><tr><th>列名</th><th>类型</th><th>大小</th><th>可空</th><th>自增</th><th>备注</th></tr></thead>
-                            <tbody>
-                                <tr v-for="col in columns">
-                                    <td>{{ col.columnName }}</td><td>{{ col.typeName }}</td><td>{{ col.columnSize }}</td>
-                                    <td>{{ col.nullable === 'YES' ? '是' : '否' }}</td><td>{{ col.autoIncrement === 'YES' ? '是' : '否' }}</td>
-                                    <td>{{ col.remarks || '-' }}</td>
-                                </table>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div v-else class="empty-tip">暂无列信息</div>
+                <div id="tableDetail">
+                    <div class="empty-tip">请从左侧选择一张表</div>
                 </div>
-                <div v-else class="empty-tip">请从左侧选择一张表</div>
             </div>
         </div>
     `,
     data() {
-        return {
-            currentDb: '',
-            currentTable: '',
-            columns: []
-        };
+        return { currentDb: '', currentTable: '', columns: [] };
     },
     methods: {
         async loadDatabases() {
@@ -78,9 +60,42 @@ export const Database = {
             const url = apiUrl(`/dbclient/api/columns?db=${encodeURIComponent(db)}&table=${encodeURIComponent(table)}`);
             const res = await fetch(url);
             this.columns = await res.json();
+            this.renderTableDetail();
+        },
+        renderTableDetail() {
+            const container = document.getElementById('tableDetail');
+            if (!container) return;
+            if (!this.currentTable) {
+                container.innerHTML = '<div class="empty-tip">请从左侧选择一张表</div>';
+                return;
+            }
+            let html = `<h3>${this.currentDb}.${this.currentTable}</h3>`;
+            html += '<table><thead><tr><th>列名</th><th>类型</th><th>大小</th><th>可空</th><th>自增</th><th>备注</th></tr></thead><tbody>';
+            this.columns.forEach(col => {
+                html += `<tr>
+                    <td>${escapeHtml(col.columnName)}</td>
+                    <td>${escapeHtml(col.typeName)}</td>
+                    <td>${col.columnSize}</td>
+                    <td>${col.nullable === 'YES' ? '是' : '否'}</td>
+                    <td>${col.autoIncrement === 'YES' ? '是' : '否'}</td>
+                    <td>${escapeHtml(col.remarks || '-')}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
         }
     },
     mounted() {
         this.loadDatabases();
     }
 };
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}

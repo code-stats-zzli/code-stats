@@ -7,7 +7,7 @@ public class Bootstrap {
         Catalina catalina = new Catalina();
         catalina.load();
         catalina.start();
-        System.out.println("Tomcat ready. Access http://localhost:8080/demo/index.html");
+        System.out.println("Tomcat ready. Access http://localhost:8080/codestats/face/index.html");
         try { Thread.sleep(Long.MAX_VALUE); } catch (InterruptedException e) { }
     }
 }

@@ -1,9 +1,7 @@
 package com.framework.tomcat;
 
-
 import com.framework.spring.config.ConfigLoader;
 import com.framework.tomcat.connector.Connector;
-
 import com.framework.tomcat.container.*;
 import com.framework.tomcat.listener.ContextListenerDemo;
 
@@ -37,17 +35,18 @@ public class Catalina {
         host.setAppBase("webapps");
         engine.addChild(host);
 
-        // 6. Context
+        // 6. Context - 从配置读取 context path
+        String contextPath = ConfigLoader.getProperty("context.path", "/codestats");
         StandardContext context = new StandardContext();
-        context.setName("/demo");
-        context.setDocBase("webapps/demo");
+        context.setName(contextPath);          // 设置上下文路径，如 "/codestats"
+        context.setDocBase("webapps/demo");    // 实际物理目录仍为 webapps/demo
         context.setParentClassLoader(Thread.currentThread().getContextClassLoader());
         host.addChild(context);
         context.addLifecycleListener(new ContextListenerDemo());
 
-        // 7. Wrapper (DispatcherServlet) - 从配置读取类名
+        // 7. Wrapper (DispatcherServlet)
         String servletClassName = ConfigLoader.getProperty("servlet.class",
-                "com.framework.spring.mvc.DispatcherServlet");  // 提供默认值
+                "com.framework.spring.mvc.DispatcherServlet");
         StandardWrapper wrapper = new StandardWrapper();
         wrapper.setName("dispatcher");
         wrapper.setServletClass(servletClassName);

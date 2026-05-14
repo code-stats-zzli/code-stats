@@ -24,18 +24,14 @@ public class DispatcherServlet extends HttpServlet {
 
     private SimpleApplicationContext applicationContext;
     private final Map<String, Handler> handlerMappings = new HashMap<>();
-    private static final String STATIC_BASE = "webapps/demo";
 
     @Override
     public void init() throws Exception {
-        System.out.println(">>> DispatcherServlet init: scanning and creating IoC container...");
+        System.out.println(">>> DispatcherServlet init");
         applicationContext = new SimpleApplicationContext();
-        String packages = ConfigLoader.getProperty("scan.packages",
-                "com.demo.*.business");
+        String packages = ConfigLoader.getProperty("scan.packages", "com.codestats.business");
         applicationContext.scanAndInit(packages);
         List<Object> controllers = applicationContext.getBeansWithAnnotation(Controller.class);
-        System.out.println(">>> Controllers found: " + controllers.size());
-
         for (Object controller : controllers) {
             Class<?> clazz = controller.getClass();
             String basePath = "";
@@ -49,7 +45,7 @@ public class DispatcherServlet extends HttpServlet {
                     if (!fullPath.startsWith("/")) fullPath = "/" + fullPath;
                     boolean isResponseBody = method.isAnnotationPresent(ResponseBody.class);
                     handlerMappings.put(fullPath, new Handler(controller, method, isResponseBody));
-                    System.out.println("Mapped " + fullPath + " -> " + clazz.getSimpleName() + "." + method.getName());
+                    System.out.println("Mapped " + fullPath);
                 }
             }
         }
@@ -72,64 +68,25 @@ public class DispatcherServlet extends HttpServlet {
         try {
             String uri = req.getUri();
             System.out.println(">>> Request URI: " + uri);
-
             Handler handler = handlerMappings.get(uri);
             if (handler != null) {
-                try {
-                    // 解析方法参数
-                    Object[] args = ParamBinder.resolveParameters(handler.method, req);
-                    // 执行方法
-                    Object result = handler.method.invoke(handler.controller, args);
-
-                    // ★ 处理返回值：兼容原有 String 类型的 JSON
-                    if (handler.isResponseBody) {
-                        String outStr;
-                        if (result instanceof String) {
-                            // 如果方法返回 String，直接输出（不二次 JSON 序列化）
-                            outStr = (String) result;
-                        } else {
-                            // 其他类型自动转 JSON
-                            outStr = JsonUtil.toJson(result);
-                        }
-                        // 如果是 JSON 内容且不是纯字符串，设置正确的 Content-Type
-                        if (!outStr.startsWith("{") && !outStr.startsWith("[") && !outStr.trim().startsWith("\"")) {
-                            // 可能是纯文本，但依然可以用 text/plain
-                            res.setContentType("text/plain; charset=utf-8");
-                        } else {
-                            res.setContentType("application/json; charset=utf-8");
-                        }
-                        res.write(outStr);
-                    } else {
-                        // 非 @ResponseBody：普通视图或字符串输出
-                        if (result != null) {
-                            res.write(result.toString());
-                        } else {
-                            res.write("OK");
-                        }
-                    }
-                    res.send();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    res.setStatus(500, "Internal Server Error");
-                    String errorMsg = getRootCauseMessage(e);
-                    res.write("<h1>500 - " + errorMsg + "</h1>");
-                    res.send();
+                Object[] args = ParamBinder.resolveParameters(handler.method, req);
+                Object result = handler.method.invoke(handler.controller, args);
+                if (handler.isResponseBody) {
+                    String outStr = result instanceof String ? (String) result : JsonUtil.toJson(result);
+                    res.setContentType(outStr.startsWith("{") ? "application/json" : "text/plain");
+                    res.write(outStr);
+                } else {
+                    if (result != null) res.write(result.toString());
                 }
+                res.send();
                 return;
             }
-
-            // 静态文件
-            if (serveStaticFile(uri, res)) {
-                return;
-            }
-
+            // 静态文件服务（支持 webapps 下任意子目录）
+            if (serveStaticFile(uri, res)) return;
             // 404
             res.setStatus(404, "Not Found");
-            res.write("<h1>404 - No handler for " + uri + "</h1>");
-            res.write("<hr/>Available mappings:<br/>");
-            for (String key : handlerMappings.keySet()) {
-                res.write(key + "<br/>");
-            }
+            res.write("<h1>404 - Not Found</h1><p>URI: " + uri + "</p>");
             res.send();
         } finally {
             RequestContextHolder.clear();
@@ -138,15 +95,34 @@ public class DispatcherServlet extends HttpServlet {
     }
 
     private boolean serveStaticFile(String uri, Response res) {
-        if (uri.contains("..") || uri.contains("//")) return false;
-        Path filePath = Paths.get(STATIC_BASE, uri);
+        if (uri == null || uri.contains("..") || uri.contains("//")) return false;
+        // uri 示例: /face/index.html  (已去除 context path)
+        String cleanUri = uri.startsWith("/") ? uri.substring(1) : uri;
+        int firstSlash = cleanUri.indexOf('/');
+        if (firstSlash <= 0) {
+            System.out.println("Static file: no slash, skip");
+            return false;
+        }
+        String webappRoot = cleanUri.substring(0, firstSlash);      // "face"
+        String subPath = cleanUri.substring(firstSlash + 1);        // "index.html"
+        Path base = Paths.get("webapps", webappRoot);
+        Path filePath = base.resolve(subPath).normalize();
+        // 安全检查
+        if (!filePath.startsWith(base)) {
+            System.out.println("Static file: path traversal detected");
+            return false;
+        }
         File file = filePath.toFile();
-        if (!file.exists() || file.isDirectory()) return false;
+        if (!file.exists() || file.isDirectory()) {
+            System.out.println("Static file not found: " + filePath);
+            return false;
+        }
         String contentType = getContentType(uri);
         res.setContentType(contentType);
         res.setStatus(200, "OK");
         try (FileInputStream fis = new FileInputStream(file)) {
             res.sendStatic(fis, contentType, file.length());
+            System.out.println("Served static file: " + filePath);
             return true;
         } catch (IOException e) {
             e.printStackTrace();
@@ -155,7 +131,7 @@ public class DispatcherServlet extends HttpServlet {
     }
 
     private String getContentType(String uri) {
-        if (uri.endsWith(".html") || uri.endsWith(".htm")) return "text/html; charset=utf-8";
+        if (uri.endsWith(".html")) return "text/html; charset=utf-8";
         if (uri.endsWith(".css")) return "text/css; charset=utf-8";
         if (uri.endsWith(".js")) return "application/javascript; charset=utf-8";
         if (uri.endsWith(".json")) return "application/json; charset=utf-8";
@@ -164,19 +140,10 @@ public class DispatcherServlet extends HttpServlet {
         return "application/octet-stream";
     }
 
-    private String getRootCauseMessage(Throwable t) {
-        while (t.getCause() != null && t.getCause() != t) {
-            t = t.getCause();
-        }
-        String msg = t.getMessage();
-        return msg != null ? msg : t.getClass().getSimpleName();
-    }
-
     private static class Handler {
         Object controller;
         Method method;
         boolean isResponseBody;
-
         Handler(Object controller, Method method, boolean isResponseBody) {
             this.controller = controller;
             this.method = method;

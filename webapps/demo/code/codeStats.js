@@ -1,5 +1,6 @@
 (function() {
-    const API_BASE = '/demo/code/api';
+    // 使用全局 apiUrl
+    const API_BASE = window.apiUrl('/code/api');
 
     // DOM 元素
     const modeList = document.getElementById('modeList');
@@ -27,18 +28,15 @@
     const filesTable = document.getElementById('filesTable');
     const summaryTab = document.getElementById('summaryContent');
 
-    // 新增按钮 DOM
     const exportCsvBtn = document.getElementById('exportCsvBtn');
     const downloadMergeBtn = document.getElementById('downloadMergeBtn');
 
-    // 当前模式 & 合并文件路径
     let currentMode = 'server';
     let currentMergeFilePath = null;
 
-    // 加载默认配置（包含 extraPaths）
     async function loadDefaultConfig() {
         try {
-            const resp = await fetch(`${API_BASE}/config`);
+            const resp = await fetch(API_BASE + '/config');
             if (resp.ok) {
                 const config = await resp.json();
                 rootDirInput.value = config.rootDir || '';
@@ -57,13 +55,11 @@
         }
     }
 
-    // 合并输出行显示/隐藏
     function toggleMergeRow() {
         mergeRow.style.display = mergeEnabledCheck.checked ? 'flex' : 'none';
     }
     mergeEnabledCheck.addEventListener('change', toggleMergeRow);
 
-    // 模式切换
     modeList.addEventListener('click', (e) => {
         const item = e.target.closest('.mode-item');
         if (!item || item.classList.contains('disabled')) return;
@@ -72,13 +68,11 @@
         currentMode = item.dataset.mode;
     });
 
-    // 执行分析
     analyzeBtn.addEventListener('click', async () => {
         if (currentMode !== 'server') {
             alert('目前仅支持服务器分析模式');
             return;
         }
-        // 禁用下载按钮（新分析完成前不可用）
         if (downloadMergeBtn) downloadMergeBtn.disabled = true;
         currentMergeFilePath = null;
 
@@ -93,13 +87,12 @@
         params.append('mergeEnabled', mergeEnabledCheck.checked);
         params.append('mergeOutputFile', mergeOutputFileInput.value);
 
-        // 显示进度条
         progressBar.style.display = 'block';
         progressFill.style.width = '10%';
         progressText.textContent = '正在分析...';
 
         try {
-            const resp = await fetch(`${API_BASE}/analyze?${params.toString()}`);
+            const resp = await fetch(API_BASE + '/analyze?' + params.toString());
             progressFill.style.width = '80%';
             const data = await resp.json();
             if (data.error) {
@@ -108,7 +101,6 @@
             }
             renderResults(data);
 
-            // 处理合并文件路径（若后端返回）
             if (data.mergeOutput && data.mergeOutput.trim() !== '') {
                 currentMergeFilePath = data.mergeOutput;
                 if (downloadMergeBtn) downloadMergeBtn.disabled = false;
@@ -126,12 +118,9 @@
         }
     });
 
-    // 重置配置
     resetBtn.addEventListener('click', loadDefaultConfig);
 
-    // 渲染结果（文件列表 + 摘要 + 语言）
     function renderResults(data) {
-        // 文件列表表格
         const files = data.files || [];
         fileTableBody.innerHTML = files.map(f => `
             <tr>
@@ -142,10 +131,9 @@
                 <td>${f.blankLines}</td>
                 <td>${f.language}</td>
                 <td>${f.complexity}</td>
-            <tr>
+            </tr>
         `).join('');
 
-        // 摘要统计
         const summary = data.summary || {};
         summaryInfo.innerHTML = `
             <h3>总体统计</h3>
@@ -154,7 +142,6 @@
             <p>耗时: ${summary.durationMs || 0} ms</p>
         `;
 
-        // 语言分布
         const langs = data.languages || {};
         languageInfo.innerHTML = `
             <h3>语言分布</h3>
@@ -166,19 +153,16 @@
             `).join('')}
         `;
 
-        // 切换到文件列表标签页
         tabButtons.forEach(btn => btn.classList.remove('active'));
         tabButtons[0].classList.add('active');
         filesTable.style.display = 'block';
         summaryTab.style.display = 'none';
     }
 
-    // 辅助函数：路径截断
     function truncatePath(path) {
         return path.length > 60 ? '...' + path.slice(-57) : path;
     }
 
-    // 辅助函数：防XSS
     function escapeHtml(str) {
         if (!str) return '';
         return str.replace(/[&<>]/g, function(m) {
@@ -189,33 +173,25 @@
         });
     }
 
-    // ================= 导出 CSV 功能 =================
     function exportToCsv() {
         const rows = document.querySelectorAll('#fileTableBody tr');
         if (!rows.length) {
             alert('没有数据可导出，请先执行分析');
             return;
         }
-
-        // 获取表头（从页面表格 thead 中提取）
         const headers = [];
         const thList = document.querySelector('#filesTable table thead tr')?.querySelectorAll('th');
         if (thList) {
             thList.forEach(th => headers.push(th.innerText.trim()));
         } else {
-            // fallback
             headers.push('文件路径', '总行数', '代码行', '注释行', '空行', '语言', '复杂度');
         }
-
-        const csvRows = [];
-        csvRows.push(headers.join(','));
-
+        const csvRows = [headers.join(',')];
         for (let row of rows) {
             const cells = row.querySelectorAll('td');
             const rowData = [];
             for (let cell of cells) {
                 let text = cell.innerText.trim();
-                // CSV 转义：如果包含逗号、换行或双引号，则用双引号包裹并转义内部双引号
                 if (text.includes(',') || text.includes('"') || text.includes('\n')) {
                     text = `"${text.replace(/"/g, '""')}"`;
                 }
@@ -223,8 +199,6 @@
             }
             csvRows.push(rowData.join(','));
         }
-
-        // 添加 BOM 以支持中文
         const blob = new Blob(["\uFEFF" + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
@@ -236,17 +210,13 @@
         URL.revokeObjectURL(url);
     }
 
-    // ================= 下载合并文件功能 =================
     async function downloadMergeFile() {
         if (!currentMergeFilePath) {
             alert('没有可用的合并文件，请启用“文件合并”并重新分析。');
             return;
         }
-
-        // 对文件路径进行 Base64 编码 + URL 编码（与后端约定一致）
         let encodedPath;
         try {
-            // 先 URL 编码，再 Base64
             const urlEncoded = encodeURIComponent(currentMergeFilePath);
             encodedPath = btoa(urlEncoded);
         } catch (e) {
@@ -254,19 +224,16 @@
             alert('文件路径编码失败');
             return;
         }
-
-        const downloadUrl = `${API_BASE}/download?filePath=${encodedPath}`;
+        const downloadUrl = window.apiUrl(`/code/api/download?filePath=${encodedPath}`);
         try {
             const response = await fetch(downloadUrl);
             if (!response.ok) {
                 const errorText = await response.text();
                 throw new Error(errorText || '下载失败');
             }
-
             const blob = await response.blob();
             const link = document.createElement('a');
             const url = URL.createObjectURL(blob);
-            // 从响应头 Content-Disposition 或路径中提取文件名
             let filename = currentMergeFilePath.split(/[\\/]/).pop() || 'merged.txt';
             const disposition = response.headers.get('Content-Disposition');
             if (disposition && disposition.includes('filename=')) {
@@ -286,11 +253,9 @@
         }
     }
 
-    // 绑定新增按钮事件（如果按钮存在）
     if (exportCsvBtn) exportCsvBtn.addEventListener('click', exportToCsv);
     if (downloadMergeBtn) downloadMergeBtn.addEventListener('click', downloadMergeFile);
 
-    // 结果标签页切换
     resultTabs.addEventListener('click', (e) => {
         const tab = e.target.closest('.tab');
         if (!tab) return;
@@ -301,6 +266,5 @@
         summaryTab.style.display = target === 'summary' ? 'block' : 'none';
     });
 
-    // 初始化
     loadDefaultConfig();
 })();

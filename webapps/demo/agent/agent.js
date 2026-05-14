@@ -1,5 +1,4 @@
 (function() {
-    const API_BASE = '/demo/agent/api';
     let currentPullInterval = null;
 
     const checkStatusBtn = document.getElementById('checkStatusBtn');
@@ -35,7 +34,7 @@
     async function checkOllamaStatus() {
         showStatus(statusResult, '🔄 检查中...');
         try {
-            const resp = await fetch(`${API_BASE}/ollama/status`);
+            const resp = await fetch(window.apiUrl('/agent/api/ollama/status'));
             const data = await resp.json();
             if (data.status === 'ok') {
                 showStatus(statusResult, `✅ Ollama 服务正常<br>版本: ${data.version || '未知'}<br>API地址: ${data.url || 'http://localhost:11434'}`);
@@ -55,7 +54,7 @@
         pullLog.textContent = '🔄 正在拉取模型，请稍候...\n';
         document.querySelector('#pullProgress .progress-fill').style.width = '0%';
         try {
-            const resp = await fetch(`${API_BASE}/ollama/pull`, {
+            const resp = await fetch(window.apiUrl('/agent/api/ollama/pull'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ model: model })
@@ -79,7 +78,7 @@
         if (!model) { alert('请先填写模型名称'); return; }
         showStatus(runResult, '🔄 正在启动模型服务...');
         try {
-            const resp = await fetch(`${API_BASE}/ollama/run`, {
+            const resp = await fetch(window.apiUrl('/agent/api/ollama/run'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ model: model })
@@ -165,7 +164,7 @@
                 requestBody.customUrl = customApiUrl.value.trim();
                 requestBody.customKey = customApiKey.value.trim();
             }
-            const response = await fetch('/demo/agent/api/chat', {
+            const response = await fetch(window.apiUrl('/agent/api/chat'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody)

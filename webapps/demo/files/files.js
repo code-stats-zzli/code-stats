@@ -1,10 +1,9 @@
 (function() {
-    const API_BASE = '/demo/files/api';
-    let currentRootType = 'local';   // 'local' 或 'server'
+    const API_BASE = window.apiUrl('/files/api');
+    let currentRootType = 'local';
     let currentPath = '';
     let currentEditPath = null;
 
-    // DOM 元素
     const tabBtns = document.querySelectorAll('.tab-btn');
     const treeContainer = document.getElementById('treeContainer');
     const pathSpan = document.getElementById('currentPath');
@@ -19,12 +18,10 @@
     const closeEditorBtn = document.getElementById('closeEditorBtn');
     const saveFileBtn = document.getElementById('saveFileBtn');
 
-    // 辅助：显示提示（简单alert，可换成toast）
     function showMsg(msg, isError = false) {
         alert(msg);
     }
 
-    // 获取目录树
     async function fetchTree(path = '') {
         const url = `${API_BASE}/tree?rootType=${currentRootType}&path=${encodeURIComponent(path)}`;
         const res = await fetch(url);
@@ -32,7 +29,6 @@
         return await res.json();
     }
 
-    // 获取文件列表（当前目录下）
     async function fetchFileList(path) {
         const url = `${API_BASE}/list?rootType=${currentRootType}&path=${encodeURIComponent(path)}`;
         const res = await fetch(url);
@@ -40,7 +36,6 @@
         return await res.json();
     }
 
-    // 渲染树
     async function renderTree() {
         try {
             const rootData = await fetchTree('');
@@ -103,7 +98,6 @@
         if (childrenUl) {
             const isOpen = childrenUl.classList.contains('open');
             if (!isOpen && (!node.children || node.children.length === 0)) {
-                // 懒加载子节点
                 try {
                     const data = await fetchTree(node.path);
                     node.children = data.children || [];
@@ -121,14 +115,12 @@
         }
     }
 
-    // 进入目录
     async function navigateTo(path) {
         currentPath = path;
         pathSpan.textContent = path || '/';
         try {
             const list = await fetchFileList(path);
             renderFileList(list);
-            // 右侧编辑器关闭
             editorPanel.style.display = 'none';
             fileListPanel.style.display = 'block';
         } catch (err) {
@@ -153,7 +145,6 @@
             `;
             fileTableBody.appendChild(row);
         });
-        // 绑定操作事件
         document.querySelectorAll('.action-icon').forEach(icon => {
             icon.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -203,7 +194,6 @@
             const data = await res.json();
             if (data.success) {
                 showMsg('保存成功');
-                // 刷新当前目录列表
                 navigateTo(currentPath);
             } else {
                 showMsg(data.error || '保存失败', true);
@@ -289,7 +279,6 @@
         }
     }
 
-    // 页签切换
     async function switchRootType(type) {
         currentRootType = type;
         currentPath = '';
@@ -305,7 +294,6 @@
         });
     });
 
-    // 按钮事件
     newFolderBtn.addEventListener('click', newFolder);
     refreshBtn.addEventListener('click', () => navigateTo(currentPath));
     closeEditorBtn.addEventListener('click', () => {
@@ -314,7 +302,6 @@
         currentEditPath = null;
     });
     saveFileBtn.addEventListener('click', saveFile);
-    // 上传文件（简单实现，使用input）
     uploadBtn.addEventListener('click', () => {
         const input = document.createElement('input');
         input.type = 'file';
@@ -353,6 +340,5 @@
         });
     }
 
-    // 初始化
     switchRootType('local');
 })();

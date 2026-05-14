@@ -1,0 +1,192 @@
+/* ========== 浅色科技感全局样式 ========== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,600&family=JetBrains+Mono&display=swap');
+
+:root {
+    --bg-light: #f0f4fa;
+    --bg-card: rgba(255, 255, 255, 0.7);
+    --bg-sidebar: rgba(255, 255, 255, 0.85);
+    --border-glow: rgba(0, 150, 255, 0.4);
+    --accent-primary: #0066ff;
+    --accent-secondary: #7c3aed;
+    --accent-glow: 0 0 12px rgba(0, 102, 255, 0.3);
+    --text-dark: #1e293b;
+    --text-muted: #5b6e8c;
+    --font-mono: 'Fira Code', 'JetBrains Mono', monospace;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%);
+    color: var(--text-dark);
+    font-family: 'Inter', 'Segoe UI', 'PingFang SC', sans-serif;
+    min-height: 100vh;
+}
+
+/* 轻量网格背景 */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image:
+            linear-gradient(rgba(0, 102, 255, 0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 102, 255, 0.03) 1px, transparent 1px);
+    background-size: 30px 30px;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* 科技滚动条 */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #e2e8f0;
+    border-radius: 8px;
+}
+::-webkit-scrollbar-thumb {
+    background: var(--accent-primary);
+    border-radius: 8px;
+}
+
+/* 顶部导航栏 */
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 64px;
+    margin: 12px 20px 0;
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border-radius: 40px;
+    border: 1px solid rgba(0,102,255,0.25);
+}
+.topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 20px;
+    font-weight: 700;
+}
+.topbar-tabs {
+    display: flex;
+    gap: 8px;
+}
+.topbar-tab {
+    background: transparent;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 40px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--accent-primary);
+}
+.topbar-tab.active {
+    background: var(--accent-primary);
+    color: white;
+    box-shadow: 0 0 12px var(--accent-primary);
+}
+.main-content {
+    height: calc(100vh - 88px);
+    margin: 12px 20px 20px;
+    overflow-y: auto;
+}
+.tab-panel {
+    display: none;
+    height: 100%;
+}
+.tab-panel.active {
+    display: block;
+}
+.card {
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border-radius: 24px;
+    border: 1px solid rgba(0,102,255,0.25);
+    padding: 24px;
+    margin-bottom: 24px;
+}
+.btn-primary, .btn-secondary {
+    transition: all 0.2s ease;
+    background: rgba(0, 102, 255, 0.08);
+    border: 1px solid rgba(0, 102, 255, 0.3);
+    color: var(--accent-primary);
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 40px;
+    padding: 8px 20px;
+}
+.btn-primary:hover, .btn-secondary:hover {
+    background: rgba(0, 102, 255, 0.2);
+    box-shadow: var(--accent-glow);
+    transform: translateY(-1px);
+}
+.btn-primary {
+    background: var(--accent-primary);
+    color: white;
+}
+input, select, textarea {
+    background: white;
+    border: 1px solid rgba(0, 102, 255, 0.3);
+    border-radius: 16px;
+    padding: 8px 14px;
+    font-family: var(--font-mono);
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 20px;
+    overflow: hidden;
+}
+th {
+    background: rgba(0,102,255,0.1);
+    padding: 12px;
+    text-align: left;
+}
+td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.progress-bar {
+    background: #e2e8f0;
+    border-radius: 20px;
+    height: 8px;
+    overflow: hidden;
+}
+.progress-fill {
+    background: linear-gradient(90deg, var(--accent-primary), #a855f7);
+    width: 0%;
+    height: 100%;
+}
+.tree-item {
+    cursor: pointer;
+    padding: 6px 12px;
+    border-radius: 12px;
+    margin: 2px 0;
+}
+.tree-item:hover {
+    background: rgba(0,102,255,0.1);
+}
+.tree-children {
+    margin-left: 24px;
+}
+.empty-tip {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+    font-style: italic;
+}

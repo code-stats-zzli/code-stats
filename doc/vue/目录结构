@@ -1,0 +1,17 @@
+webapps/demo/
+├── index.html                      # 主入口页面
+├── index.css                       # 页面特有样式
+├── global-tech.css                 # 全局科技感主题
+├── app.js                          # SimpleVue 应用启动入口
+├── js/
+│   └── simple-vue/                 # 核心框架
+│       ├── SimpleVue.js            # 主类
+│       ├── Observer.js             # 响应式系统
+│       ├── Compiler.js             # 模板编译器
+│       ├── Watcher.js              # 观察者
+│       ├── Component.js            # 组件基类
+│       ├── StyleManager.js         # CSS 作用域
+│       └── utils.js                # 辅助工具
+└── components/                     # 业务组件
+    ├── Counter.js
+    └── TodoList.js

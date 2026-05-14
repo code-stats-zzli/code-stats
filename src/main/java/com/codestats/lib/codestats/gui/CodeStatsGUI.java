@@ -1,10 +1,14 @@
 package com.codestats.lib.codestats.gui;
 
 import com.codestats.lib.codestats.config.ConfigLoader;
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
 
 import javax.swing.*;
 
 public class CodeStatsGUI extends JFrame {
+    private static final Logger log = LoggerFactory.getLogger(CodeStatsGUI.class);
+
     public CodeStatsGUI() {
         setTitle("Code Statistics Tool - Visual Config");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -15,15 +19,12 @@ public class CodeStatsGUI extends JFrame {
         CodeStatsController controller = new CodeStatsController(panel);
         panel.setStartAction(e -> controller.startAnalysis());
 
-        // ========== 加载配置并应用默认值 ==========
         try {
-            // 传入空参数加载 yaml、环境变量，命令行参数通常为空
             com.codestats.lib.codestats.config.Config config = ConfigLoader.load(new String[0]);
-            panel.applyDefaults(config);  // 将 rootDir 显示到界面并自动设置合并输出
+            panel.applyDefaults(config);
         } catch (Exception ex) {
-            ex.printStackTrace();
+            log.error("加载配置失败", ex);
         }
-        // ========================================
 
         setContentPane(panel);
     }

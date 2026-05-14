@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.framework.spring.annotation.Service;
 import com.framework.spring.config.ConfigLoader;
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
 import com.microsoft.playwright.Page;
 
 import java.net.URI;
@@ -16,13 +18,12 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class AIChatService {
+    private static final Logger log = LoggerFactory.getLogger(AIChatService.class);
 
-    // 后端类型常量
     public static final String BACKEND_OLLAMA = "ollama";
     public static final String BACKEND_DEEPSEEK = "deepseek";
     public static final String BACKEND_CUSTOM = "custom";
 
-    // 配置项
     private final String defaultBackend;
     private final boolean playwrightEnabled;
     private final String deepseekApiKey;
@@ -33,7 +34,6 @@ public class AIChatService {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
-    // Playwright 会话（仅当启用且初始化成功时使用）
     private final ConcurrentHashMap<String, Page> sessionPages = new ConcurrentHashMap<>();
     private final boolean playwrightAvailable;
 
@@ -50,45 +50,28 @@ public class AIChatService {
                 .build();
         this.objectMapper = new ObjectMapper();
 
-        // 检查 Playwright 是否可用
         boolean tempAvailable = false;
         if (playwrightEnabled) {
             try {
                 tempAvailable = com.codestats.common.util.PlaywrightStealthUtil.isAvailable();
             } catch (Exception e) {
-                System.err.println("Playwright 不可用: " + e.getMessage());
+                log.error("Playwright 不可用", e);
             }
         }
         this.playwrightAvailable = tempAvailable;
-        System.out.println("AIChatService 初始化: backend=" + defaultBackend +
-                ", playwrightEnabled=" + playwrightEnabled +
-                ", playwrightAvailable=" + playwrightAvailable);
+        log.info("AIChatService 初始化: backend={}, playwrightEnabled={}, playwrightAvailable={}",
+                defaultBackend, playwrightEnabled, playwrightAvailable);
     }
 
-    /**
-     * 发送聊天请求
-     * @param sessionId 会话ID（仅当使用 Playwright 时有效）
-     * @param question 用户问题
-     * @param messages 对话历史（用于 API 模式）
-     * @param backend 指定后端（null 则使用默认）
-     * @param model 模型名称
-     * @param temperature 温度
-     * @param customUrlOverride 自定义 URL 覆盖
-     * @param customKeyOverride 自定义 Key 覆盖
-     * @return 回复内容
-     */
     public String chat(String sessionId, String question, List<Map<String, String>> messages,
                        String backend, String model, double temperature,
                        String customUrlOverride, String customKeyOverride) {
         String useBackend = backend != null ? backend : defaultBackend;
 
-        // 对于 Playwright 模式（仅当明确指定且可用时）
         if (BACKEND_CUSTOM.equals(useBackend) && playwrightAvailable && sessionId != null) {
-            // 如果用户想要使用网页自动化（通过 custom 后端且 playwright 可用）
             return chatWithPlaywright(sessionId, question, 60);
         }
 
-        // 否则使用 HTTP API
         switch (useBackend) {
             case BACKEND_OLLAMA:
                 return chatWithOllama(model, messages, temperature);
@@ -106,9 +89,6 @@ public class AIChatService {
         }
     }
 
-    /**
-     * 使用 Playwright 自动化（旧 DeepSeek 官网方式）
-     */
     private String chatWithPlaywright(String sessionId, String question, int timeoutSeconds) {
         if (!playwrightAvailable) {
             return "Playwright 未启用或初始化失败，请检查配置和环境";
@@ -145,8 +125,6 @@ public class AIChatService {
         }
     }
 
-    // ------------------- HTTP API 方法 -------------------
-
     private String chatWithOllama(String model, List<Map<String, String>> messages, double temperature) {
         Map<String, Object> request = new HashMap<>();
         request.put("model", model != null ? model : "deepseek-r1:7b");
@@ -169,6 +147,7 @@ public class AIChatService {
                 return "Ollama 错误: " + response.statusCode();
             }
         } catch (Exception e) {
+            log.error("调用 Ollama 失败", e);
             return "调用 Ollama 失败: " + e.getMessage();
         }
     }
@@ -205,6 +184,7 @@ public class AIChatService {
                 return "DeepSeek API 错误: " + response.statusCode();
             }
         } catch (Exception e) {
+            log.error("调用 DeepSeek API 失败", e);
             return "调用 DeepSeek API 失败: " + e.getMessage();
         }
     }
@@ -233,6 +213,7 @@ public class AIChatService {
                 return "自定义 API 错误: " + response.statusCode();
             }
         } catch (Exception e) {
+            log.error("调用自定义 API 失败", e);
             return "调用自定义 API 失败: " + e.getMessage();
         }
     }
@@ -248,6 +229,7 @@ public class AIChatService {
             }
             return json;
         } catch (Exception e) {
+            log.warn("解析自定义 API 响应失败: {}", json, e);
             return json;
         }
     }
@@ -255,12 +237,12 @@ public class AIChatService {
     public void closeSession(String sessionId) {
         Page page = sessionPages.remove(sessionId);
         if (page != null) {
-            try { page.close(); } catch (Exception ignored) {}
+            try { page.close(); } catch (Exception e) { log.warn("关闭 Playwright 页面异常", e); }
         }
     }
 
     public void closeAll() {
-        sessionPages.values().forEach(p -> { try { p.close(); } catch (Exception ignored) {} });
+        sessionPages.values().forEach(p -> { try { p.close(); } catch (Exception e) { log.warn("关闭页面异常", e); } });
         sessionPages.clear();
         com.codestats.common.util.PlaywrightStealthUtil.close();
     }

@@ -1,18 +1,14 @@
 package com.codestats.common.cache;
 
 import com.codestats.common.cache.impl.LocalCache;
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
 
 import java.lang.reflect.Constructor;
 
 public class CacheFactory {
+    private static final Logger log = LoggerFactory.getLogger(CacheFactory.class);
 
-    /**
-     * 根据配置创建缓存实例
-     * @param config 配置对象
-     * @param <K> 键类型
-     * @param <V> 值类型
-     * @return 缓存实例
-     */
     @SuppressWarnings("unchecked")
     public static <K, V> Cache<K, V> createCache(CacheConfigBean config) {
         CacheType type = config.getType();
@@ -27,16 +23,12 @@ public class CacheFactory {
                 Constructor<?> ctor = clazz.getConstructor(long.class, long.class);
                 return (Cache<K, V>) ctor.newInstance(ttl, maxSize);
             } catch (Exception e) {
-                System.err.println("Caffeine 缓存创建失败，回退到 LOCAL 缓存: " + e.getMessage());
+                log.warn("Caffeine 缓存创建失败，回退到 LOCAL 缓存: {}", e.getMessage());
             }
         }
-        // 默认使用 LOCAL 缓存
         return new LocalCache<>(ttl, maxSize, enableCleaner, cleanInterval);
     }
 
-    /**
-     * 使用默认配置创建缓存
-     */
     public static <K, V> Cache<K, V> createDefaultCache() {
         return createCache(new CacheConfigBean());
     }
@@ -50,9 +42,6 @@ public class CacheFactory {
         }
     }
 
-    /**
-     * 缓存配置 Bean
-     */
     public static class CacheConfigBean {
         private CacheType type = CacheConfig.DEFAULT_CACHE_TYPE;
         private long ttlMillis = CacheConfig.DEFAULT_TTL_MILLIS;
@@ -60,7 +49,6 @@ public class CacheFactory {
         private boolean enableCleaner = CacheConfig.DEFAULT_ENABLE_CLEANER;
         private long cleanIntervalSeconds = CacheConfig.DEFAULT_CLEAN_INTERVAL_SECONDS;
 
-        // getters / setters
         public CacheType getType() { return type; }
         public void setType(CacheType type) { this.type = type; }
         public long getTtlMillis() { return ttlMillis; }

@@ -4,6 +4,8 @@ import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.ColorScheme;
 import com.microsoft.playwright.options.WaitUntilState;
 import com.framework.spring.config.ConfigLoader;
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -11,10 +13,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * Playwright 工具类 - 支持配置开关（默认关闭），懒加载，避免启动失败影响应用
- */
 public class PlaywrightStealthUtil {
+    private static final Logger log = LoggerFactory.getLogger(PlaywrightStealthUtil.class);
 
     private static final AtomicReference<Playwright> playwrightRef = new AtomicReference<>();
     private static final AtomicReference<Browser> browserRef = new AtomicReference<>();
@@ -22,7 +22,6 @@ public class PlaywrightStealthUtil {
     private static final AtomicBoolean enabled = new AtomicBoolean(false);
     private static final AtomicBoolean initAttempted = new AtomicBoolean(false);
 
-    // 关键反检测参数
     private static final String[] LAUNCH_ARGS = {
             "--disable-blink-features=AutomationControlled",
             "--disable-features=IsolateOrigins,site-per-process",
@@ -45,33 +44,26 @@ public class PlaywrightStealthUtil {
     };
 
     static {
-        // 从配置文件读取是否启用 Playwright（默认 false）
         String enablePlaywright = ConfigLoader.getProperty("playwright.enabled", "false");
         enabled.set("true".equalsIgnoreCase(enablePlaywright));
         if (enabled.get()) {
-            System.out.println("[PlaywrightStealth] 配置为启用，将在首次使用时初始化");
+            log.info("Playwright 配置为启用，将在首次使用时初始化");
         } else {
-            System.out.println("[PlaywrightStealth] 配置为禁用，不会启动浏览器");
+            log.info("Playwright 配置为禁用，不会启动浏览器");
         }
     }
 
-    /**
-     * 是否可用（配置启用且初始化成功）
-     */
     public static boolean isAvailable() {
         if (!enabled.get()) return false;
         if (!initAttempted.get()) initialize();
         return initialized.get();
     }
 
-    /**
-     * 懒加载初始化
-     */
     private static synchronized void initialize() {
         if (initAttempted.get()) return;
         initAttempted.set(true);
         if (!enabled.get()) {
-            System.out.println("[PlaywrightStealth] 未启用，跳过初始化");
+            log.debug("Playwright 未启用，跳过初始化");
             return;
         }
         try {
@@ -84,26 +76,19 @@ public class PlaywrightStealthUtil {
             playwrightRef.set(playwright);
             browserRef.set(browser);
             initialized.set(true);
-            System.out.println("[PlaywrightStealth] 浏览器初始化成功");
+            log.info("Playwright 浏览器初始化成功");
         } catch (Exception e) {
-            System.err.println("[PlaywrightStealth] 浏览器初始化失败: " + e.getMessage());
-            System.err.println("Playwright 将不可用，请检查环境或设置 playwright.enabled=false");
+            log.error("Playwright 浏览器初始化失败", e);
             enabled.set(false);
             initialized.set(false);
         }
     }
 
-    /**
-     * 获取 Browser 实例（仅在可用时返回）
-     */
     public static Browser getBrowser() {
         if (!isAvailable()) return null;
         return browserRef.get();
     }
 
-    /**
-     * 创建新页面（仅在可用时）
-     */
     public static Page createDefaultPage() {
         if (!isAvailable()) {
             throw new UnsupportedOperationException("Playwright 未启用或初始化失败，请设置 playwright.enabled=true 并检查环境");
@@ -161,18 +146,15 @@ public class PlaywrightStealthUtil {
                 .setTimeout(timeoutSeconds * 1000L));
     }
 
-    /**
-     * 关闭资源（应用关闭时调用）
-     */
     public static void close() {
         try {
             if (browserRef.get() != null) browserRef.get().close();
-        } catch (Exception ignored) {}
+        } catch (Exception e) { log.warn("关闭浏览器异常", e); }
         try {
             if (playwrightRef.get() != null) playwrightRef.get().close();
-        } catch (Exception ignored) {}
+        } catch (Exception e) { log.warn("关闭 Playwright 异常", e); }
         initialized.set(false);
         enabled.set(false);
-        System.out.println("[PlaywrightStealth] 资源已释放");
+        log.info("Playwright 资源已释放");
     }
 }

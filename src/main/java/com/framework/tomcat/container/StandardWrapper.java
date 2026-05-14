@@ -7,9 +7,11 @@ import com.framework.tomcat.filter.Filter;
 import com.framework.tomcat.servlet.Servlet;
 import com.framework.tomcat.connector.Request;
 import com.framework.tomcat.connector.Response;
-
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
 
 public class StandardWrapper extends ContainerBase implements Wrapper {
+    private static final Logger log = LoggerFactory.getLogger(StandardWrapper.class);
     private String servletClass;
     private Servlet servletInstance;
 
@@ -25,7 +27,9 @@ public class StandardWrapper extends ContainerBase implements Wrapper {
             Class<?> clazz = loader.loadClass(servletClass);
             servletInstance = (Servlet) clazz.getDeclaredConstructor().newInstance();
             servletInstance.init();
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) {
+            log.error("Failed to initialize servlet: {}", servletClass, e);
+        }
         state = LifecycleState.INITIALIZED;
     }
 

@@ -1,6 +1,9 @@
 package com.codestats.lib.codestats.config;
 
 import org.yaml.snakeyaml.Yaml;
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
+
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 
 public class ConfigLoader {
+    private static final Logger log = LoggerFactory.getLogger(ConfigLoader.class);
+
     public static Config load(String[] args) {
         Config.Builder builder = new Config.Builder();
         loadYamlFromClasspathOrFile("config.yaml", builder);
@@ -68,7 +73,6 @@ public class ConfigLoader {
             String d = map.get("defaultOutputPath").toString().replace("\\", "/");
             builder.defaultOutputPath(Paths.get(d));
         }
-        // ★ 新增：加载 extraPaths
         if (map.containsKey("extraPaths")) {
             builder.extraPaths((List<String>) map.get("extraPaths"));
         }
@@ -87,7 +91,6 @@ public class ConfigLoader {
         if (defaultInput != null) builder.defaultInputPath(Paths.get(defaultInput));
         String defaultOutput = System.getenv("CODE_STATS_DEFAULT_OUTPUT");
         if (defaultOutput != null) builder.defaultOutputPath(Paths.get(defaultOutput));
-        // ★ 新增：加载额外路径环境变量
         String extra = System.getenv("CODE_STATS_EXTRA_PATHS");
         if (extra != null) builder.extraPaths(Arrays.asList(extra.split(",")));
     }
@@ -107,9 +110,8 @@ public class ConfigLoader {
                 case "--no-gitignore": builder.useGitIgnore(false); break;
                 case "--default-input": builder.defaultInputPath(Paths.get(args[++i].replace("\\", "/"))); break;
                 case "--default-output": builder.defaultOutputPath(Paths.get(args[++i].replace("\\", "/"))); break;
-                // ★ 新增命令行参数
                 case "--extra-paths": builder.extraPaths(Arrays.asList(args[++i].split(","))); break;
-                default: System.err.println("Unknown option: " + args[i]); break;
+                default: log.warn("Unknown option: {}", args[i]); break;
             }
         }
     }

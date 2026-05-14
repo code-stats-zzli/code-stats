@@ -5,6 +5,8 @@ import com.framework.tomcat.container.Service;
 import com.framework.tomcat.core.Lifecycle;
 import com.framework.tomcat.core.LifecycleListener;
 import com.framework.tomcat.core.LifecycleState;
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -13,6 +15,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class Connector implements Lifecycle {
+    private static final Logger log = LoggerFactory.getLogger(Connector.class);
     private int port;
     private Service service;
     private ExecutorService threadPool;
@@ -32,12 +35,14 @@ public class Connector implements Lifecycle {
         new Thread(() -> {
             try {
                 serverSocket = new ServerSocket(port);
-                System.out.println("Connector listening on " + port);
+                log.info("Connector listening on {}", port);
                 while (running) {
                     Socket socket = serverSocket.accept();
                     threadPool.submit(() -> process(socket));
                 }
-            } catch (IOException e) { e.printStackTrace(); }
+            } catch (IOException e) {
+                log.error("Connector error", e);
+            }
         }).start();
     }
 
@@ -54,12 +59,15 @@ public class Connector implements Lifecycle {
                 response.write("<h1>No Engine</h1>");
                 response.send();
             }
-        } catch (Exception e) { e.printStackTrace(); }
-        finally { try { socket.close(); } catch (IOException e) {} }
+        } catch (Exception e) {
+            log.error("Request processing failed", e);
+        } finally {
+            try { socket.close(); } catch (IOException e) { log.warn("Close socket error", e); }
+        }
     }
 
     @Override
-    public void stop() { running = false; try { if (serverSocket != null) serverSocket.close(); } catch (IOException e) {} }
+    public void stop() { running = false; try { if (serverSocket != null) serverSocket.close(); } catch (IOException e) { log.warn("Close server socket error", e); } }
     @Override
     public void destroy() { stop(); if (threadPool != null) threadPool.shutdown(); }
     @Override public void addLifecycleListener(LifecycleListener listener) {}

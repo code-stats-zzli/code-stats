@@ -1,17 +1,16 @@
 package com.codestats.lib.codestats.statistics;
 
-
 import com.codestats.lib.codestats.core.FileInfo;
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-
-
-// 行数统计（支持排除空行/注释）
 public class LineCountStrategy implements StatisticStrategy {
+    private static final Logger log = LoggerFactory.getLogger(LineCountStrategy.class);
     private final boolean excludeCommentsAndBlanks;
 
     public LineCountStrategy(boolean excludeCommentsAndBlanks) {
@@ -31,7 +30,6 @@ public class LineCountStrategy implements StatisticStrategy {
                     blank++;
                     continue;
                 }
-                // 简化的注释检测（实际项目需要更严谨）
                 if (excludeCommentsAndBlanks) {
                     if (trimmed.startsWith("//")) {
                         comment++;
@@ -55,7 +53,7 @@ public class LineCountStrategy implements StatisticStrategy {
             info.setCommentLines(comment);
             info.setBlankLines(blank);
         } catch (IOException e) {
-            System.err.println("Error reading " + file + ": " + e.getMessage());
+            log.error("Error reading file: {}", file, e);
         }
     }
 }

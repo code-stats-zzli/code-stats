@@ -4,6 +4,9 @@ import com.codestats.lib.codestats.core.FileInfo;
 import com.codestats.lib.codestats.language.Language;
 import com.codestats.lib.codestats.language.LanguageDetector;
 import com.codestats.lib.codestats.language.LanguageSpec;
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
+
 import java.io.BufferedReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,6 +14,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class AnalyzeStage implements Stage<Path, FileInfo> {
+    private static final Logger log = LoggerFactory.getLogger(AnalyzeStage.class);
+
     private final LanguageDetector detector = new LanguageDetector();
     private final boolean excludeComments;
     private static final Pattern COMPLEXITY_KEYWORDS = Pattern.compile(
@@ -29,7 +34,6 @@ public class AnalyzeStage implements Stage<Path, FileInfo> {
         int complexity = 0;
 
         if (spec.getLineComment() == null && spec.getBlockStart() == null) {
-            // 无法识别，只统计总行数
             long total = countLines(file);
             info.setLines(total);
             if (excludeComments) info.setCodeLines(total);
@@ -47,14 +51,10 @@ public class AnalyzeStage implements Stage<Path, FileInfo> {
                     blank++;
                     continue;
                 }
-                // 复杂度统计（仅对code行）
                 if (!inBlock && !trimmed.startsWith(spec.getLineComment() != null ? spec.getLineComment() : "")) {
-                    // 统计 line 中匹配 COMPLEXITY_KEYWORDS 的次数（Java 8 兼容）
                     Matcher m = COMPLEXITY_KEYWORDS.matcher(line);
                     int count = 0;
-                    while (m.find()) {
-                        count++;
-                    }
+                    while (m.find()) count++;
                     complexity += count;
                 }
 
@@ -84,7 +84,7 @@ public class AnalyzeStage implements Stage<Path, FileInfo> {
             info.setBlankLines(blank);
             info.setComplexity(complexity);
         } catch (Exception e) {
-            System.err.println("Error reading " + file + ": " + e.getMessage());
+            log.error("Error reading file: {}", file, e);
         }
         return info;
     }
@@ -93,6 +93,7 @@ public class AnalyzeStage implements Stage<Path, FileInfo> {
         try (BufferedReader r = Files.newBufferedReader(file)) {
             return r.lines().count();
         } catch (Exception e) {
+            log.warn("Could not count lines for: {}", file, e);
             return 0;
         }
     }

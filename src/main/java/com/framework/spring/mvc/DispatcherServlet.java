@@ -9,6 +9,8 @@ import com.framework.tomcat.connector.Request;
 import com.framework.tomcat.connector.Response;
 import com.framework.tomcat.servlet.HttpServlet;
 import com.framework.util.JsonUtil;
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -21,13 +23,13 @@ import java.util.List;
 import java.util.Map;
 
 public class DispatcherServlet extends HttpServlet {
-
+    private static final Logger log = LoggerFactory.getLogger(DispatcherServlet.class);
     private SimpleApplicationContext applicationContext;
     private final Map<String, Handler> handlerMappings = new HashMap<>();
 
     @Override
     public void init() throws Exception {
-        System.out.println(">>> DispatcherServlet init");
+        log.info("DispatcherServlet 初始化开始");
         applicationContext = new SimpleApplicationContext();
         String packages = ConfigLoader.getProperty("scan.packages", "com.codestats.business");
         applicationContext.scanAndInit(packages);
@@ -45,11 +47,11 @@ public class DispatcherServlet extends HttpServlet {
                     if (!fullPath.startsWith("/")) fullPath = "/" + fullPath;
                     boolean isResponseBody = method.isAnnotationPresent(ResponseBody.class);
                     handlerMappings.put(fullPath, new Handler(controller, method, isResponseBody));
-                    System.out.println("Mapped " + fullPath);
+                    log.debug("Mapped {}", fullPath);
                 }
             }
         }
-        System.out.println(">>> DispatcherServlet ready, mapped " + handlerMappings.size() + " handlers");
+        log.info("DispatcherServlet 初始化完成，共映射 {} 个处理器", handlerMappings.size());
     }
 
     @Override
@@ -67,7 +69,7 @@ public class DispatcherServlet extends HttpServlet {
         ResponseContextHolder.setResponse(res);
         try {
             String uri = req.getUri();
-            System.out.println(">>> Request URI: " + uri);
+            log.debug("Request URI: {}", uri);
             Handler handler = handlerMappings.get(uri);
             if (handler != null) {
                 Object[] args = ParamBinder.resolveParameters(handler.method, req);
@@ -82,9 +84,7 @@ public class DispatcherServlet extends HttpServlet {
                 res.send();
                 return;
             }
-            // 静态文件服务（支持 webapps 下任意子目录）
             if (serveStaticFile(uri, res)) return;
-            // 404
             res.setStatus(404, "Not Found");
             res.write("<h1>404 - Not Found</h1><p>URI: " + uri + "</p>");
             res.send();
@@ -96,25 +96,23 @@ public class DispatcherServlet extends HttpServlet {
 
     private boolean serveStaticFile(String uri, Response res) {
         if (uri == null || uri.contains("..") || uri.contains("//")) return false;
-        // uri 示例: /face/index.html  (已去除 context path)
         String cleanUri = uri.startsWith("/") ? uri.substring(1) : uri;
         int firstSlash = cleanUri.indexOf('/');
         if (firstSlash <= 0) {
-            System.out.println("Static file: no slash, skip");
+            log.debug("静态文件无斜杠，跳过: {}", uri);
             return false;
         }
-        String webappRoot = cleanUri.substring(0, firstSlash);      // "face"
-        String subPath = cleanUri.substring(firstSlash + 1);        // "index.html"
+        String webappRoot = cleanUri.substring(0, firstSlash);
+        String subPath = cleanUri.substring(firstSlash + 1);
         Path base = Paths.get("webapps", webappRoot);
         Path filePath = base.resolve(subPath).normalize();
-        // 安全检查
         if (!filePath.startsWith(base)) {
-            System.out.println("Static file: path traversal detected");
+            log.warn("静态文件路径越界: {}", filePath);
             return false;
         }
         File file = filePath.toFile();
         if (!file.exists() || file.isDirectory()) {
-            System.out.println("Static file not found: " + filePath);
+            log.debug("静态文件不存在: {}", filePath);
             return false;
         }
         String contentType = getContentType(uri);
@@ -122,10 +120,10 @@ public class DispatcherServlet extends HttpServlet {
         res.setStatus(200, "OK");
         try (FileInputStream fis = new FileInputStream(file)) {
             res.sendStatic(fis, contentType, file.length());
-            System.out.println("Served static file: " + filePath);
+            log.info("提供静态文件: {}", filePath);
             return true;
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("提供静态文件失败: {}", filePath, e);
             return false;
         }
     }

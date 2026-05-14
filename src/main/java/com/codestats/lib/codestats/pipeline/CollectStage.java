@@ -1,6 +1,8 @@
 package com.codestats.lib.codestats.pipeline;
 
 import com.codestats.lib.codestats.filter.CompositeFilter;
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -9,7 +11,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CollectStage implements Stage<Path, List<Path>> {
+    private static final Logger log = LoggerFactory.getLogger(CollectStage.class);
     private final CompositeFilter filterChain;
+
     public CollectStage(CompositeFilter filterChain) { this.filterChain = filterChain; }
 
     @Override
@@ -23,11 +27,11 @@ public class CollectStage implements Stage<Path, List<Path>> {
             }
             @Override
             public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                System.err.println("Skip file: " + file + " - " + exc.getMessage());
+                log.warn("Skip file: {} - {}", file, exc.getMessage());
                 return FileVisitResult.CONTINUE;
             }
         });
-        System.out.println("Collected " + result.size() + " files.");
+        log.info("Collected {} files.", result.size());
         return result;
     }
 }

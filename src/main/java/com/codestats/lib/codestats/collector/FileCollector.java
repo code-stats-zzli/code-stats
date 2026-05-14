@@ -1,6 +1,9 @@
 package com.codestats.lib.codestats.collector;
 
 import com.codestats.lib.codestats.filter.CompositeFilter;
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
+
 import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -8,6 +11,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class FileCollector {
+    private static final Logger log = LoggerFactory.getLogger(FileCollector.class);
     private final CompositeFilter filterChain;
 
     public FileCollector(CompositeFilter filterChain) {
@@ -28,11 +32,11 @@ public class FileCollector {
             }
             @Override
             public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                System.err.println("Skip file: " + file + " - " + exc.getMessage());
+                log.warn("Skip file: {} - {}", file, exc.getMessage());
                 return FileVisitResult.CONTINUE;
             }
         });
-        System.out.println("Collected " + fileCount.get() + " files.");
+        log.info("Collected {} files.", fileCount.get());
         return queue;
     }
 }

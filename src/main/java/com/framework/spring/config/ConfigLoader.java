@@ -1,11 +1,14 @@
 package com.framework.spring.config;
 
+import com.framework.log.LoggerFactory;
+import com.framework.log.core.Logger;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
 public class ConfigLoader {
-
+    private static final Logger log = LoggerFactory.getLogger(ConfigLoader.class);
     private static final Properties props = new Properties();
 
     static {
@@ -14,7 +17,7 @@ public class ConfigLoader {
             if (is != null) {
                 props.load(is);
             } else {
-                System.err.println("WARNING: application.properties not found in classpath");
+                log.warn("application.properties not found in classpath");
             }
         } catch (IOException e) {
             throw new RuntimeException("Failed to load application.properties", e);

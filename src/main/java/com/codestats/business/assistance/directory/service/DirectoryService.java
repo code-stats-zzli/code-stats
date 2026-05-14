@@ -5,12 +5,14 @@ import com.codestats.common.util.FileUtils;
 import com.framework.spring.annotation.Service;
 import com.framework.spring.config.ConfigLoader;
 
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * 目录管理服务层 - 支持多根目录（本地/服务器）
@@ -27,8 +29,8 @@ public class DirectoryService {
     private Path serverRoot;
 
     public DirectoryService() {
-        // 本地根：当前用户目录下的 temp 或配置的路径
-        String localRootPath = ConfigLoader.getProperty("files.local.root", System.getProperty("user.dir") + "/temp");
+        // 本地根：当前用户目录下的 codestats
+        String localRootPath = ConfigLoader.getProperty("files.local.root", System.getProperty("user.dir"));
         localRoot = Paths.get(localRootPath).normalize().toAbsolutePath();
         ensureRootExists(localRoot);
 
@@ -146,7 +148,7 @@ public class DirectoryService {
     }
 
     /**
-     * 读取文件内容
+     * 读取文件内容（文本）
      */
     public String readFile(String rootType, String filePath) throws IOException {
         Path root = getRootPath(rootType);
@@ -164,5 +166,53 @@ public class DirectoryService {
         Path root = getRootPath(rootType);
         Path target = FileUtils.resolveSafePath(root, filePath);
         FileUtils.writeFile(target, content);
+    }
+
+    // ========== 新增：下载功能 ==========
+
+    /**
+     * 读取文件二进制内容
+     */
+    public byte[] readFileBytes(String rootType, String filePath) throws IOException {
+        Path root = getRootPath(rootType);
+        Path target = FileUtils.resolveSafePath(root, filePath);
+        if (!java.nio.file.Files.isRegularFile(target)) {
+            throw new IOException("不是文件: " + target);
+        }
+        return java.nio.file.Files.readAllBytes(target);
+    }
+
+    /**
+     * 将目录打包成 ZIP 并写入输出流
+     * @param rootType 根类型
+     * @param dirPath 相对路径
+     * @param out 输出流（通常为 Http 响应流）
+     */
+    public void zipDirectory(String rootType, String dirPath, OutputStream out) throws IOException {
+        Path root = getRootPath(rootType);
+        Path targetDir = FileUtils.resolveSafePath(root, dirPath);
+        if (!java.nio.file.Files.isDirectory(targetDir)) {
+            throw new IOException("路径不是目录: " + targetDir);
+        }
+
+        try (ZipOutputStream zos = new ZipOutputStream(out)) {
+            java.nio.file.Files.walk(targetDir)
+                    .filter(java.nio.file.Files::isRegularFile)
+                    .forEach(file -> {
+                        String relativePath = targetDir.relativize(file).toString().replace('\\', '/');
+                        try {
+                            zos.putNextEntry(new ZipEntry(relativePath));
+                            java.nio.file.Files.copy(file, zos);
+                            zos.closeEntry();
+                        } catch (IOException e) {
+                            throw new RuntimeException("打包失败: " + relativePath, e);
+                        }
+                    });
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof IOException) {
+                throw (IOException) e.getCause();
+            }
+            throw e;
+        }
     }
 }

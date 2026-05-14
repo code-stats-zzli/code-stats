@@ -8,6 +8,7 @@ import com.framework.spring.annotation.RequestMapping;
 import com.framework.spring.annotation.ResponseBody;
 import com.framework.spring.mvc.RequestContextHolder;
 import com.framework.tomcat.connector.Request;
+import com.framework.tomcat.connector.Response;
 import com.framework.util.JsonUtil;
 
 import java.io.IOException;
@@ -23,7 +24,6 @@ public class FilesController {
     @Autowired
     private DirectoryService directoryService;
 
-    // 获取根类型参数
     private String getRootType(Map<String, String> params) {
         String rt = params.get("rootType");
         if (rt == null || rt.isEmpty()) {
@@ -142,7 +142,6 @@ public class FilesController {
     @RequestMapping("/upload")
     @ResponseBody
     public String upload() throws Exception {
-        // 简化实现：实际应处理 multipart，此处示例使用 Base64 接收文件内容（前端需配合）
         String body = getRequestBody();
         Map<String, Object> req = parseJson(body);
         String rootType = (String) req.getOrDefault("rootType", DirectoryService.ROOT_TYPE_LOCAL);
@@ -154,6 +153,78 @@ public class FilesController {
         String content = new String(bytes, StandardCharsets.UTF_8);
         directoryService.writeFile(rootType, parentPath + (parentPath.isEmpty() ? "" : "/") + fileName, content);
         return successResponse();
+    }
+
+    // 文件下载（不修改）
+    @RequestMapping("/download")
+    public void downloadFile() throws Exception {
+        Response response = getResponse();
+        if (response == null) {
+            throw new RuntimeException("No response available");
+        }
+        Map<String, String> params = parseQueryParams();
+        String rootType = getRootType(params);
+        String path = params.get("path");
+        if (path == null || path.trim().isEmpty()) {
+            response.setStatus(400, "Bad Request");
+            response.write("Missing parameter: path");
+            response.send();
+            return;
+        }
+
+        try {
+            byte[] data = directoryService.readFileBytes(rootType, path);
+            String fileName = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
+            response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+            response.setContentType("application/octet-stream");
+            response.getRawOutputStream().write(data);
+            response.getRawOutputStream().flush();
+        } catch (Exception e) {
+            response.setStatus(500, "Internal Server Error");
+            response.write("下载失败: " + e.getMessage());
+            response.send();
+        }
+    }
+
+    // 目录下载为 ZIP（已修复）
+    @RequestMapping("/downloadZip")
+    public void downloadDirectoryAsZip() throws Exception {
+        Response response = getResponse();
+        if (response == null) {
+            throw new RuntimeException("No response available");
+        }
+        Map<String, String> params = parseQueryParams();
+        String rootType = getRootType(params);
+        String path = params.get("path");
+        if (path == null || path.trim().isEmpty()) {
+            response.setStatus(400, "Bad Request");
+            response.write("Missing parameter: path");
+            response.send();
+            return;
+        }
+
+        // 准备文件名
+        String zipName = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
+        if (zipName.isEmpty()) zipName = "root";
+        zipName += ".zip";
+
+        // 设置响应头
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + zipName + "\"");
+        response.setContentType("application/zip");
+        response.setStatus(200, "OK");
+
+        // 直接写入输出流，使用 try-catch 避免异常后重复响应
+        try {
+            directoryService.zipDirectory(rootType, path, response.getRawOutputStream());
+            response.getRawOutputStream().flush();
+        } catch (Exception e) {
+            // 响应头已经发送，无法再返回错误页面，只能记录日志
+            e.printStackTrace();
+            // 尝试关闭输出流（客户端会断开连接）
+            try {
+                response.getRawOutputStream().close();
+            } catch (IOException ignored) {}
+        }
     }
 
     // ---------- 辅助方法 ----------
@@ -200,6 +271,10 @@ public class FilesController {
             }
         } catch (Exception ignored) {}
         return map;
+    }
+
+    private Response getResponse() {
+        return com.framework.spring.mvc.ResponseContextHolder.getResponse();
     }
 
     private String successResponse() {

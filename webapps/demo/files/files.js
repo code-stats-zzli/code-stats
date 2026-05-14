@@ -1,12 +1,11 @@
 // ======== D:\work\git\CodeStats\webapps\demo\files\files.js ========
 (function() {
     const API_BASE = window.apiUrl('/files/api');
-    let currentRootType = 'local';   // 'local' 或 'server'
+    let currentRootType = 'local';
     let currentPath = '';
     let currentEditPath = null;
     let rootPathInfo = {};
 
-    // DOM 元素
     const treeContainer = document.getElementById('treeContainer');
     const pathSpan = document.getElementById('currentPath');
     const fileTableBody = document.getElementById('fileTableBody');
@@ -27,7 +26,6 @@
         alert(msg);
     }
 
-    // 获取根信息
     async function fetchRootInfo() {
         try {
             const res = await fetch(`${API_BASE}/root?rootType=${currentRootType}`);
@@ -54,13 +52,16 @@
         return await res.json();
     }
 
-    // 渲染树
     async function renderTree() {
         try {
             const rootNode = await fetchTree('');
             treeContainer.innerHTML = '';
             const rootLi = createTreeNode(rootNode, 0);
             treeContainer.appendChild(rootLi);
+            const rootToggle = rootLi.querySelector('.toggle');
+            if (rootToggle && rootToggle.textContent === '▶') {
+                rootToggle.click();
+            }
         } catch (err) {
             showMsg(err.message, true);
         }
@@ -73,7 +74,6 @@
         div.className = 'tree-item';
         div.style.paddingLeft = (level * 16 + 8) + 'px';
 
-        // 只有目录且拥有子节点时才显示 toggle 箭头
         const hasChildren = node.hasChildren === true;
         const toggle = document.createElement('span');
         toggle.className = 'toggle';
@@ -101,6 +101,11 @@
         div.onclick = () => {
             if (node.type === 'directory') {
                 navigateTo(node.path);
+                const childrenUl = li.querySelector('.tree-children');
+                const isExpanded = childrenUl && childrenUl.classList.contains('open');
+                if (!isExpanded && hasChildren) {
+                    toggle.click();
+                }
             } else {
                 openEditor(node.path);
             }
@@ -138,7 +143,9 @@
                 }
             }
             childrenUl.classList.toggle('open');
-            toggleSpan.textContent = childrenUl.classList.contains('open') ? '▼' : '▶';
+            const newState = childrenUl.classList.contains('open');
+            toggleSpan.textContent = newState ? '▼' : '▶';
+            node.expanded = newState;
         }
     }
 
@@ -159,7 +166,7 @@
     function renderFileList(files) {
         fileTableBody.innerHTML = '';
         if (files.length === 0) {
-            fileTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">目录为空</td></tr>';
+            fileTableBody.innerHTML = '<td><td colspan="5" style="text-align:center;">目录为空</td></tr>';
             return;
         }
         files.forEach(file => {
@@ -171,13 +178,14 @@
                 <td>${file.modified || '-'}</td>
                 <td class="actions">
                     ${file.type === 'file' ? `<span class="action-icon" data-action="edit" data-path="${file.path}">✏️ 编辑</span>` : ''}
+                    <span class="action-icon" data-action="download" data-path="${file.path}" data-type="${file.type}">⬇️ 下载</span>
                     <span class="action-icon" data-action="rename" data-path="${file.path}" data-name="${file.name}">✏️ 重命名</span>
                     <span class="action-icon" data-action="delete" data-path="${file.path}">🗑️ 删除</span>
                 </td>
             `;
             fileTableBody.appendChild(row);
         });
-        // 名称点击（目录进入，文件编辑）
+
         document.querySelectorAll('.file-name').forEach(el => {
             el.addEventListener('click', (e) => {
                 const path = el.dataset.path;
@@ -186,14 +194,16 @@
                 else openEditor(path);
             });
         });
-        // 操作按钮
+
         document.querySelectorAll('.action-icon').forEach(icon => {
             icon.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const action = icon.dataset.action;
                 const path = icon.dataset.path;
+                const type = icon.dataset.type;
                 const name = icon.dataset.name;
                 if (action === 'edit') openEditor(path);
+                else if (action === 'download') downloadItem(path, type);
                 else if (action === 'rename') renameItem(path, name);
                 else if (action === 'delete') deleteItem(path);
             });
@@ -283,6 +293,19 @@
             }
         } catch (err) {
             showMsg(err.message, true);
+        }
+    }
+
+    // 新增：下载文件或目录
+    function downloadItem(path, type) {
+        if (type === 'directory') {
+            // 目录下载为 ZIP
+            const url = `${API_BASE}/downloadZip?rootType=${currentRootType}&path=${encodeURIComponent(path)}`;
+            window.open(url, '_blank');
+        } else {
+            // 文件直接下载
+            const url = `${API_BASE}/download?rootType=${currentRootType}&path=${encodeURIComponent(path)}`;
+            window.open(url, '_blank');
         }
     }
 
@@ -382,7 +405,6 @@
         await navigateTo('');
     }
 
-    // 事件绑定
     rootLocalBtn.addEventListener('click', () => switchRoot('local'));
     rootServerBtn.addEventListener('click', () => switchRoot('server'));
     newFolderBtn.addEventListener('click', newFolder);
@@ -406,7 +428,6 @@
         });
     }
 
-    // 初始化
     (async () => {
         await switchRoot('local');
     })();

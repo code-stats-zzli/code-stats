@@ -1,35 +1,39 @@
+<!-- ======== D:\work\git\CodeStats\webapps\demo\files\files.html ======== -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>目录管理 - CodeStats</title>
-    <script src="../global.js"></script>   <!-- 新增 -->
+    <script src="../global.js"></script>
     <link rel="stylesheet" href="../global-tech.css">
     <link rel="stylesheet" href="files.css">
 </head>
 <body>
 <div class="files-container">
-    <!-- 左侧页签 + 目录树 -->
+    <!-- 左侧目录树 -->
     <aside class="files-sidebar">
-        <div class="tab-header">
-            <button class="tab-btn active" data-root-type="local">📁 本地目录</button>
-            <button class="tab-btn" data-root-type="server">💾 服务器目录 (D:)</button>
+        <div class="sidebar-header">
+            <div class="root-selector">
+                <button id="rootLocalBtn" class="root-btn active">📁 本地目录</button>
+                <button id="rootServerBtn" class="root-btn">💾 服务器目录 (D:)</button>
+            </div>
         </div>
         <div class="tree-wrapper" id="treeWrapper">
             <div id="treeContainer" class="tree"></div>
         </div>
     </aside>
 
-    <!-- 右侧主区域：文件列表 / 文件编辑器 -->
+    <!-- 右侧主区域 -->
     <main class="files-content">
         <div id="pathBar" class="path-bar">
             <span class="path-label">当前路径：</span>
-            <span id="currentPath" class="path-value"></span>
+            <span id="currentPath" class="path-value">/</span>
         </div>
         <div id="fileListPanel" class="file-list-panel">
             <div class="toolbar">
                 <button id="newFolderBtn" class="btn-icon">📁 新建目录</button>
+                <button id="newFileBtn" class="btn-icon">📄 新建文件</button>
                 <button id="uploadBtn" class="btn-icon">📤 上传文件</button>
                 <button id="refreshBtn" class="btn-icon">🔄 刷新</button>
             </div>

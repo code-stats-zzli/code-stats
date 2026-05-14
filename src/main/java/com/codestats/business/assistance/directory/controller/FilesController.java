@@ -1,7 +1,8 @@
+// ======== D:\work\git\CodeStats\src\main\java\com\codestats\business\assistance\directory\controller\FilesController.java ========
 package com.codestats.business.assistance.directory.controller;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.codestats.business.assistance.directory.service.DirectoryService;
+import com.framework.spring.annotation.Autowired;
 import com.framework.spring.annotation.Controller;
 import com.framework.spring.annotation.RequestMapping;
 import com.framework.spring.annotation.ResponseBody;
@@ -10,243 +11,166 @@ import com.framework.tomcat.connector.Request;
 import com.framework.util.JsonUtil;
 
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.text.SimpleDateFormat;
-import java.util.*;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 
 @Controller
 @RequestMapping("/files/api")
 public class FilesController {
 
-    private static final String LOCAL_ROOT = System.getProperty("user.dir");
-    private static final String SERVER_ROOT = "D:/";
+    @Autowired
+    private DirectoryService directoryService;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
-    // 获取根路径
-    private Path getRootPath(String rootType) {
-        if ("server".equals(rootType)) {
-            return Paths.get(SERVER_ROOT);
+    // 获取根类型参数
+    private String getRootType(Map<String, String> params) {
+        String rt = params.get("rootType");
+        if (rt == null || rt.isEmpty()) {
+            rt = DirectoryService.ROOT_TYPE_LOCAL;
         }
-        return Paths.get(LOCAL_ROOT);
+        return rt;
     }
 
-    // 安全校验：确保路径在根目录内
-    private Path safePath(String rootType, String userPath) throws IOException {
-        Path root = getRootPath(rootType);
-        Path target;
-        if (userPath == null || userPath.trim().isEmpty()) {
-            target = root;
-        } else {
-            target = root.resolve(userPath).normalize();
-        }
-        if (!target.startsWith(root)) {
-            throw new SecurityException("路径越界访问");
-        }
-        return target;
+    @RequestMapping("/root")
+    @ResponseBody
+    public String getRootInfo() throws Exception {
+        Map<String, String> params = parseQueryParams();
+        String rootType = getRootType(params);
+        return JsonUtil.toJson(directoryService.getRootInfo(rootType));
     }
 
-    /**
-     * 获取目录树 (递归到第一层，子节点懒加载)
-     * GET /files/api/tree?rootType=local&path=
-     */
     @RequestMapping("/tree")
     @ResponseBody
     public String getTree() throws Exception {
-        Request request = RequestContextHolder.getRequest();
-        Map<String, String> params = parseQuery(request.getQueryString());
-        String rootType = params.getOrDefault("rootType", "local");
+        Map<String, String> params = parseQueryParams();
+        String rootType = getRootType(params);
         String path = params.getOrDefault("path", "");
-        Path target = safePath(rootType, path);
-        Map<String, Object> node = buildTreeNode(target, rootType, true);
+        boolean withChildren = !"false".equalsIgnoreCase(params.get("withChildren"));
+        var node = directoryService.getTreeNode(rootType, path, withChildren);
         return JsonUtil.toJson(node);
     }
 
-    private Map<String, Object> buildTreeNode(Path path, String rootType, boolean withChildren) throws IOException {
-        Map<String, Object> node = new LinkedHashMap<>();
-        node.put("name", path.getFileName().toString());
-        node.put("path", path.toString());
-        boolean isDir = Files.isDirectory(path);
-        node.put("type", isDir ? "directory" : "file");
-        if (withChildren && isDir) {
-            List<Map<String, Object>> children = new ArrayList<>();
-            try (DirectoryStream<Path> stream = Files.newDirectoryStream(path)) {
-                for (Path child : stream) {
-                    // 只展示一层，子节点 children 为空，前端懒加载
-                    Map<String, Object> childNode = buildTreeNode(child, rootType, false);
-                    children.add(childNode);
-                }
-            }
-            node.put("children", children);
-            node.put("expanded", false);
-        } else {
-            node.put("children", Collections.emptyList());
-        }
-        return node;
-    }
-
-    /**
-     * 获取文件列表（当前目录）
-     * GET /files/api/list?rootType=local&path=
-     */
     @RequestMapping("/list")
     @ResponseBody
     public String listFiles() throws Exception {
-        Request request = RequestContextHolder.getRequest();
-        Map<String, String> params = parseQuery(request.getQueryString());
-        String rootType = params.getOrDefault("rootType", "local");
+        Map<String, String> params = parseQueryParams();
+        String rootType = getRootType(params);
         String path = params.getOrDefault("path", "");
-        Path target = safePath(rootType, path);
-        List<Map<String, Object>> entries = new ArrayList<>();
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(target)) {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-            for (Path entry : stream) {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("name", entry.getFileName().toString());
-                item.put("path", entry.toString());
-                item.put("type", Files.isDirectory(entry) ? "directory" : "file");
-                item.put("size", Files.isRegularFile(entry) ? Files.size(entry) : 0);
-                item.put("modified", sdf.format(Files.getLastModifiedTime(entry).toMillis()));
-                entries.add(item);
-            }
-            // 排序：目录在前，文件在后，按名称
-            entries.sort((a, b) -> {
-                if (a.get("type").equals(b.get("type"))) {
-                    return ((String) a.get("name")).compareToIgnoreCase((String) b.get("name"));
-                }
-                return a.get("type").equals("directory") ? -1 : 1;
-            });
-        }
-        return JsonUtil.toJson(entries);
+        var list = directoryService.listDirectory(rootType, path);
+        return JsonUtil.toJson(list);
     }
 
-    /**
-     * 读取文件内容
-     * GET /files/api/read?rootType=local&path=
-     */
     @RequestMapping("/read")
     @ResponseBody
     public String readFile() throws Exception {
-        Request request = RequestContextHolder.getRequest();
-        Map<String, String> params = parseQuery(request.getQueryString());
-        String rootType = params.getOrDefault("rootType", "local");
+        Map<String, String> params = parseQueryParams();
+        String rootType = getRootType(params);
         String path = params.get("path");
         if (path == null) return errorResponse("缺少path参数");
-        Path target = safePath(rootType, path);
-        if (!Files.isRegularFile(target)) {
-            return errorResponse("不是文件");
-        }
-        String content = new String(Files.readAllBytes(target));
+        String content = directoryService.readFile(rootType, path);
         Map<String, Object> result = new HashMap<>();
         result.put("content", content);
-        result.put("path", target.toString());
+        result.put("path", path);
         return JsonUtil.toJson(result);
     }
 
-    /**
-     * 保存文件内容
-     * POST /files/api/save
-     * Body: { "rootType":"local", "path":"/a/b.txt", "content":"..." }
-     */
     @RequestMapping("/save")
     @ResponseBody
     public String saveFile() throws Exception {
         String body = getRequestBody();
-        JsonNode root = objectMapper.readTree(body);
-        String rootType = root.has("rootType") ? root.get("rootType").asText() : "local";
-        String path = root.has("path") ? root.get("path").asText() : null;
-        String content = root.has("content") ? root.get("content").asText() : "";
-        if (path == null) return errorResponse("缺少path");
-        Path target = safePath(rootType, path);
-        Files.write(target, content.getBytes());
+        Map<String, Object> req = parseJson(body);
+        String rootType = (String) req.getOrDefault("rootType", DirectoryService.ROOT_TYPE_LOCAL);
+        String path = (String) req.get("path");
+        String content = (String) req.getOrDefault("content", "");
+        if (path == null) return errorResponse("缺少path参数");
+        directoryService.writeFile(rootType, path, content);
         return successResponse();
     }
 
-    /**
-     * 新建目录
-     * POST /files/api/mkdir
-     * Body: { "rootType":"local", "parentPath":"/a", "name":"newFolder" }
-     */
     @RequestMapping("/mkdir")
     @ResponseBody
     public String mkdir() throws Exception {
         String body = getRequestBody();
-        JsonNode root = objectMapper.readTree(body);
-        String rootType = root.has("rootType") ? root.get("rootType").asText() : "local";
-        String parentPath = root.has("parentPath") ? root.get("parentPath").asText() : "";
-        String name = root.has("name") ? root.get("name").asText() : null;
+        Map<String, Object> req = parseJson(body);
+        String rootType = (String) req.getOrDefault("rootType", DirectoryService.ROOT_TYPE_LOCAL);
+        String parentPath = (String) req.getOrDefault("parentPath", "");
+        String name = (String) req.get("name");
         if (name == null || name.trim().isEmpty()) return errorResponse("目录名不能为空");
-        Path parent = safePath(rootType, parentPath);
-        Path newDir = parent.resolve(name);
-        Files.createDirectories(newDir);
+        directoryService.createDirectory(rootType, parentPath, name);
         return successResponse();
     }
 
-    /**
-     * 重命名文件或目录
-     * POST /files/api/rename
-     * Body: { "rootType":"local", "path":"/a/old", "newName":"new" }
-     */
+    @RequestMapping("/createFile")
+    @ResponseBody
+    public String createFile() throws Exception {
+        String body = getRequestBody();
+        Map<String, Object> req = parseJson(body);
+        String rootType = (String) req.getOrDefault("rootType", DirectoryService.ROOT_TYPE_LOCAL);
+        String parentPath = (String) req.getOrDefault("parentPath", "");
+        String fileName = (String) req.get("fileName");
+        if (fileName == null || fileName.trim().isEmpty()) return errorResponse("文件名不能为空");
+        directoryService.createFile(rootType, parentPath, fileName);
+        return successResponse();
+    }
+
     @RequestMapping("/rename")
     @ResponseBody
     public String rename() throws Exception {
         String body = getRequestBody();
-        JsonNode root = objectMapper.readTree(body);
-        String rootType = root.has("rootType") ? root.get("rootType").asText() : "local";
-        String path = root.has("path") ? root.get("path").asText() : null;
-        String newName = root.has("newName") ? root.get("newName").asText() : null;
+        Map<String, Object> req = parseJson(body);
+        String rootType = (String) req.getOrDefault("rootType", DirectoryService.ROOT_TYPE_LOCAL);
+        String path = (String) req.get("path");
+        String newName = (String) req.get("newName");
         if (path == null || newName == null) return errorResponse("缺少参数");
-        Path source = safePath(rootType, path);
-        Path target = source.resolveSibling(newName);
-        Files.move(source, target);
+        directoryService.rename(rootType, path, newName);
         return successResponse();
     }
 
-    /**
-     * 删除文件或空目录
-     * POST /files/api/delete
-     * Body: { "rootType":"local", "path":"/a/file.txt" }
-     */
     @RequestMapping("/delete")
     @ResponseBody
     public String delete() throws Exception {
         String body = getRequestBody();
-        JsonNode root = objectMapper.readTree(body);
-        String rootType = root.has("rootType") ? root.get("rootType").asText() : "local";
-        String path = root.has("path") ? root.get("path").asText() : null;
-        if (path == null) return errorResponse("缺少path");
-        Path target = safePath(rootType, path);
-        if (Files.isDirectory(target)) {
-            Files.delete(target); // 仅删除空目录
-        } else {
-            Files.delete(target);
-        }
+        Map<String, Object> req = parseJson(body);
+        String rootType = (String) req.getOrDefault("rootType", DirectoryService.ROOT_TYPE_LOCAL);
+        String path = (String) req.get("path");
+        if (path == null) return errorResponse("缺少path参数");
+        directoryService.deletePath(rootType, path);
         return successResponse();
     }
 
-    /**
-     * 上传文件
-     * POST /files/api/upload (multipart/form-data)
-     */
     @RequestMapping("/upload")
     @ResponseBody
     public String upload() throws Exception {
-        // 简化实现：从 multipart 解析文件（自研框架暂不支持 multipart，这里做简单处理）
-        // 实际生产建议使用 Apache Commons FileUpload，此处返回错误提示
-        return errorResponse("上传功能暂未完整实现，请使用新建文件方式");
+        // 简化实现：实际应处理 multipart，此处示例使用 Base64 接收文件内容（前端需配合）
+        String body = getRequestBody();
+        Map<String, Object> req = parseJson(body);
+        String rootType = (String) req.getOrDefault("rootType", DirectoryService.ROOT_TYPE_LOCAL);
+        String parentPath = (String) req.getOrDefault("parentPath", "");
+        String fileName = (String) req.get("fileName");
+        String base64Content = (String) req.get("content");
+        if (fileName == null || base64Content == null) return errorResponse("缺少参数");
+        byte[] bytes = java.util.Base64.getDecoder().decode(base64Content);
+        String content = new String(bytes, StandardCharsets.UTF_8);
+        directoryService.writeFile(rootType, parentPath + (parentPath.isEmpty() ? "" : "/") + fileName, content);
+        return successResponse();
     }
 
-    // 辅助方法
-    private Map<String, String> parseQuery(String query) {
+    // ---------- 辅助方法 ----------
+    private Map<String, String> parseQueryParams() {
+        Request request = RequestContextHolder.getRequest();
         Map<String, String> map = new HashMap<>();
+        if (request == null) return map;
+        String query = request.getQueryString();
         if (query == null) return map;
         for (String pair : query.split("&")) {
             int idx = pair.indexOf("=");
             if (idx > 0) {
-                map.put(pair.substring(0, idx), pair.substring(idx + 1));
+                try {
+                    String key = URLDecoder.decode(pair.substring(0, idx), "UTF-8");
+                    String value = URLDecoder.decode(pair.substring(idx + 1), "UTF-8");
+                    map.put(key, value);
+                } catch (Exception ignored) {}
             }
         }
         return map;
@@ -255,6 +179,27 @@ public class FilesController {
     private String getRequestBody() throws IOException {
         Request request = RequestContextHolder.getRequest();
         return request.getBody();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseJson(String json) {
+        Map<String, Object> map = new HashMap<>();
+        if (json == null || json.trim().isEmpty()) return map;
+        try {
+            String trimmed = json.trim();
+            if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+                String inner = trimmed.substring(1, trimmed.length() - 1);
+                for (String pair : inner.split(",")) {
+                    String[] kv = pair.split(":", 2);
+                    if (kv.length == 2) {
+                        String key = kv[0].trim().replaceAll("\"", "");
+                        String value = kv[1].trim().replaceAll("\"", "");
+                        map.put(key, value);
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return map;
     }
 
     private String successResponse() {

@@ -1,10 +1,12 @@
+// ======== D:\work\git\CodeStats\webapps\demo\files\files.js ========
 (function() {
     const API_BASE = window.apiUrl('/files/api');
-    let currentRootType = 'local';
+    let currentRootType = 'local';   // 'local' 或 'server'
     let currentPath = '';
     let currentEditPath = null;
+    let rootPathInfo = {};
 
-    const tabBtns = document.querySelectorAll('.tab-btn');
+    // DOM 元素
     const treeContainer = document.getElementById('treeContainer');
     const pathSpan = document.getElementById('currentPath');
     const fileTableBody = document.getElementById('fileTableBody');
@@ -13,17 +15,33 @@
     const fileEditor = document.getElementById('fileEditor');
     const editFileNameSpan = document.getElementById('editFileName');
     const newFolderBtn = document.getElementById('newFolderBtn');
+    const newFileBtn = document.getElementById('newFileBtn');
     const uploadBtn = document.getElementById('uploadBtn');
     const refreshBtn = document.getElementById('refreshBtn');
     const closeEditorBtn = document.getElementById('closeEditorBtn');
     const saveFileBtn = document.getElementById('saveFileBtn');
+    const rootLocalBtn = document.getElementById('rootLocalBtn');
+    const rootServerBtn = document.getElementById('rootServerBtn');
 
     function showMsg(msg, isError = false) {
         alert(msg);
     }
 
+    // 获取根信息
+    async function fetchRootInfo() {
+        try {
+            const res = await fetch(`${API_BASE}/root?rootType=${currentRootType}`);
+            if (res.ok) {
+                const data = await res.json();
+                rootPathInfo = data;
+            }
+        } catch (err) {
+            console.warn(err);
+        }
+    }
+
     async function fetchTree(path = '') {
-        const url = `${API_BASE}/tree?rootType=${currentRootType}&path=${encodeURIComponent(path)}`;
+        const url = `${API_BASE}/tree?rootType=${currentRootType}&path=${encodeURIComponent(path)}&withChildren=true`;
         const res = await fetch(url);
         if (!res.ok) throw new Error('获取目录树失败');
         return await res.json();
@@ -36,12 +54,13 @@
         return await res.json();
     }
 
+    // 渲染树
     async function renderTree() {
         try {
-            const rootData = await fetchTree('');
+            const rootNode = await fetchTree('');
             treeContainer.innerHTML = '';
-            const rootNode = createTreeNode(rootData, 0);
-            treeContainer.appendChild(rootNode);
+            const rootLi = createTreeNode(rootNode, 0);
+            treeContainer.appendChild(rootLi);
         } catch (err) {
             showMsg(err.message, true);
         }
@@ -53,9 +72,12 @@
         const div = document.createElement('div');
         div.className = 'tree-item';
         div.style.paddingLeft = (level * 16 + 8) + 'px';
+
+        // 只有目录且拥有子节点时才显示 toggle 箭头
+        const hasChildren = node.hasChildren === true;
         const toggle = document.createElement('span');
         toggle.className = 'toggle';
-        if (node.type === 'directory') {
+        if (node.type === 'directory' && hasChildren) {
             toggle.textContent = node.expanded ? '▼' : '▶';
             toggle.onclick = (e) => {
                 e.stopPropagation();
@@ -63,7 +85,9 @@
             };
         } else {
             toggle.textContent = ' ';
+            toggle.style.opacity = '0';
         }
+
         const icon = document.createElement('span');
         icon.className = 'icon';
         icon.textContent = node.type === 'directory' ? '📁' : '📄';
@@ -73,6 +97,7 @@
         div.appendChild(toggle);
         div.appendChild(icon);
         div.appendChild(nameSpan);
+
         div.onclick = () => {
             if (node.type === 'directory') {
                 navigateTo(node.path);
@@ -81,6 +106,7 @@
             }
         };
         li.appendChild(div);
+
         if (node.children && node.children.length) {
             const childrenUl = document.createElement('ul');
             childrenUl.className = 'tree-children';
@@ -101,6 +127,7 @@
                 try {
                     const data = await fetchTree(node.path);
                     node.children = data.children || [];
+                    node.hasChildren = data.hasChildren;
                     childrenUl.innerHTML = '';
                     node.children.forEach(child => {
                         childrenUl.appendChild(createTreeNode(child, 0));
@@ -117,7 +144,8 @@
 
     async function navigateTo(path) {
         currentPath = path;
-        pathSpan.textContent = path || '/';
+        const displayPath = path === '' ? '/' : '/' + path;
+        pathSpan.textContent = displayPath;
         try {
             const list = await fetchFileList(path);
             renderFileList(list);
@@ -130,29 +158,44 @@
 
     function renderFileList(files) {
         fileTableBody.innerHTML = '';
+        if (files.length === 0) {
+            fileTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">目录为空</td></tr>';
+            return;
+        }
         files.forEach(file => {
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td>${escapeHtml(file.name)}</td>
+                <td class="file-name" data-path="${file.path}" data-type="${file.type}">${escapeHtml(file.name)}</td>
                 <td>${file.type === 'directory' ? '目录' : '文件'}</td>
                 <td>${file.type === 'file' ? formatSize(file.size) : '-'}</td>
-                <td>${file.modified}</td>
+                <td>${file.modified || '-'}</td>
                 <td class="actions">
                     ${file.type === 'file' ? `<span class="action-icon" data-action="edit" data-path="${file.path}">✏️ 编辑</span>` : ''}
-                    <span class="action-icon" data-action="rename" data-path="${file.path}">✏️ 重命名</span>
+                    <span class="action-icon" data-action="rename" data-path="${file.path}" data-name="${file.name}">✏️ 重命名</span>
                     <span class="action-icon" data-action="delete" data-path="${file.path}">🗑️ 删除</span>
                 </td>
             `;
             fileTableBody.appendChild(row);
         });
+        // 名称点击（目录进入，文件编辑）
+        document.querySelectorAll('.file-name').forEach(el => {
+            el.addEventListener('click', (e) => {
+                const path = el.dataset.path;
+                const type = el.dataset.type;
+                if (type === 'directory') navigateTo(path);
+                else openEditor(path);
+            });
+        });
+        // 操作按钮
         document.querySelectorAll('.action-icon').forEach(icon => {
             icon.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const action = icon.dataset.action;
                 const path = icon.dataset.path;
+                const name = icon.dataset.name;
                 if (action === 'edit') openEditor(path);
-                else if (action === 'rename') renameFileOrDir(path);
-                else if (action === 'delete') deleteFileOrDir(path);
+                else if (action === 'rename') renameItem(path, name);
+                else if (action === 'delete') deleteItem(path);
             });
         });
     }
@@ -185,16 +228,13 @@
             const res = await fetch(`${API_BASE}/save`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    rootType: currentRootType,
-                    path: currentEditPath,
-                    content: content
-                })
+                body: JSON.stringify({ rootType: currentRootType, path: currentEditPath, content: content })
             });
             const data = await res.json();
             if (data.success) {
                 showMsg('保存成功');
                 navigateTo(currentPath);
+                renderTree();
             } else {
                 showMsg(data.error || '保存失败', true);
             }
@@ -203,24 +243,20 @@
         }
     }
 
-    async function renameFileOrDir(oldPath) {
-        const newName = prompt('请输入新名称', oldPath.split(/[\\/]/).pop());
+    async function renameItem(oldPath, oldName) {
+        const newName = prompt('请输入新名称', oldName);
         if (!newName) return;
         try {
             const res = await fetch(`${API_BASE}/rename`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    rootType: currentRootType,
-                    path: oldPath,
-                    newName: newName
-                })
+                body: JSON.stringify({ rootType: currentRootType, path: oldPath, newName: newName })
             });
             const data = await res.json();
             if (data.success) {
                 showMsg('重命名成功');
-                navigateTo(currentPath);
-                renderTree();
+                await navigateTo(currentPath);
+                await renderTree();
             } else {
                 showMsg(data.error || '重命名失败', true);
             }
@@ -229,22 +265,19 @@
         }
     }
 
-    async function deleteFileOrDir(path) {
+    async function deleteItem(path) {
         if (!confirm(`确定删除 ${path} 吗？`)) return;
         try {
             const res = await fetch(`${API_BASE}/delete`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    rootType: currentRootType,
-                    path: path
-                })
+                body: JSON.stringify({ rootType: currentRootType, path: path })
             });
             const data = await res.json();
             if (data.success) {
                 showMsg('删除成功');
-                navigateTo(currentPath);
-                renderTree();
+                await navigateTo(currentPath);
+                await renderTree();
             } else {
                 showMsg(data.error || '删除失败', true);
             }
@@ -260,17 +293,13 @@
             const res = await fetch(`${API_BASE}/mkdir`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    rootType: currentRootType,
-                    parentPath: currentPath,
-                    name: folderName
-                })
+                body: JSON.stringify({ rootType: currentRootType, parentPath: currentPath, name: folderName })
             });
             const data = await res.json();
             if (data.success) {
                 showMsg('目录创建成功');
-                navigateTo(currentPath);
-                renderTree();
+                await navigateTo(currentPath);
+                await renderTree();
             } else {
                 showMsg(data.error || '创建失败', true);
             }
@@ -279,22 +308,86 @@
         }
     }
 
-    async function switchRootType(type) {
-        currentRootType = type;
-        currentPath = '';
-        await renderTree();
-        navigateTo('');
+    async function newFile() {
+        const fileName = prompt('请输入文件名（含扩展名）', 'newfile.txt');
+        if (!fileName) return;
+        try {
+            const res = await fetch(`${API_BASE}/createFile`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rootType: currentRootType, parentPath: currentPath, fileName: fileName })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showMsg('文件创建成功');
+                await navigateTo(currentPath);
+                await renderTree();
+            } else {
+                showMsg(data.error || '创建失败', true);
+            }
+        } catch (err) {
+            showMsg(err.message, true);
+        }
     }
 
-    tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            tabBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            switchRootType(btn.dataset.rootType);
-        });
-    });
+    function uploadFile() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.onchange = async () => {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const base64 = btoa(unescape(encodeURIComponent(e.target.result)));
+                try {
+                    const res = await fetch(`${API_BASE}/upload`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            rootType: currentRootType,
+                            parentPath: currentPath,
+                            fileName: file.name,
+                            content: base64
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        showMsg('上传成功');
+                        await navigateTo(currentPath);
+                        await renderTree();
+                    } else {
+                        showMsg(data.error || '上传失败', true);
+                    }
+                } catch (err) {
+                    showMsg(err.message, true);
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    }
 
+    async function switchRoot(rootType) {
+        currentRootType = rootType;
+        currentPath = '';
+        if (rootType === 'local') {
+            rootLocalBtn.classList.add('active');
+            rootServerBtn.classList.remove('active');
+        } else {
+            rootServerBtn.classList.add('active');
+            rootLocalBtn.classList.remove('active');
+        }
+        await fetchRootInfo();
+        await renderTree();
+        await navigateTo('');
+    }
+
+    // 事件绑定
+    rootLocalBtn.addEventListener('click', () => switchRoot('local'));
+    rootServerBtn.addEventListener('click', () => switchRoot('server'));
     newFolderBtn.addEventListener('click', newFolder);
+    newFileBtn.addEventListener('click', newFile);
+    uploadBtn.addEventListener('click', uploadFile);
     refreshBtn.addEventListener('click', () => navigateTo(currentPath));
     closeEditorBtn.addEventListener('click', () => {
         editorPanel.style.display = 'none';
@@ -302,37 +395,10 @@
         currentEditPath = null;
     });
     saveFileBtn.addEventListener('click', saveFile);
-    uploadBtn.addEventListener('click', () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.onchange = async () => {
-            const file = input.files[0];
-            if (!file) return;
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('rootType', currentRootType);
-            formData.append('targetPath', currentPath);
-            try {
-                const res = await fetch(`${API_BASE}/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await res.json();
-                if (data.success) {
-                    showMsg('上传成功');
-                    navigateTo(currentPath);
-                } else {
-                    showMsg(data.error || '上传失败', true);
-                }
-            } catch (err) {
-                showMsg(err.message, true);
-            }
-        };
-        input.click();
-    });
 
     function escapeHtml(str) {
-        return str.replace(/[&<>]/g, function(m) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, m => {
             if (m === '&') return '&amp;';
             if (m === '<') return '&lt;';
             if (m === '>') return '&gt;';
@@ -340,5 +406,8 @@
         });
     }
 
-    switchRootType('local');
+    // 初始化
+    (async () => {
+        await switchRoot('local');
+    })();
 })();

@@ -160,3 +160,24 @@ th, td {
     margin-top: 12px;
     text-align: right;
 }
+/* 新增根切换按钮样式 */
+.root-selector {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+}
+.root-btn {
+    flex: 1;
+    background: rgba(0,102,255,0.1);
+    border: 1px solid rgba(0,102,255,0.3);
+    border-radius: 20px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: 0.2s;
+    color: var(--accent-primary);
+}
+.root-btn.active {
+    background: var(--accent-primary);
+    color: white;
+    box-shadow: 0 0 8px var(--accent-primary);
+}

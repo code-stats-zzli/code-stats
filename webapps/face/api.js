@@ -17,7 +17,8 @@ export const CONTEXT_PATH = getContextPath();
  * @returns {string} 完整 URL
  */
 export function apiUrl(path) {
-    return CONTEXT_PATH + path;
+    const normalized = path.startsWith('/') ? path : '/' + path;
+    return CONTEXT_PATH + normalized;
 }
 
 /**
@@ -31,3 +32,6 @@ export async function apiFetch(path, options = {}) {
     }
     return response;
 }
+
+// 挂载到 window 方便调试
+window.__API_BASE__ = CONTEXT_PATH;

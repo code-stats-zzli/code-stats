@@ -1,4 +1,3 @@
-// 使用相对路径导入 Vue 框架（适配任何 context）
 import { Component } from '../vue/index.js';
 import { Intro } from './components/Intro.js';
 import { Database } from './components/Database.js';
@@ -32,7 +31,13 @@ const App = new Component({
         return { activeTab: 'intro' };
     },
     methods: {
-        setActiveTab(tab) { this.activeTab = tab; }
+        setActiveTab(tab) {
+            this.activeTab = tab;
+            // 切换到数据库页签时重新加载树（防止残留空白）
+            if (tab === 'database' && window.__refreshDatabase) {
+                setTimeout(() => window.__refreshDatabase(), 50);
+            }
+        }
     },
     mounted() {
         new Component(Intro).mount('#intro-panel');

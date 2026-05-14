@@ -49,6 +49,7 @@
         } else if (tabName === 'codestats') {
             initCodeStatsPanel();
         }
+        // 开源工具面板无需额外初始化
     }
 
     function initDatabasePanel() {

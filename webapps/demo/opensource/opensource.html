@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>开源工具 - DeepSeek 对话</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="opensource.css">
+    <script src="../global.js"></script>
+</head>
+<body>
+<div class="opensource-container">
+    <div class="tool-header">
+        <h2>🤖 DeepSeek 智能对话</h2>
+        <p>通过本地后端与 DeepSeek 官网交互，支持连续对话（保持上下文）</p>
+    </div>
+    <div class="chat-card">
+        <div class="chat-messages" id="chatMessages">
+            <div class="message assistant">
+                <div class="message-avatar">🧠</div>
+                <div class="message-content">你好！我是 DeepSeek AI 助手（通过后端代理）。请问有什么可以帮助你的？</div>
+            </div>
+        </div>
+        <div class="chat-input-area">
+            <textarea id="userInput" placeholder="输入你的问题..." rows="2"></textarea>
+            <button id="sendBtn" class="btn-primary">发送</button>
+        </div>
+        <div class="chat-status" id="chatStatus"></div>
+    </div>
+</div>
+<script src="opensource.js"></script>
+</body>
+</html>

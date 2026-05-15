@@ -23,16 +23,34 @@ export class Compiler {
         for (let attr of attrs) {
             const name = attr.name;
             const value = attr.value;
+
+            // 处理 @click 事件简写
             const eventName = parseEventName(name);
             if (eventName) {
                 this.bindEvent(node, eventName, value);
                 node.removeAttribute(name);
-            } else if (name.startsWith('v-bind:')) {
+            }
+            // 处理 :class 等 v-bind 简写
+            else if (name.startsWith(':')) {
+                const prop = name.slice(1);  // 如 'class'
+                this.bindProp(node, prop, value);
+                node.removeAttribute(name);
+            }
+            else if (name.startsWith('v-bind:')) {
                 const prop = name.split(':')[1];
                 this.bindProp(node, prop, value);
                 node.removeAttribute(name);
-            } else if (name === 'v-model') {
+            }
+            else if (name === 'v-model') {
                 this.bindModel(node, value);
+                node.removeAttribute(name);
+            }
+            else if (name === 'v-if') {
+                this.bindIf(node, value);
+                node.removeAttribute(name);
+            }
+            else if (name === 'v-show') {
+                this.bindShow(node, value);
                 node.removeAttribute(name);
             }
         }
@@ -57,8 +75,8 @@ export class Compiler {
             const updateText = () => {
                 let newText = '';
                 for (let i = 0; i < expressions.length; i++) {
-                    const val = this.evaluateExpression(expressions[i]);
-                    newText += parts[i] + (val !== undefined ? val : '');
+                    const val = this.safeEvaluate(expressions[i]);
+                    newText += parts[i] + (val !== undefined && val !== null ? val : '');
                 }
                 newText += parts[parts.length - 1];
                 node.textContent = newText;
@@ -70,29 +88,70 @@ export class Compiler {
         }
     }
 
-    evaluateExpression(exp) {
+    // 安全求值，捕获异常返回 undefined
+    safeEvaluate(exp) {
         try {
-            return new Function('vm', `with(vm) { return ${exp} }`)(this.vm);
-        } catch(e) {
+            const fn = new Function('vm', `with(vm) { return ${exp} }`);
+            return fn(this.vm);
+        } catch (e) {
             console.warn('表达式解析错误:', exp, e);
-            return '';
+            return undefined;
         }
     }
 
-    bindEvent(node, event, handlerName) {
-        // 优先从 vm 直接取方法，再从 $methods 取
-        let handler = this.vm[handlerName] || this.vm.$methods?.[handlerName];
+    evaluateExpression(exp) {
+        return this.safeEvaluate(exp);
+    }
+
+    bindEvent(node, event, expression) {
+        let methodName = expression;
+        let args = [];
+        const callMatch = expression.match(/^(\w+)\((.*)\)$/);
+        if (callMatch) {
+            methodName = callMatch[1];
+            const argsStr = callMatch[2];
+            if (argsStr.trim()) {
+                args = argsStr.split(',').map(arg => {
+                    arg = arg.trim();
+                    if ((arg.startsWith("'") && arg.endsWith("'")) || (arg.startsWith('"') && arg.endsWith('"'))) {
+                        return arg.slice(1, -1);
+                    }
+                    if (!isNaN(arg)) return parseFloat(arg);
+                    try {
+                        return this.safeEvaluate(arg);
+                    } catch (e) {
+                        console.warn(`事件参数求值失败: ${arg}`, e);
+                        return undefined;
+                    }
+                });
+            }
+        }
+        let handler = this.vm[methodName] || this.vm.$methods?.[methodName];
         if (handler) {
-            node.addEventListener(event, handler.bind(this.vm));
+            if (args.length) {
+                node.addEventListener(event, (e) => handler.apply(this.vm, args));
+            } else {
+                node.addEventListener(event, handler.bind(this.vm));
+            }
         } else {
-            console.warn(`事件处理函数 ${handlerName} 未定义`);
+            console.warn(`事件处理函数 ${methodName} 未定义`);
         }
     }
 
     bindProp(node, prop, expression) {
         const update = () => {
-            const value = this.evaluateExpression(expression);
-            node.setAttribute(prop, value);
+            const value = this.safeEvaluate(expression);
+            if (value !== undefined && value !== null) {
+                if (prop === 'class') {
+                    // 合并静态 class 和动态 class
+                    const staticClass = node.getAttribute('class') || '';
+                    const dynamicClass = typeof value === 'string' ? value : '';
+                    const finalClass = (staticClass + ' ' + dynamicClass).trim();
+                    node.setAttribute('class', finalClass);
+                } else {
+                    node.setAttribute(prop, value);
+                }
+            }
         };
         update();
         new Watcher(this.vm, expression, update);
@@ -100,14 +159,63 @@ export class Compiler {
 
     bindModel(node, expression) {
         const update = () => {
-            const value = this.evaluateExpression(expression);
+            const value = this.safeEvaluate(expression);
             if (node.value !== undefined) node.value = value;
             else node.textContent = value;
         };
         update();
         new Watcher(this.vm, expression, update);
         node.addEventListener('input', (e) => {
-            this.vm.$data[expression] = e.target.value;
+            const keys = expression.split('.');
+            let target = this.vm.$data;
+            for (let i = 0; i < keys.length - 1; i++) {
+                if (target[keys[i]] === undefined) target[keys[i]] = {};
+                target = target[keys[i]];
+            }
+            target[keys[keys.length - 1]] = e.target.value;
         });
+    }
+
+    bindIf(node, expression) {
+        const parent = node.parentNode;
+        const placeholder = document.createComment('v-if');
+        let removed = false;
+        const update = () => {
+            let value = false;
+            try {
+                const result = this.safeEvaluate(expression);
+                value = !!result;
+            } catch (e) {
+                value = false;
+            }
+            if (value) {
+                if (removed) {
+                    parent.replaceChild(node, placeholder);
+                    removed = false;
+                }
+            } else {
+                if (!removed) {
+                    parent.replaceChild(placeholder, node);
+                    removed = true;
+                }
+            }
+        };
+        update();
+        new Watcher(this.vm, expression, update);
+    }
+
+    bindShow(node, expression) {
+        const update = () => {
+            let value = false;
+            try {
+                const result = this.safeEvaluate(expression);
+                value = !!result;
+            } catch (e) {
+                value = false;
+            }
+            node.style.display = value ? '' : 'none';
+        };
+        update();
+        new Watcher(this.vm, expression, update);
     }
 }

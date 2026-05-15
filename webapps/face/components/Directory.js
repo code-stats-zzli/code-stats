@@ -1,30 +1,31 @@
+// webapps/face/components/Directory.js
 import { apiUrl } from '../api.js';
 
 export const Directory = {
     template: `
-        <div class="card">
+        <div class="card directory-card">
             <h2>📁 目录管理</h2>
-            <div style="display: flex; gap: 20px;">
-                <div style="width: 260px; border-right: 1px solid rgba(0,102,255,0.2); padding-right: 16px;">
-                    <div id="fileTree" class="tree"></div>
+            <div style="display: flex; gap: 20px; height: calc(100vh - 200px);">
+                <div style="width: 280px; border-right: 1px solid rgba(0,102,255,0.2); overflow-y: auto;">
+                    <div id="fileTreeContainer" class="tree"></div>
                 </div>
-                <div style="flex:1;">
-                    <div id="fileListPanel" v-bind:style="editingFile ? 'display:none' : 'display:block'">
-                        <div class="toolbar" style="margin-bottom: 12px;">
-                            <button class="btn-secondary" @click="newFolder">📁 新建目录</button>
-                            <button class="btn-secondary" @click="refresh">🔄 刷新</button>
+                <div style="flex:1; display: flex; flex-direction: column;">
+                    <div id="fileListPanel" style="flex:1;">
+                        <div class="toolbar">
+                            <button id="newFolderBtnDir" class="btn-secondary">📁 新建目录</button>
+                            <button id="refreshBtnDir" class="btn-secondary">🔄 刷新</button>
                         </div>
-                        <div v-if="currentPath" style="margin-bottom: 12px; font-family: monospace;">当前路径：{{ currentPath }}</div>
-                        <div id="fileTableWrapper"></div>
+                        <div id="currentPathDisplay" style="margin: 12px 0; font-family: monospace;"></div>
+                        <div id="fileTableWrapper" style="overflow-x: auto;"></div>
                     </div>
-                    <div id="editorPanel" v-bind:style="editingFile ? 'display:block' : 'display:none'">
-                        <div class="editor-header" style="margin-bottom: 12px;">
-                            <strong>编辑：{{ editingFile ? editingFile.path : '' }}</strong>
-                            <button class="btn-secondary" @click="closeEditor">关闭</button>
+                    <div id="editorPanelDir" style="display: none; flex-direction: column; height: 100%;">
+                        <div class="editor-header">
+                            <strong id="editFileNameLabel"></strong>
+                            <button id="closeEditorBtnDir" class="btn-secondary">关闭</button>
                         </div>
-                        <textarea id="fileEditor" rows="20" style="width:100%; font-family:monospace;"></textarea>
+                        <textarea id="fileEditorDir" rows="20" style="width:100%; font-family:monospace; flex:1;"></textarea>
                         <div style="margin-top: 12px;">
-                            <button class="btn-primary" @click="saveFile">保存</button>
+                            <button id="saveFileBtnDir" class="btn-primary">保存</button>
                         </div>
                     </div>
                 </div>
@@ -41,17 +42,76 @@ export const Directory = {
         };
     },
     methods: {
-        formatSize(bytes) {
-            if (bytes < 1024) return bytes + ' B';
-            if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
-            return (bytes/(1024*1024)).toFixed(1) + ' MB';
+        async fetchTree() {
+            const container = document.getElementById('fileTreeContainer');
+            if (!container) return;
+            try {
+                const url = apiUrl(`/files/api/tree?rootType=${this.rootType}&path=&withChildren=true`);
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('获取目录树失败');
+                const root = await res.json();
+                this.renderTree(root, container);
+            } catch (err) {
+                container.innerHTML = `<div class="error">${err.message}</div>`;
+            }
         },
-        async fetchFileList(path) {
-            const url = apiUrl(`/files/api/list?rootType=${this.rootType}&path=${encodeURIComponent(path)}`);
+        renderTree(node, container, level = 0) {
+            const div = document.createElement('div');
+            div.className = 'tree-item';
+            div.style.paddingLeft = `${level * 20 + 8}px`;
+            div.innerHTML = `
+                <span class="toggle">${node.hasChildren ? '▶' : '•'}</span>
+                <span class="icon">${node.type === 'directory' ? '📁' : '📄'}</span>
+                <span class="name">${this.escapeHtml(node.name)}</span>
+            `;
+            const childrenDiv = document.createElement('div');
+            childrenDiv.className = 'tree-children';
+            childrenDiv.style.display = 'none';
+
+            div.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (node.type === 'directory') {
+                    this.currentPath = node.path;
+                    await this.fetchFileList();
+                    // 展开/折叠
+                    const isOpen = childrenDiv.style.display === 'block';
+                    if (!isOpen && node.hasChildren && (!node.children || node.children.length === 0)) {
+                        // 懒加载子节点
+                        try {
+                            const url = apiUrl(`/files/api/tree?rootType=${this.rootType}&path=${encodeURIComponent(node.path)}&withChildren=true`);
+                            const res = await fetch(url);
+                            const childData = await res.json();
+                            node.children = childData.children || [];
+                            childrenDiv.innerHTML = '';
+                            node.children.forEach(child => this.renderTree(child, childrenDiv, level + 1));
+                        } catch (err) {
+                            childrenDiv.innerHTML = `<div class="error">加载失败</div>`;
+                        }
+                    }
+                    childrenDiv.style.display = isOpen ? 'none' : 'block';
+                    const toggleSpan = div.querySelector('.toggle');
+                    toggleSpan.textContent = isOpen ? '▶' : '▼';
+                } else {
+                    // 文件直接编辑
+                    this.editFile(node.path);
+                }
+            });
+            container.appendChild(div);
+            container.appendChild(childrenDiv);
+            if (node.children && node.children.length) {
+                node.children.forEach(child => this.renderTree(child, childrenDiv, level + 1));
+                childrenDiv.style.display = 'block';
+                const toggleSpan = div.querySelector('.toggle');
+                toggleSpan.textContent = '▼';
+            }
+        },
+        async fetchFileList() {
+            const url = apiUrl(`/files/api/list?rootType=${this.rootType}&path=${encodeURIComponent(this.currentPath)}`);
             const res = await fetch(url);
             if (res.ok) {
                 this.fileList = await res.json();
                 this.renderFileList();
+                document.getElementById('currentPathDisplay').innerHTML = `当前路径：${this.currentPath === '' ? '/' : '/' + this.currentPath}`;
             } else {
                 alert('获取文件列表失败');
             }
@@ -63,38 +123,41 @@ export const Directory = {
                 wrapper.innerHTML = '<div class="empty-tip">目录为空</div>';
                 return;
             }
-            let html = '<table><thead><tr><th>名称</th><th>类型</th><th>大小</th><th>修改时间</th><th>操作</th></tr></thead><tbody>';
+            let html = `<table class="data-table"><thead><tr>
+                <th>名称</th><th>类型</th><th>大小</th><th>修改时间</th><th>操作</th>
+            </tr></thead><tbody>`;
             for (const item of this.fileList) {
                 html += `<tr>
-                    <td><span class="dir-link" data-path="${item.path}" data-type="${item.type}">${escapeHtml(item.name)}</span></td>
+                    <td class="dir-link" data-path="${this.escapeAttr(item.path)}" data-type="${item.type}">${this.escapeHtml(item.name)}</td>
                     <td>${item.type === 'directory' ? '目录' : '文件'}</td>
                     <td>${item.type === 'file' ? this.formatSize(item.size) : '-'}</td>
                     <td>${item.modified || '-'}</td>
                     <td>
-                        ${item.type === 'file' ? `<button class="btn-secondary edit-btn" data-path="${item.path}">编辑</button>` : ''}
-                        <button class="btn-secondary rename-btn" data-path="${item.path}" data-name="${item.name}">重命名</button>
-                        <button class="btn-secondary delete-btn" data-path="${item.path}">删除</button>
+                        ${item.type === 'file' ? `<button class="btn-secondary edit-btn" data-path="${this.escapeAttr(item.path)}">编辑</button>` : ''}
+                        <button class="btn-secondary rename-btn" data-path="${this.escapeAttr(item.path)}" data-name="${this.escapeAttr(item.name)}">重命名</button>
+                        <button class="btn-secondary delete-btn" data-path="${this.escapeAttr(item.path)}">删除</button>
                     </td>
                 </tr>`;
             }
-            html += '</tbody></table>';
+            html += `</tbody></table>`;
             wrapper.innerHTML = html;
-            // 绑定动态事件
+
+            // 绑定事件
             wrapper.querySelectorAll('.dir-link').forEach(el => {
-                el.addEventListener('click', (e) => {
+                el.addEventListener('click', () => {
                     const path = el.dataset.path;
                     const type = el.dataset.type;
                     if (type === 'directory') {
                         this.currentPath = path;
-                        this.fetchFileList(path);
-                        this.renderTree(); // 刷新树高亮
+                        this.fetchFileList();
+                        this.fetchTree(); // 刷新树高亮（可选）
                     } else {
-                        this.editFile({ path, type: 'file' });
+                        this.editFile(path);
                     }
                 });
             });
             wrapper.querySelectorAll('.edit-btn').forEach(btn => {
-                btn.addEventListener('click', () => this.editFile({ path: btn.dataset.path, type: 'file' }));
+                btn.addEventListener('click', () => this.editFile(btn.dataset.path));
             });
             wrapper.querySelectorAll('.rename-btn').forEach(btn => {
                 btn.addEventListener('click', () => this.renameItem(btn.dataset.path, btn.dataset.name));
@@ -103,65 +166,22 @@ export const Directory = {
                 btn.addEventListener('click', () => this.deleteItem(btn.dataset.path));
             });
         },
-        async fetchTree() {
-            const url = apiUrl(`/files/api/tree?rootType=${this.rootType}&path=`);
+        async editFile(path) {
+            const url = apiUrl(`/files/api/read?rootType=${this.rootType}&path=${encodeURIComponent(path)}`);
             const res = await fetch(url);
             if (res.ok) {
                 const data = await res.json();
-                this.renderTree(data);
-            }
-        },
-        renderTree(node, level = 0) {
-            const wrapper = document.getElementById('fileTree');
-            if (!wrapper) return;
-            const buildHTML = (n, lvl) => {
-                const indent = lvl * 20;
-                let html = `<div style="padding-left:${indent}px; margin:4px 0; cursor:pointer;" data-path="${n.path}" data-type="${n.type}">
-                    ${n.type === 'directory' ? '📁' : '📄'} ${escapeHtml(n.name)}
-                </div>`;
-                if (n.children && n.children.length) {
-                    html += `<div class="tree-children" style="display:none;">`;
-                    n.children.forEach(child => html += buildHTML(child, lvl+1));
-                    html += `</div>`;
-                }
-                return html;
-            };
-            wrapper.innerHTML = buildHTML(node, 0);
-            wrapper.querySelectorAll('[data-path]').forEach(el => {
-                el.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    const path = el.dataset.path;
-                    const type = el.dataset.type;
-                    if (type === 'directory') {
-                        this.currentPath = path;
-                        await this.fetchFileList(path);
-                        // 展开/折叠子节点
-                        const childrenDiv = el.nextElementSibling;
-                        if (childrenDiv && childrenDiv.classList.contains('tree-children')) {
-                            const isOpen = childrenDiv.style.display === 'block';
-                            childrenDiv.style.display = isOpen ? 'none' : 'block';
-                        }
-                    } else {
-                        this.editFile({ path, type: 'file' });
-                    }
-                });
-            });
-        },
-        async editFile(item) {
-            const url = apiUrl(`/files/api/read?rootType=${this.rootType}&path=${encodeURIComponent(item.path)}`);
-            const res = await fetch(url);
-            if (res.ok) {
-                const data = await res.json();
-                this.editingFile = item;
-                this.fileContent = data.content;
-                const editor = document.getElementById('fileEditor');
-                if (editor) editor.value = data.content;
+                this.editingFile = { path };
+                document.getElementById('editFileNameLabel').innerText = path;
+                document.getElementById('fileEditorDir').value = data.content;
+                document.getElementById('fileListPanel').style.display = 'none';
+                document.getElementById('editorPanelDir').style.display = 'flex';
             } else {
                 alert('读取文件失败');
             }
         },
         async saveFile() {
-            const content = document.getElementById('fileEditor').value;
+            const content = document.getElementById('fileEditorDir').value;
             const url = apiUrl('/files/api/save');
             const res = await fetch(url, {
                 method: 'POST',
@@ -175,14 +195,16 @@ export const Directory = {
             if (res.ok) {
                 alert('保存成功');
                 this.closeEditor();
-                await this.fetchFileList(this.currentPath);
+                await this.fetchFileList();
+                await this.fetchTree();
             } else {
                 alert('保存失败');
             }
         },
         closeEditor() {
             this.editingFile = null;
-            this.fileContent = '';
+            document.getElementById('fileListPanel').style.display = 'block';
+            document.getElementById('editorPanelDir').style.display = 'none';
         },
         async newFolder() {
             const name = prompt('请输入目录名');
@@ -198,7 +220,7 @@ export const Directory = {
                 })
             });
             if (res.ok) {
-                await this.fetchFileList(this.currentPath);
+                await this.fetchFileList();
                 await this.fetchTree();
             } else {
                 alert('创建失败');
@@ -218,7 +240,7 @@ export const Directory = {
                 })
             });
             if (res.ok) {
-                await this.fetchFileList(this.currentPath);
+                await this.fetchFileList();
                 await this.fetchTree();
             } else {
                 alert('重命名失败');
@@ -236,29 +258,45 @@ export const Directory = {
                 })
             });
             if (res.ok) {
-                await this.fetchFileList(this.currentPath);
+                await this.fetchFileList();
                 await this.fetchTree();
             } else {
                 alert('删除失败');
             }
         },
         refresh() {
-            if (this.currentPath) this.fetchFileList(this.currentPath);
+            this.fetchFileList();
             this.fetchTree();
+        },
+        formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        },
+        escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+        },
+        escapeAttr(str) {
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
     },
     mounted() {
-        this.fetchTree();
-        this.fetchFileList('');
+        if (this.rootType === undefined) this.rootType = 'local';
+        if (this.currentPath === undefined) this.currentPath = '';
+        // 延迟执行，确保 DOM 完全挂载
+        setTimeout(() => {
+            this.fetchTree();
+            this.fetchFileList();
+        }, 50);
+        // 绑定按钮事件
+        document.getElementById('newFolderBtnDir')?.addEventListener('click', () => this.newFolder());
+        document.getElementById('refreshBtnDir')?.addEventListener('click', () => this.refresh());
+        document.getElementById('closeEditorBtnDir')?.addEventListener('click', () => this.closeEditor());
+        document.getElementById('saveFileBtnDir')?.addEventListener('click', () => this.saveFile());
+        window.__refreshDirectory = () => {
+            this.fetchTree();
+            this.fetchFileList();
+        };
     }
 };
-
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/[&<>]/g, function(m) {
-        if (m === '&') return '&amp;';
-        if (m === '<') return '&lt;';
-        if (m === '>') return '&gt;';
-        return m;
-    });
-}

@@ -1,4 +1,4 @@
-// js/simple-vue/StyleManager.js
+// webapps/vue/core/StyleManager.js
 import { nextUid } from './utils.js';
 
 export class StyleManager {
@@ -6,7 +6,6 @@ export class StyleManager {
 
     static process(cssText, componentId) {
         if (!cssText) return '';
-        // 转换选择器，添加 [data-v-xxx]
         const transformed = cssText.replace(/([^{]+)(\{[^}]*\})/g, (match, selectors, rules) => {
             const newSelectors = selectors.split(',').map(sel => {
                 sel = sel.trim();

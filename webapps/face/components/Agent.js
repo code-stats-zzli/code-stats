@@ -65,10 +65,11 @@ export const Agent = {
         renderMessages() {
             const container = document.getElementById('chatMessages');
             if (!container) return;
+            if (!this.messages || !this.messages.length) return;
             container.innerHTML = this.messages.map(msg => `
                 <div style="margin:8px 0;">
                     <strong>${msg.role === 'user' ? '👤 我' : '🤖 助手'}：</strong>
-                    <span>${escapeHtml(msg.content)}</span>
+                    <span>${this.escapeHtml(msg.content)}</span>
                 </div>
             `).join('');
             container.scrollTop = container.scrollHeight;
@@ -77,11 +78,7 @@ export const Agent = {
             try {
                 const resp = await fetch(apiUrl('/agent/api/ollama/status'));
                 const data = await resp.json();
-                if (data.status === 'ok') {
-                    this.statusMsg = `✅ 服务正常，版本: ${data.version}`;
-                } else {
-                    this.statusMsg = `❌ ${data.message}`;
-                }
+                this.statusMsg = data.status === 'ok' ? `✅ 服务正常，版本: ${data.version}` : `❌ ${data.message}`;
             } catch (err) {
                 this.statusMsg = `❌ 连接失败: ${err.message}`;
             }
@@ -96,11 +93,7 @@ export const Agent = {
                     body: JSON.stringify({ model: this.modelName })
                 });
                 const data = await resp.json();
-                if (data.success) {
-                    this.pullLog = '✅ 模型下载完成！';
-                } else {
-                    this.pullLog = `❌ 失败: ${data.message}`;
-                }
+                this.pullLog = data.success ? '✅ 模型下载完成！' : `❌ 失败: ${data.message}`;
             } catch (err) {
                 this.pullLog = `❌ 请求异常: ${err.message}`;
             }
@@ -114,11 +107,7 @@ export const Agent = {
                     body: JSON.stringify({ model: this.modelName })
                 });
                 const data = await resp.json();
-                if (data.success) {
-                    this.statusMsg = `✅ 模型已就绪: ${data.message}`;
-                } else {
-                    this.statusMsg = `❌ 启动失败: ${data.message}`;
-                }
+                this.statusMsg = data.success ? `✅ 模型已就绪: ${data.message}` : `❌ 启动失败: ${data.message}`;
             } catch (err) {
                 this.statusMsg = `❌ 请求异常: ${err.message}`;
             }
@@ -147,12 +136,8 @@ export const Agent = {
                     body: JSON.stringify(payload)
                 });
                 const data = await resp.json();
-                if (data.error) {
-                    this.messages.push({ role: 'assistant', content: `❌ 错误: ${data.error}` });
-                } else {
-                    const reply = data.response || data.message || '无回复';
-                    this.messages.push({ role: 'assistant', content: reply });
-                }
+                const reply = data.response || data.message || '无回复';
+                this.messages.push({ role: 'assistant', content: reply });
                 this.renderMessages();
             } catch (err) {
                 this.messages.push({ role: 'assistant', content: `❌ 请求失败: ${err.message}` });
@@ -160,20 +145,26 @@ export const Agent = {
             } finally {
                 this.loading = false;
             }
+        },
+        escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
         }
     },
     mounted() {
-        this.checkStatus();
-        this.renderMessages();
+        // 确保 DOM 元素存在后再操作
+        setTimeout(() => {
+            this.renderMessages();
+            this.checkStatus();
+            const textarea = document.querySelector('#agent-panel textarea');
+            if (textarea) {
+                textarea.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+            }
+        }, 50);
     }
 };
-
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/[&<>]/g, function(m) {
-        if (m === '&') return '&amp;';
-        if (m === '<') return '&lt;';
-        if (m === '>') return '&gt;';
-        return m;
-    });
-}

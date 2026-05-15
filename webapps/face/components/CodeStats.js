@@ -1,3 +1,4 @@
+// webapps/face/components/CodeStats.js
 import { apiUrl } from '../api.js';
 
 export const CodeStats = {
@@ -19,17 +20,17 @@ export const CodeStats = {
                 <button class="btn-secondary" @click="resetConfig">重置</button>
             </div>
             <div v-if="analyzing" class="progress-bar" style="margin-top: 20px;">
-                <div class="progress-fill" v-bind:style="'width:' + progressPercent + '%'"></div>
+                <div class="progress-fill" :style="'width:' + progressPercent + '%'"></div>
                 <div style="text-align:center;">{{ progressText }}</div>
             </div>
             <div v-if="resultData" style="margin-top: 24px;">
                 <div class="result-tabs" style="display: flex; gap: 12px;">
-                    <button class="btn-secondary" @click="showFiles = true; showSummary = false">文件列表</button>
-                    <button class="btn-secondary" @click="showFiles = false; showSummary = true">摘要统计</button>
+                    <button class="btn-secondary" @click="showFilesTab">文件列表</button>
+                    <button class="btn-secondary" @click="showSummaryTab">摘要统计</button>
                 </div>
-                <div id="filesPanel" v-bind:style="showFiles ? 'display:block' : 'display:none'"></div>
-                <div id="summaryPanel" v-bind:style="showFiles ? 'display:none' : 'display:block'"></div>
-                <div v-if="resultData.mergeOutput">
+                <div id="filesPanel" :style="showFiles ? 'display:block' : 'display:none'"></div>
+                <div id="summaryPanel" :style="showFiles ? 'display:none' : 'display:block'"></div>
+                <div v-if="resultData && resultData.mergeOutput">
                     <button class="btn-secondary" @click="downloadMergeFile(resultData.mergeOutput)">📥 下载合并文件</button>
                 </div>
             </div>
@@ -48,24 +49,28 @@ export const CodeStats = {
             analyzing: false,
             progressPercent: 0,
             progressText: '',
-            resultData: null,
+            resultData: null,      // 初始为 null，避免访问属性时报错
             showFiles: true,
             showSummary: false
         };
     },
     methods: {
         async fetchDefaultConfig() {
-            const resp = await fetch(apiUrl('/code/api/config'));
-            if (resp.ok) {
-                const cfg = await resp.json();
-                this.rootDir = cfg.rootDir || '';
-                this.extensions = cfg.extensions || 'java';
-                this.excludePaths = cfg.excludePaths || '';
-                this.extraPaths = cfg.extraPaths || '';
-                this.excludeComments = cfg.excludeComments !== false;
-                this.threadCount = cfg.threadCount || 4;
-                this.sortBy = cfg.sortBy || 'lines';
-                this.mergeOutputFile = cfg.mergeOutputFile || '';
+            try {
+                const resp = await fetch(apiUrl('/code/api/config'));
+                if (resp.ok) {
+                    const cfg = await resp.json();
+                    this.rootDir = cfg.rootDir || '';
+                    this.extensions = cfg.extensions || 'java';
+                    this.excludePaths = cfg.excludePaths || '';
+                    this.extraPaths = cfg.extraPaths || '';
+                    this.excludeComments = cfg.excludeComments !== false;
+                    this.threadCount = cfg.threadCount || 4;
+                    this.sortBy = cfg.sortBy || 'lines';
+                    this.mergeOutputFile = cfg.mergeOutputFile || '';
+                }
+            } catch (e) {
+                console.error('加载配置失败', e);
             }
         },
         async analyze() {
@@ -103,15 +108,15 @@ export const CodeStats = {
             const container = document.getElementById('filesPanel');
             if (!container || !this.resultData) return;
             const files = this.resultData.files || [];
-            let html = '<table><thead><tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr></thead><tbody>';
+            let html = '<table class="data-table"><thead><tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr></thead><tbody>';
             for (const f of files) {
                 html += `<tr>
-                    <td title="${escapeHtml(f.path)}">${truncatePath(f.path)}</td>
+                    <td title="${this.escapeHtml(f.path)}">${this.truncatePath(f.path)}</td>
                     <td>${f.lines}</td>
                     <td>${f.codeLines}</td>
                     <td>${f.commentLines}</td>
                     <td>${f.blankLines}</td>
-                    <td>${f.language}</td>
+                    <td>${this.escapeHtml(f.language)}</td>
                     <td>${f.complexity}</td>
                 </tr>`;
             }
@@ -129,7 +134,7 @@ export const CodeStats = {
                 <p>耗时: ${summary.durationMs || 0} ms</p>
                 <h3>语言分布</h3>`;
             for (const [lang, stat] of Object.entries(langs)) {
-                html += `<div><strong>${escapeHtml(lang)}</strong>: 文件 ${stat.files}, 行数 ${stat.lines}, 代码 ${stat.code}, 注释 ${stat.comments}, 空行 ${stat.blanks}</div>`;
+                html += `<div><strong>${this.escapeHtml(lang)}</strong>: 文件 ${stat.files}, 行数 ${stat.lines}, 代码 ${stat.code}, 注释 ${stat.comments}, 空行 ${stat.blanks}</div>`;
             }
             container.innerHTML = html;
         },
@@ -140,23 +145,24 @@ export const CodeStats = {
             const encoded = btoa(encodeURIComponent(filePath));
             const url = apiUrl(`/code/api/download?filePath=${encoded}`);
             window.open(url, '_blank');
+        },
+        escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+        },
+        truncatePath(path) {
+            return path.length > 60 ? '...' + path.slice(-57) : path;
+        },
+        showFilesTab() {
+            this.showFiles = true;
+            this.showSummary = false;
+        },
+        showSummaryTab() {
+            this.showFiles = false;
+            this.showSummary = true;
         }
     },
     mounted() {
         this.fetchDefaultConfig();
     }
 };
-
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/[&<>]/g, function(m) {
-        if (m === '&') return '&amp;';
-        if (m === '<') return '&lt;';
-        if (m === '>') return '&gt;';
-        return m;
-    });
-}
-
-function truncatePath(path) {
-    return path.length > 60 ? '...' + path.slice(-57) : path;
-}

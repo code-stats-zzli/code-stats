@@ -12,5 +12,4 @@ export class Dep {
         this.subscribers.forEach(sub => sub.update());
     }
 }
-
 Dep.target = null;

@@ -1,5 +1,5 @@
 // webapps/vue/core/Component.js
-import { Observer } from './Observer.js';
+import { observe } from './Observer.js';
 import { Compiler } from './Compiler.js';
 import { StyleManager } from './StyleManager.js';
 import { nextUid } from './utils.js';
@@ -12,13 +12,14 @@ export class Component {
         this.$style = options.style;
         this.$id = nextUid();
 
-        // 1. 获取原始数据
+        // 获取初始数据并使其响应式
         const rawData = options.data ? options.data() : {};
-        // 2. 先变为响应式对象
-        this.$data = new Observer(rawData);
-        // 3. 代理响应式数据到 this
+        this.$data = observe(rawData);
+
+        // 代理所有数据属性到 this 实例
         this._proxyData();
-        // 4. 绑定方法到 this
+
+        // 绑定方法到 this
         this._bindMethods();
 
         if (this.$style) {
@@ -27,14 +28,16 @@ export class Component {
     }
 
     _proxyData() {
-        Object.keys(this.$data).forEach(key => {
+        const keys = Object.keys(this.$data);
+        for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
             Object.defineProperty(this, key, {
                 enumerable: true,
                 configurable: true,
                 get: () => this.$data[key],
                 set: (val) => { this.$data[key] = val; }
             });
-        });
+        }
     }
 
     _bindMethods() {
@@ -49,7 +52,6 @@ export class Component {
         this.$el = this.render();
         container.appendChild(this.$el);
         new Compiler(this);
-        // 调用 mounted 钩子
         if (this.$options.mounted) {
             this.$options.mounted.call(this);
         }

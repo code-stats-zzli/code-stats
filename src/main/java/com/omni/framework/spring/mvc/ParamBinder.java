@@ -1,34 +1,40 @@
 package com.omni.framework.spring.mvc;
 
-import com.omni.framework.spring.annotation.*;
+
+
+import com.omni.framework.spring.annotation.PathVariable;
+import com.omni.framework.spring.annotation.RequestBody;
+import com.omni.framework.spring.annotation.RequestParam;
+import com.omni.framework.spring.annotation.RequestPart;
 import com.omni.framework.tomcat.connector.Request;
 import com.omni.framework.tomcat.connector.Response;
+import com.omni.framework.tomcat.servlet.HttpServletRequest;
+import com.omni.framework.tomcat.servlet.HttpServletResponse;
 
 import java.io.ByteArrayInputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import java.util.HashMap;
 import java.util.Map;
 
 public class ParamBinder {
 
-    public static Object[] resolveParameters(Method method, Request request, Response response, Map<String, String> pathVariables) throws Exception {
+    public static Object[] resolveParameters(Method method, HttpServletRequest request,
+                                             HttpServletResponse response, Map<String, String> pathVariables) throws Exception {
         Parameter[] params = method.getParameters();
         Object[] args = new Object[params.length];
         for (int i = 0; i < params.length; i++) {
             Parameter p = params[i];
             Class<?> type = p.getType();
 
-            if (type == Request.class) {
+            if (type == HttpServletRequest.class || type == Request.class) {
                 args[i] = request;
                 continue;
             }
-            if (type == Response.class) {
+            if (type == HttpServletResponse.class || type == Response.class) {
                 args[i] = response;
                 continue;
             }
 
-            // @PathVariable
             PathVariable pathVar = p.getAnnotation(PathVariable.class);
             if (pathVar != null) {
                 String name = pathVar.value();
@@ -40,11 +46,10 @@ public class ParamBinder {
                 continue;
             }
 
-            // @RequestParam
             RequestParam reqParam = p.getAnnotation(RequestParam.class);
             if (reqParam != null) {
                 String name = reqParam.value();
-                String value = request.getParameters().get(name);
+                String value = request.getParameter(name);
                 if (value == null && reqParam.required()) {
                     if (!reqParam.defaultValue().isEmpty()) {
                         value = reqParam.defaultValue();
@@ -56,14 +61,14 @@ public class ParamBinder {
                 continue;
             }
 
-            // @RequestPart (multipart)
             RequestPart part = p.getAnnotation(RequestPart.class);
             if (part != null) {
                 String name = part.value();
-                if (request.getMultipartResolver() == null) {
+                MultipartResolver resolver = request.getMultipartResolver();
+                if (resolver == null) {
                     throw new IllegalArgumentException("Not a multipart request");
                 }
-                byte[] data = request.getMultipartResolver().getFileParameter(name);
+                byte[] data = resolver.getFileParameter(name);
                 if (data == null && part.required()) {
                     throw new IllegalArgumentException("Missing request part: " + name);
                 }
@@ -74,13 +79,11 @@ public class ParamBinder {
                 } else if (type == java.io.InputStream.class && data != null) {
                     args[i] = new ByteArrayInputStream(data);
                 } else {
-                    // 可以扩展为文件对象等
                     args[i] = data;
                 }
                 continue;
             }
 
-            // @RequestBody
             RequestBody body = p.getAnnotation(RequestBody.class);
             if (body != null) {
                 String ct = request.getContentType();
@@ -93,7 +96,6 @@ public class ParamBinder {
                 continue;
             }
 
-            // 没有注解，赋 null
             args[i] = null;
         }
         return args;

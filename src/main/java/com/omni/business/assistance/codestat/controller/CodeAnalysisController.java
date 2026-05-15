@@ -49,7 +49,7 @@ public class CodeAnalysisController {
         return codeAnalysisService.analyze(params);
     }
     @RequestMapping("/download")
-    public void downloadFile() throws IOException {
+    public void downloadFile() throws Exception {
         Response response = ResponseContextHolder.getResponse();
         if (response == null) {
             throw new RuntimeException("No response available for download");

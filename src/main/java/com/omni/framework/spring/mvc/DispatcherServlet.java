@@ -1,13 +1,18 @@
 package com.omni.framework.spring.mvc;
 
-import com.omni.framework.spring.annotation.*;
+
+
+import com.omni.framework.spring.annotation.Controller;
+import com.omni.framework.spring.annotation.RequestMapping;
+import com.omni.framework.spring.annotation.ResponseBody;
+import com.omni.framework.spring.annotation.RestController;
 import com.omni.framework.spring.config.ConfigLoader;
 import com.omni.framework.spring.ioc.SimpleApplicationContext;
 import com.omni.framework.tomcat.connector.Request;
 import com.omni.framework.tomcat.connector.Response;
 import com.omni.framework.tomcat.servlet.HttpServlet;
-import com.omni.framework.log.LoggerFactory;
-import com.omni.framework.log.core.Logger;
+import com.omni.framework.tomcat.servlet.HttpServletRequest;
+import com.omni.framework.tomcat.servlet.HttpServletResponse;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -17,7 +22,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class DispatcherServlet extends HttpServlet {
-    private static final Logger log = LoggerFactory.getLogger(DispatcherServlet.class);
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DispatcherServlet.class);
     private SimpleApplicationContext applicationContext;
     private final List<HandlerMapping> handlerMappings = new ArrayList<>();
 
@@ -40,7 +45,6 @@ public class DispatcherServlet extends HttpServlet {
                     String fullPath = (basePath + methodPath).replaceAll("//", "/");
                     if (!fullPath.startsWith("/")) fullPath = "/" + fullPath;
                     boolean isResponseBody = isRest || method.isAnnotationPresent(ResponseBody.class);
-                    // 将路径模式转换为正则，提取路径变量
                     String regex = fullPath.replaceAll("\\{([^}]+)\\}", "([^/]+)");
                     List<String> varNames = new ArrayList<>();
                     Matcher m = Pattern.compile("\\{([^}]+)\\}").matcher(fullPath);
@@ -53,13 +57,13 @@ public class DispatcherServlet extends HttpServlet {
     }
 
     @Override
-    protected void doGet(Request req, Response res) throws Exception { processRequest(req, res); }
+    protected void doGet(HttpServletRequest req, HttpServletResponse res) throws Exception { processRequest(req, res); }
     @Override
-    protected void doPost(Request req, Response res) throws Exception { processRequest(req, res); }
+    protected void doPost(HttpServletRequest req, HttpServletResponse res) throws Exception { processRequest(req, res); }
 
-    private void processRequest(Request req, Response res) throws Exception {
-        RequestContextHolder.setRequest(req);
-        ResponseContextHolder.setResponse(res);
+    private void processRequest(HttpServletRequest req, HttpServletResponse res) throws Exception {
+        RequestContextHolder.setRequest((Request) req);
+        ResponseContextHolder.setResponse((Response) res);
         try {
             String uri = req.getUri();
             for (HandlerMapping hm : handlerMappings) {
@@ -82,8 +86,7 @@ public class DispatcherServlet extends HttpServlet {
                     return;
                 }
             }
-            // 静态文件服务
-            if (serveStaticFile(uri, res)) return;
+            if (serveStaticFile(uri, (Response) res)) return;
             res.setStatus(404, "Not Found");
             res.write("<h1>404 - Not Found</h1>");
             res.send();
@@ -94,7 +97,6 @@ public class DispatcherServlet extends HttpServlet {
     }
 
     private boolean serveStaticFile(String uri, Response res) {
-        // 原有静态文件逻辑保持不变
         if (uri == null || uri.contains("..") || uri.contains("//")) return false;
         String cleanUri = uri.startsWith("/") ? uri.substring(1) : uri;
         int firstSlash = cleanUri.indexOf('/');

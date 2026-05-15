@@ -4,7 +4,7 @@ import com.omni.framework.tomcat.connector.Request;
 import com.omni.framework.tomcat.connector.Response;
 
 public class HelloServlet extends HttpServlet {
-    @Override
+
     protected void doGet(Request req, Response res) throws Exception {
         String name = req.getUri().replace("/", "");
         if (name.isEmpty()) name = "World";

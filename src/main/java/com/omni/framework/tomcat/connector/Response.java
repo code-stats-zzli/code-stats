@@ -1,16 +1,16 @@
 package com.omni.framework.tomcat.connector;
 
-import com.omni.framework.log.LoggerFactory;
-import com.omni.framework.log.core.Logger;
+
+
 import com.omni.framework.spring.mvc.MessageConverters;
+import com.omni.framework.tomcat.servlet.HttpServletResponse;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
-public class Response {
-    private static final Logger log = LoggerFactory.getLogger(Response.class);
+public class Response implements HttpServletResponse {
     private final OutputStream output;
     private int statusCode = 200;
     private String statusMessage = "OK";
@@ -18,22 +18,65 @@ public class Response {
     private String contentType = "text/html; charset=utf-8";
     private final Map<String, String> headers = new HashMap<>();
     private boolean committed = false;
+    private PrintWriter writer;  // 懒加载
 
-    public Response(OutputStream output) { this.output = output; }
+    public Response(OutputStream output) {
+        this.output = output;
+    }
 
-    public void setStatus(int code, String message) { this.statusCode = code; this.statusMessage = message; }
-    public void write(String text) { this.responseBody = text; }
-    public void setResponseBody(Object obj) { this.responseBody = obj; }
-    public void setContentType(String contentType) { this.contentType = contentType; }
-    public OutputStream getRawOutputStream() { return output; }
-    public void setHeader(String name, String value) { headers.put(name, value); }
+    // ---------- 实现 ServletResponse / HttpServletResponse ----------
+    @Override
+    public void setContentType(String type) {
+        this.contentType = type;
+    }
 
-    public void send() throws IOException {
-        if (committed) return;
-        // 如果尚未设置 Content-Type 但 responseBody 已知，尝试推导
-        if (contentType == null && responseBody != null) {
-            contentType = "application/json";
+    @Override
+    public String getContentType() {
+        return contentType;
+    }
+
+    @Override
+    public void setHeader(String name, String value) {
+        headers.put(name, value);
+    }
+
+    @Override
+    public String getHeader(String name) {
+        return headers.get(name);
+    }
+
+    @Override
+    public OutputStream getOutputStream() {
+        return output;
+    }
+
+    @Override
+    public PrintWriter getWriter() {
+        if (writer == null) {
+            writer = new PrintWriter(output, true);
         }
+        return writer;
+    }
+
+    @Override
+    public void setStatus(int code, String message) {
+        this.statusCode = code;
+        this.statusMessage = message;
+    }
+
+    @Override
+    public void write(String text) {
+        this.responseBody = text;
+    }
+
+    @Override
+    public void setResponseBody(Object obj) {
+        this.responseBody = obj;
+    }
+
+    @Override
+    public void send() throws Exception {
+        if (committed) return;
         byte[] bodyBytes;
         if (responseBody != null) {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -41,49 +84,59 @@ public class Response {
                 MessageConverters.writeToResponse(responseBody, baos, contentType);
                 bodyBytes = baos.toByteArray();
             } catch (Exception e) {
-                log.error("Message conversion failed", e);
                 bodyBytes = responseBody.toString().getBytes(StandardCharsets.UTF_8);
             }
         } else {
             bodyBytes = new byte[0];
         }
-
-        try (PrintWriter writer = new PrintWriter(output, true)) {
-            writer.print("HTTP/1.1 " + statusCode + " " + statusMessage + "\r\n");
-            writer.print("Content-Type: " + contentType + "\r\n");
-            writer.print("Content-Length: " + bodyBytes.length + "\r\n");
+        try (PrintWriter pw = new PrintWriter(output, true)) {
+            pw.print("HTTP/1.1 " + statusCode + " " + statusMessage + "\r\n");
+            pw.print("Content-Type: " + contentType + "\r\n");
+            pw.print("Content-Length: " + bodyBytes.length + "\r\n");
             for (Map.Entry<String, String> entry : headers.entrySet()) {
-                writer.print(entry.getKey() + ": " + entry.getValue() + "\r\n");
+                pw.print(entry.getKey() + ": " + entry.getValue() + "\r\n");
             }
-            writer.print("\r\n");
-            writer.flush();
+            pw.print("\r\n");
+            pw.flush();
             output.write(bodyBytes);
             output.flush();
         }
         committed = true;
     }
 
-    public void sendStatic(InputStream inputStream, String contentType, long contentLength) throws IOException {
+    @Override
+    public void sendRedirect(String location) throws Exception {
+        setStatus(302, "Found");
+        setHeader("Location", location);
+        send();
+    }
+
+    // ---------- 扩展方法（非接口，供内部使用） ----------
+    public OutputStream getRawOutputStream() {
+        return output;
+    }
+
+    public void sendStatic(InputStream inputStream, String contentType, long contentLength) throws Exception {
         if (committed) return;
         this.contentType = contentType;
         this.statusCode = 200;
         this.statusMessage = "OK";
-        try (PrintWriter writer = new PrintWriter(output, true)) {
-            writer.print("HTTP/1.1 200 OK\r\n");
-            writer.print("Content-Type: " + contentType + "\r\n");
-            writer.print("Content-Length: " + contentLength + "\r\n");
+        try (PrintWriter pw = new PrintWriter(output, true)) {
+            pw.print("HTTP/1.1 200 OK\r\n");
+            pw.print("Content-Type: " + contentType + "\r\n");
+            pw.print("Content-Length: " + contentLength + "\r\n");
             for (Map.Entry<String, String> entry : headers.entrySet()) {
-                writer.print(entry.getKey() + ": " + entry.getValue() + "\r\n");
+                pw.print(entry.getKey() + ": " + entry.getValue() + "\r\n");
             }
-            writer.print("\r\n");
-            writer.flush();
+            pw.print("\r\n");
+            pw.flush();
             inputStream.transferTo(output);
             output.flush();
         }
         committed = true;
     }
 
-    public String getContentType() {
-        return contentType;
+    public boolean isCommitted() {
+        return committed;
     }
 }

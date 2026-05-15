@@ -1,37 +1,30 @@
 package com.omni.framework.spring.mvc;
 
-import com.omni.framework.spring.annotation.Controller;
-import com.omni.framework.spring.annotation.RequestMapping;
-import com.omni.framework.spring.annotation.ResponseBody;
+import com.omni.framework.spring.annotation.*;
 import com.omni.framework.spring.config.ConfigLoader;
 import com.omni.framework.spring.ioc.SimpleApplicationContext;
 import com.omni.framework.tomcat.connector.Request;
 import com.omni.framework.tomcat.connector.Response;
 import com.omni.framework.tomcat.servlet.HttpServlet;
-import com.omni.framework.util.JsonUtil;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.lang.reflect.Method;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class DispatcherServlet extends HttpServlet {
     private static final Logger log = LoggerFactory.getLogger(DispatcherServlet.class);
     private SimpleApplicationContext applicationContext;
-    private final Map<String, Handler> handlerMappings = new HashMap<>();
+    private final List<HandlerMapping> handlerMappings = new ArrayList<>();
 
     @Override
     public void init() throws Exception {
-        log.info("DispatcherServlet 初始化开始");
         applicationContext = new SimpleApplicationContext();
-        String packages = ConfigLoader.getProperty("scan.packages", "com.codestats.business");
+        String packages = ConfigLoader.getProperty("scan.packages", "com.omni.business");
         applicationContext.scanAndInit(packages);
         List<Object> controllers = applicationContext.getBeansWithAnnotation(Controller.class);
         for (Object controller : controllers) {
@@ -40,53 +33,59 @@ public class DispatcherServlet extends HttpServlet {
             if (clazz.isAnnotationPresent(RequestMapping.class)) {
                 basePath = clazz.getAnnotation(RequestMapping.class).value();
             }
+            boolean isRest = clazz.isAnnotationPresent(RestController.class);
             for (Method method : clazz.getDeclaredMethods()) {
                 if (method.isAnnotationPresent(RequestMapping.class)) {
                     String methodPath = method.getAnnotation(RequestMapping.class).value();
                     String fullPath = (basePath + methodPath).replaceAll("//", "/");
                     if (!fullPath.startsWith("/")) fullPath = "/" + fullPath;
-                    boolean isResponseBody = method.isAnnotationPresent(ResponseBody.class);
-                    handlerMappings.put(fullPath, new Handler(controller, method, isResponseBody));
-                    log.debug("Mapped {}", fullPath);
+                    boolean isResponseBody = isRest || method.isAnnotationPresent(ResponseBody.class);
+                    // 将路径模式转换为正则，提取路径变量
+                    String regex = fullPath.replaceAll("\\{([^}]+)\\}", "([^/]+)");
+                    List<String> varNames = new ArrayList<>();
+                    Matcher m = Pattern.compile("\\{([^}]+)\\}").matcher(fullPath);
+                    while (m.find()) varNames.add(m.group(1));
+                    handlerMappings.add(new HandlerMapping(regex, varNames, controller, method, isResponseBody));
+                    log.debug("Mapped {} -> {}", fullPath, method);
                 }
             }
         }
-        log.info("DispatcherServlet 初始化完成，共映射 {} 个处理器", handlerMappings.size());
     }
 
     @Override
-    protected void doGet(Request req, Response res) throws Exception {
-        processRequest(req, res);
-    }
-
+    protected void doGet(Request req, Response res) throws Exception { processRequest(req, res); }
     @Override
-    protected void doPost(Request req, Response res) throws Exception {
-        processRequest(req, res);
-    }
+    protected void doPost(Request req, Response res) throws Exception { processRequest(req, res); }
 
     private void processRequest(Request req, Response res) throws Exception {
         RequestContextHolder.setRequest(req);
         ResponseContextHolder.setResponse(res);
         try {
             String uri = req.getUri();
-            log.debug("Request URI: {}", uri);
-            Handler handler = handlerMappings.get(uri);
-            if (handler != null) {
-                Object[] args = ParamBinder.resolveParameters(handler.method, req);
-                Object result = handler.method.invoke(handler.controller, args);
-                if (handler.isResponseBody) {
-                    String outStr = result instanceof String ? (String) result : JsonUtil.toJson(result);
-                    res.setContentType(outStr.startsWith("{") ? "application/json" : "text/plain");
-                    res.write(outStr);
-                } else {
-                    if (result != null) res.write(result.toString());
+            for (HandlerMapping hm : handlerMappings) {
+                Pattern pattern = Pattern.compile(hm.regex);
+                Matcher matcher = pattern.matcher(uri);
+                if (matcher.matches()) {
+                    Map<String, String> pathVars = new HashMap<>();
+                    for (int i = 0; i < hm.varNames.size(); i++) {
+                        pathVars.put(hm.varNames.get(i), matcher.group(i + 1));
+                    }
+                    Object[] args = ParamBinder.resolveParameters(hm.method, req, res, pathVars);
+                    Object result = hm.method.invoke(hm.controller, args);
+                    if (hm.isResponseBody) {
+                        res.setResponseBody(result);
+                        if (res.getContentType() == null) res.setContentType("application/json");
+                    } else {
+                        if (result != null) res.write(result.toString());
+                    }
+                    res.send();
+                    return;
                 }
-                res.send();
-                return;
             }
+            // 静态文件服务
             if (serveStaticFile(uri, res)) return;
             res.setStatus(404, "Not Found");
-            res.write("<h1>404 - Not Found</h1><p>URI: " + uri + "</p>");
+            res.write("<h1>404 - Not Found</h1>");
             res.send();
         } finally {
             RequestContextHolder.clear();
@@ -95,35 +94,24 @@ public class DispatcherServlet extends HttpServlet {
     }
 
     private boolean serveStaticFile(String uri, Response res) {
+        // 原有静态文件逻辑保持不变
         if (uri == null || uri.contains("..") || uri.contains("//")) return false;
         String cleanUri = uri.startsWith("/") ? uri.substring(1) : uri;
         int firstSlash = cleanUri.indexOf('/');
-        if (firstSlash <= 0) {
-            log.debug("静态文件无斜杠，跳过: {}", uri);
-            return false;
-        }
+        if (firstSlash <= 0) return false;
         String webappRoot = cleanUri.substring(0, firstSlash);
         String subPath = cleanUri.substring(firstSlash + 1);
-        Path base = Paths.get("webapps", webappRoot);
-        Path filePath = base.resolve(subPath).normalize();
-        if (!filePath.startsWith(base)) {
-            log.warn("静态文件路径越界: {}", filePath);
-            return false;
-        }
+        java.nio.file.Path base = java.nio.file.Paths.get("webapps", webappRoot);
+        java.nio.file.Path filePath = base.resolve(subPath).normalize();
+        if (!filePath.startsWith(base)) return false;
         File file = filePath.toFile();
-        if (!file.exists() || file.isDirectory()) {
-            log.debug("静态文件不存在: {}", filePath);
-            return false;
-        }
+        if (!file.exists() || file.isDirectory()) return false;
         String contentType = getContentType(uri);
-        res.setContentType(contentType);
-        res.setStatus(200, "OK");
         try (FileInputStream fis = new FileInputStream(file)) {
             res.sendStatic(fis, contentType, file.length());
-            log.info("提供静态文件: {}", filePath);
             return true;
-        } catch (IOException e) {
-            log.error("提供静态文件失败: {}", filePath, e);
+        } catch (Exception e) {
+            log.error("Static file error", e);
             return false;
         }
     }
@@ -138,11 +126,15 @@ public class DispatcherServlet extends HttpServlet {
         return "application/octet-stream";
     }
 
-    private static class Handler {
-        Object controller;
-        Method method;
-        boolean isResponseBody;
-        Handler(Object controller, Method method, boolean isResponseBody) {
+    private static class HandlerMapping {
+        final String regex;
+        final List<String> varNames;
+        final Object controller;
+        final Method method;
+        final boolean isResponseBody;
+        HandlerMapping(String regex, List<String> varNames, Object controller, Method method, boolean isResponseBody) {
+            this.regex = regex;
+            this.varNames = varNames;
             this.controller = controller;
             this.method = method;
             this.isResponseBody = isResponseBody;

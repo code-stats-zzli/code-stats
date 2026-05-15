@@ -18,7 +18,7 @@
             <configuration>
               <transformers>
                 <transformer>
-                  <mainClass>com.omni.Bootstrap</mainClass>
+                  <mainClass>com.omni.run.Bootstrap</mainClass>
                 </transformer>
               </transformers>
             </configuration>
@@ -37,7 +37,7 @@
           </execution>
         </executions>
         <configuration>
-          <mainClass>com.omni.Bootstrap</mainClass>
+          <mainClass>com.omni.run.Bootstrap</mainClass>
         </configuration>
       </plugin>
       <plugin>

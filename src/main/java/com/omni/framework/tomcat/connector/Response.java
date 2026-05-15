@@ -116,7 +116,7 @@ public class Response implements HttpServletResponse {
         return output;
     }
 
-    public void sendStatic(InputStream inputStream, String contentType, long contentLength) throws Exception {
+    public void sendStatic(InputStream inputStream, String contentType, long contentLength) throws IOException {
         if (committed) return;
         this.contentType = contentType;
         this.statusCode = 200;

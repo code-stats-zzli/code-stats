@@ -2,6 +2,7 @@ package com.omni.framework.util;
 
 import com.omni.framework.spring.mvc.RequestContextHolder;
 import com.omni.framework.tomcat.connector.Request;
+import com.omni.framework.tomcat.servlet.HttpServletRequest;
 
 import java.net.URLDecoder;
 import java.util.HashMap;
@@ -17,7 +18,7 @@ public class ParamUtils {
      * @return 参数键值对（键已做 URL 解码）
      */
     public static Map<String, String> parseQueryParams() {
-        Request request = RequestContextHolder.getRequest();
+        HttpServletRequest request = RequestContextHolder.getRequest();
         Map<String, String> map = new HashMap<>();
         if (request == null) {
             return map;

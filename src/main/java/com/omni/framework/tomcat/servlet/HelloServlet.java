@@ -10,4 +10,14 @@ public class HelloServlet extends HttpServlet {
         if (name.isEmpty()) name = "World";
         res.write("<html><body><h1>Hello, " + name + "!</h1></body></html>");
     }
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse res) throws Exception {
+
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse res) throws Exception {
+
+    }
 }

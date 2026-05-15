@@ -8,6 +8,7 @@ import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.spring.config.ConfigLoader;
 import com.omni.framework.spring.mvc.RequestContextHolder;
 import com.omni.framework.tomcat.connector.Request;
+import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.util.JsonUtil;
 
 import java.net.URI;
@@ -33,7 +34,7 @@ public class ChatController {
     @RequestMapping("/chat")
     @ResponseBody
     public String chat() {
-        Request request = RequestContextHolder.getRequest();
+        HttpServletRequest request = RequestContextHolder.getRequest();
         if (request == null) {
             return errorResponse("无法获取请求对象");
         }

@@ -3,6 +3,7 @@
 package com.omni.business.assistance.codestat.controller;
 
 import com.omni.business.assistance.codestat.service.CodeAnalysisService;
+import com.omni.framework.tomcat.servlet.HttpServletResponse;
 import com.omni.framework.util.ParamUtils;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
@@ -50,7 +51,7 @@ public class CodeAnalysisController {
     }
     @RequestMapping("/download")
     public void downloadFile() throws Exception {
-        Response response = ResponseContextHolder.getResponse();
+        HttpServletResponse response = ResponseContextHolder.getResponse();
         if (response == null) {
             throw new RuntimeException("No response available for download");
         }

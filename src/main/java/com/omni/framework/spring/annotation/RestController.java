@@ -6,4 +6,5 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Controller
 public @interface RestController {
+    String value() default "";
 }

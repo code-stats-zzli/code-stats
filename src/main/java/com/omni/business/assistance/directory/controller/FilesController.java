@@ -10,6 +10,8 @@ import com.omni.framework.spring.mvc.RequestContextHolder;
 import com.omni.framework.spring.mvc.ResponseContextHolder;
 import com.omni.framework.tomcat.connector.Request;
 import com.omni.framework.tomcat.connector.Response;
+import com.omni.framework.tomcat.servlet.HttpServletRequest;
+import com.omni.framework.tomcat.servlet.HttpServletResponse;
 import com.omni.framework.util.JsonUtil;
 
 import java.io.IOException;
@@ -159,7 +161,7 @@ public class FilesController {
     // 文件下载（不修改）
     @RequestMapping("/download")
     public void downloadFile() throws Exception {
-        Response response = getResponse();
+        HttpServletResponse response = getResponse();
         if (response == null) {
             throw new RuntimeException("No response available");
         }
@@ -190,7 +192,7 @@ public class FilesController {
     // 目录下载为 ZIP（已修复）
     @RequestMapping("/downloadZip")
     public void downloadDirectoryAsZip() throws Exception {
-        Response response = getResponse();
+        HttpServletResponse response = getResponse();
         if (response == null) {
             throw new RuntimeException("No response available");
         }
@@ -230,7 +232,7 @@ public class FilesController {
 
     // ---------- 辅助方法 ----------
     private Map<String, String> parseQueryParams() {
-        Request request = RequestContextHolder.getRequest();
+        HttpServletRequest request = RequestContextHolder.getRequest();
         Map<String, String> map = new HashMap<>();
         if (request == null) return map;
         String query = request.getQueryString();
@@ -249,7 +251,7 @@ public class FilesController {
     }
 
     private String getRequestBody() throws IOException {
-        Request request = RequestContextHolder.getRequest();
+        HttpServletRequest request = RequestContextHolder.getRequest();
         return request.getBody();
     }
 
@@ -274,7 +276,7 @@ public class FilesController {
         return map;
     }
 
-    private Response getResponse() {
+    private HttpServletResponse getResponse() {
         return ResponseContextHolder.getResponse();
     }
 

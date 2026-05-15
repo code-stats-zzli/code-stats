@@ -131,7 +131,7 @@ cd CodeStats
 mvn clean package
 
 # 运行主启动类（内置 Tomcat 服务器）
-java -cp target/CodeStats-1.0.jar com.omni.Bootstrap
+java -cp target/CodeStats-1.0.jar com.omni.run.Bootstrap
 启动后访问：http://localhost:28080/codestats/ （端口和 context path 可在 application.properties 修改）
 
 配置数据库（数据库模块）

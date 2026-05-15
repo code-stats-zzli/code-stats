@@ -1,15 +1,16 @@
 package com.omni.framework.spring.mvc;
 
-import com.omni.framework.tomcat.connector.Request;
+
+import com.omni.framework.tomcat.servlet.HttpServletRequest;
 
 public class RequestContextHolder {
-    private static final ThreadLocal<Request> requestHolder = new ThreadLocal<>();
+    private static final ThreadLocal<HttpServletRequest> requestHolder = new ThreadLocal<>();
 
-    public static void setRequest(Request request) {
+    public static void setRequest(HttpServletRequest request) {
         requestHolder.set(request);
     }
 
-    public static Request getRequest() {
+    public static HttpServletRequest getRequest() {
         return requestHolder.get();
     }
 

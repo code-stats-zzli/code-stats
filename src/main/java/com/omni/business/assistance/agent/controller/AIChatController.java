@@ -7,6 +7,7 @@ import com.omni.framework.spring.annotation.RequestMapping;
 import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.spring.mvc.RequestContextHolder;
 import com.omni.framework.tomcat.connector.Request;
+import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.util.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,7 +26,7 @@ public class AIChatController {
     @RequestMapping("/chat")
     @ResponseBody
     public String chat() {
-        Request request = RequestContextHolder.getRequest();
+        HttpServletRequest request = RequestContextHolder.getRequest();
         if (request == null) {
             return errorResponse("无法获取请求对象");
         }
@@ -72,7 +73,7 @@ public class AIChatController {
     @RequestMapping("/close")
     @ResponseBody
     public String closeSession() {
-        Request request = RequestContextHolder.getRequest();
+        HttpServletRequest request = RequestContextHolder.getRequest();
         if (request == null) return errorResponse("无法获取请求对象");
         String body = request.getBody();
         try {

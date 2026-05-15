@@ -1,5 +1,8 @@
 package com.omni.framework.tomcat.servlet;
 
+import com.omni.framework.tomcat.connector.Request;
+import com.omni.framework.tomcat.connector.Response;
+
 public abstract class HttpServlet implements Servlet {
     @Override public void init() throws Exception { }
     @Override public void destroy() { }
@@ -16,13 +19,8 @@ public abstract class HttpServlet implements Servlet {
         }
     }
 
-    protected void doGet(HttpServletRequest req, HttpServletResponse res) throws Exception {
-        res.setStatus(405, "GET Not Supported");
-        res.send();
-    }
+    protected abstract void doGet(HttpServletRequest req, HttpServletResponse res) throws Exception;
 
-    protected void doPost(HttpServletRequest req, HttpServletResponse res) throws Exception {
-        res.setStatus(405, "POST Not Supported");
-        res.send();
-    }
+    protected abstract void doPost(HttpServletRequest req, HttpServletResponse res) throws Exception;
+
 }

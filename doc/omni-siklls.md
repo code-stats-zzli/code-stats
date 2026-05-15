@@ -151,7 +151,7 @@ files.server.root=D:/temp
 # Playwright 启用（用于自定义后端模拟浏览器）
 playwright.enabled=false
 4.3 启动服务
-运行 com.omni.Bootstrap 的 main 方法。启动后访问：
+运行 com.omni.run.Bootstrap 的 main 方法。启动后访问：
 
 主界面：http://localhost:28080/omni/demo/index.html
 

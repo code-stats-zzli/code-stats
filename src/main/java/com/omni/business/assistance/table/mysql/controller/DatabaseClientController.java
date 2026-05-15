@@ -9,6 +9,7 @@ import com.omni.framework.spring.annotation.RequestMapping;
 import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.spring.mvc.RequestContextHolder;
 import com.omni.framework.tomcat.connector.Request;
+import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.util.JsonUtil;
 
 import java.net.URLDecoder;
@@ -101,7 +102,7 @@ public class DatabaseClientController {
     }
 
     private String getQueryParam(String name) {
-        Request request = RequestContextHolder.getRequest();
+        HttpServletRequest request = RequestContextHolder.getRequest();
         if (request == null) return null;
         String query = request.getQueryString();
         if (query == null || query.isEmpty()) return null;

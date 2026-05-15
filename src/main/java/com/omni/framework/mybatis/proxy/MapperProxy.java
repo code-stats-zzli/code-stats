@@ -2,8 +2,6 @@ package com.omni.framework.mybatis.proxy;
 
 import com.omni.framework.jdbc.JdbcTemplate;
 import com.omni.framework.mybatis.annotation.Select;
-
-
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -25,17 +23,19 @@ public class MapperProxy implements InvocationHandler {
             throw new UnsupportedOperationException("Mapper method must have @Select: " + method);
         }
         String sql = select.value();
-        int timeout = select.timeout();          // 获取注解中的超时设置
+        int timeout = select.timeout();
         Object[] paramValues = args == null ? new Object[0] : args;
         Class<?> returnType = method.getReturnType();
 
         if (returnType == List.class) {
+            // 查询列表，假设每一行返回第一列值（简单处理）
             return jdbcTemplate.query(sql, timeout, rs -> rs.getObject(1).toString(), paramValues);
         } else {
+            // 查询单值
             return jdbcTemplate.queryOne(sql, timeout, rs -> {
                 if (returnType == String.class) return rs.getString(1);
                 else if (returnType == Integer.class) return rs.getInt(1);
-                else return rs.getObject(1).toString();
+                else return rs.getObject(1);
             }, paramValues);
         }
     }

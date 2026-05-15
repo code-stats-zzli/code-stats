@@ -24,15 +24,13 @@ export class Compiler {
             const name = attr.name;
             const value = attr.value;
 
-            // 处理 @click 事件简写
             const eventName = parseEventName(name);
             if (eventName) {
                 this.bindEvent(node, eventName, value);
                 node.removeAttribute(name);
             }
-            // 处理 :class 等 v-bind 简写
             else if (name.startsWith(':')) {
-                const prop = name.slice(1);  // 如 'class'
+                const prop = name.slice(1);
                 this.bindProp(node, prop, value);
                 node.removeAttribute(name);
             }
@@ -88,7 +86,6 @@ export class Compiler {
         }
     }
 
-    // 安全求值，捕获异常返回 undefined
     safeEvaluate(exp) {
         try {
             const fn = new Function('vm', `with(vm) { return ${exp} }`);
@@ -139,17 +136,33 @@ export class Compiler {
     }
 
     bindProp(node, prop, expression) {
+        // 对于 class 属性，需要保存初始静态类，避免动态更新时叠加
+        let staticClass = null;
+        if (prop === 'class') {
+            staticClass = node.getAttribute('class') || '';
+            node.removeAttribute('class'); // 先移除，后续完全由动态值控制合并
+        }
         const update = () => {
-            const value = this.safeEvaluate(expression);
-            if (value !== undefined && value !== null) {
-                if (prop === 'class') {
-                    // 合并静态 class 和动态 class
-                    const staticClass = node.getAttribute('class') || '';
-                    const dynamicClass = typeof value === 'string' ? value : '';
-                    const finalClass = (staticClass + ' ' + dynamicClass).trim();
-                    node.setAttribute('class', finalClass);
-                } else {
+            let value = this.safeEvaluate(expression);
+            if (prop === 'class') {
+                let dynamicClass = '';
+                if (typeof value === 'string') {
+                    dynamicClass = value;
+                } else if (value === true) {
+                    dynamicClass = 'active'; // 支持布尔值简化写法
+                } else if (value === false) {
+                    dynamicClass = '';
+                } else if (value && typeof value === 'object') {
+                    // 支持对象语法 { active: condition }
+                    dynamicClass = Object.keys(value).filter(k => value[k]).join(' ');
+                }
+                const finalClass = (staticClass + ' ' + dynamicClass).trim();
+                node.setAttribute('class', finalClass);
+            } else {
+                if (value !== undefined && value !== null) {
                     node.setAttribute(prop, value);
+                } else {
+                    node.removeAttribute(prop);
                 }
             }
         };

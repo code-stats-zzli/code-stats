@@ -2,14 +2,15 @@
 package com.codestats.business.assistance.directory.controller;
 
 import com.codestats.business.assistance.directory.service.DirectoryService;
-import com.framework.spring.annotation.Autowired;
-import com.framework.spring.annotation.Controller;
-import com.framework.spring.annotation.RequestMapping;
-import com.framework.spring.annotation.ResponseBody;
-import com.framework.spring.mvc.RequestContextHolder;
-import com.framework.tomcat.connector.Request;
-import com.framework.tomcat.connector.Response;
-import com.framework.util.JsonUtil;
+import com.codestats.framework.spring.annotation.Autowired;
+import com.codestats.framework.spring.annotation.Controller;
+import com.codestats.framework.spring.annotation.RequestMapping;
+import com.codestats.framework.spring.annotation.ResponseBody;
+import com.codestats.framework.spring.mvc.RequestContextHolder;
+import com.codestats.framework.spring.mvc.ResponseContextHolder;
+import com.codestats.framework.tomcat.connector.Request;
+import com.codestats.framework.tomcat.connector.Response;
+import com.codestats.framework.util.JsonUtil;
 
 import java.io.IOException;
 import java.net.URLDecoder;
@@ -274,7 +275,7 @@ public class FilesController {
     }
 
     private Response getResponse() {
-        return com.framework.spring.mvc.ResponseContextHolder.getResponse();
+        return ResponseContextHolder.getResponse();
     }
 
     private String successResponse() {

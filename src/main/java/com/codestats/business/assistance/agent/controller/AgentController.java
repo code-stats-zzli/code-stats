@@ -1,9 +1,9 @@
 package com.codestats.business.assistance.agent.controller;
 
-import com.framework.spring.annotation.Controller;
-import com.framework.spring.annotation.RequestMapping;
-import com.framework.spring.annotation.ResponseBody;
-import com.framework.util.JsonUtil;
+import com.codestats.framework.spring.annotation.Controller;
+import com.codestats.framework.spring.annotation.RequestMapping;
+import com.codestats.framework.spring.annotation.ResponseBody;
+import com.codestats.framework.util.JsonUtil;
 
 import java.io.BufferedReader;
 import java.io.IOException;

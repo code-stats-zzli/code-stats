@@ -3,13 +3,13 @@
 package com.codestats.business.assistance.codestat.controller;
 
 import com.codestats.business.assistance.codestat.service.CodeAnalysisService;
-import com.codestats.common.util.ParamUtils;
-import com.framework.spring.annotation.Autowired;
-import com.framework.spring.annotation.Controller;
-import com.framework.spring.annotation.RequestMapping;
-import com.framework.spring.annotation.ResponseBody;
-import com.framework.spring.mvc.ResponseContextHolder;
-import com.framework.tomcat.connector.Response;
+import com.codestats.framework.util.ParamUtils;
+import com.codestats.framework.spring.annotation.Autowired;
+import com.codestats.framework.spring.annotation.Controller;
+import com.codestats.framework.spring.annotation.RequestMapping;
+import com.codestats.framework.spring.annotation.ResponseBody;
+import com.codestats.framework.spring.mvc.ResponseContextHolder;
+import com.codestats.framework.tomcat.connector.Response;
 
 import java.io.IOException;
 import java.io.InputStream;

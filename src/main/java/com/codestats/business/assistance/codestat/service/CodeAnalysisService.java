@@ -2,20 +2,22 @@
 
 package com.codestats.business.assistance.codestat.service;
 
-import com.codestats.lib.codestats.config.Config;
-import com.codestats.lib.codestats.config.ConfigLoader;
-import com.codestats.lib.codestats.core.FileInfo;
-import com.codestats.lib.codestats.core.StatisticsResult;
-import com.codestats.lib.codestats.filter.CompositeFilter;
-import com.codestats.lib.codestats.filter.ExcludePathFilter;
-import com.codestats.lib.codestats.filter.ExtensionFilter;
-import com.codestats.lib.codestats.filter.GitIgnoreFilter;
-import com.codestats.lib.codestats.pipeline.*;
-import com.codestats.lib.codestats.sorter.SorterRegistry;
-import com.framework.spring.annotation.Service;
-import com.framework.util.JsonUtil;
-import com.framework.log.LoggerFactory;
-import com.framework.log.core.Logger;
+import com.codestats.framework.codestats.config.Config;
+import com.codestats.framework.codestats.config.ConfigLoader;
+import com.codestats.framework.codestats.core.FileInfo;
+import com.codestats.framework.codestats.core.StatisticsResult;
+import com.codestats.framework.codestats.filter.CompositeFilter;
+import com.codestats.framework.codestats.filter.ExcludePathFilter;
+import com.codestats.framework.codestats.filter.ExtensionFilter;
+import com.codestats.framework.codestats.filter.GitIgnoreFilter;
+import com.codestats.framework.codestats.pipeline.CollectStage;
+import com.codestats.framework.codestats.pipeline.MergeFilesStage;
+import com.codestats.framework.codestats.pipeline.ParallelAnalyzeStage;
+import com.codestats.framework.codestats.sorter.SorterRegistry;
+import com.codestats.framework.spring.annotation.Service;
+import com.codestats.framework.util.JsonUtil;
+import com.codestats.framework.log.LoggerFactory;
+import com.codestats.framework.log.core.Logger;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

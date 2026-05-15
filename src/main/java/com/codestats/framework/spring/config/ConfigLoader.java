@@ -1,0 +1,34 @@
+package com.codestats.framework.spring.config;
+
+import com.codestats.framework.log.LoggerFactory;
+import com.codestats.framework.log.core.Logger;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
+
+public class ConfigLoader {
+    private static final Logger log = LoggerFactory.getLogger(ConfigLoader.class);
+    private static final Properties props = new Properties();
+
+    static {
+        try (InputStream is = ConfigLoader.class.getClassLoader()
+                .getResourceAsStream("application.properties")) {
+            if (is != null) {
+                props.load(is);
+            } else {
+                log.warn("application.properties not found in classpath");
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load application.properties", e);
+        }
+    }
+
+    public static String getProperty(String key) {
+        return props.getProperty(key);
+    }
+
+    public static String getProperty(String key, String defaultValue) {
+        return props.getProperty(key, defaultValue);
+    }
+}

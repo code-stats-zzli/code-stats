@@ -1,7 +1,7 @@
 package com.codestats.business.assistance.table.mysql.repository;
 
 
-import com.framework.spring.annotation.Repository;
+import com.codestats.framework.spring.annotation.Repository;
 
 @Repository
 public class UserRepository {

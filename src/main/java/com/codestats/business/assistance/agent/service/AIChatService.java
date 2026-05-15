@@ -2,10 +2,10 @@ package com.codestats.business.assistance.agent.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.framework.spring.annotation.Service;
-import com.framework.spring.config.ConfigLoader;
-import com.framework.log.LoggerFactory;
-import com.framework.log.core.Logger;
+import com.codestats.framework.spring.annotation.Service;
+import com.codestats.framework.spring.config.ConfigLoader;
+import com.codestats.framework.log.LoggerFactory;
+import com.codestats.framework.log.core.Logger;
 import com.microsoft.playwright.Page;
 
 import java.net.URI;

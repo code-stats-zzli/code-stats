@@ -2,8 +2,8 @@ package com.codestats.business.assistance.directory.service;
 
 
 import com.codestats.common.util.FileUtils;
-import com.framework.spring.annotation.Service;
-import com.framework.spring.config.ConfigLoader;
+import com.codestats.framework.spring.annotation.Service;
+import com.codestats.framework.spring.config.ConfigLoader;
 
 import java.io.*;
 import java.nio.file.Path;

@@ -1,10 +1,10 @@
 package com.codestats.business.assistance.table.mysql.controller;
 
-import com.framework.spring.annotation.Controller;
-import com.framework.spring.annotation.RequestMapping;
-import com.framework.spring.annotation.RequestParam;
-import com.framework.spring.annotation.ResponseBody;
-import com.framework.spring.mvc.ModelAndView;
+import com.codestats.framework.spring.annotation.Controller;
+import com.codestats.framework.spring.annotation.RequestMapping;
+import com.codestats.framework.spring.annotation.RequestParam;
+import com.codestats.framework.spring.annotation.ResponseBody;
+import com.codestats.framework.spring.mvc.ModelAndView;
 
 @Controller
 @RequestMapping("/hello")

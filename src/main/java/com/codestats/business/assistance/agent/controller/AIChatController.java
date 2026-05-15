@@ -1,13 +1,13 @@
 package com.codestats.business.assistance.agent.controller;
 
 import com.codestats.business.assistance.agent.service.AIChatService;
-import com.framework.spring.annotation.Autowired;
-import com.framework.spring.annotation.Controller;
-import com.framework.spring.annotation.RequestMapping;
-import com.framework.spring.annotation.ResponseBody;
-import com.framework.spring.mvc.RequestContextHolder;
-import com.framework.tomcat.connector.Request;
-import com.framework.util.JsonUtil;
+import com.codestats.framework.spring.annotation.Autowired;
+import com.codestats.framework.spring.annotation.Controller;
+import com.codestats.framework.spring.annotation.RequestMapping;
+import com.codestats.framework.spring.annotation.ResponseBody;
+import com.codestats.framework.spring.mvc.RequestContextHolder;
+import com.codestats.framework.tomcat.connector.Request;
+import com.codestats.framework.util.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 

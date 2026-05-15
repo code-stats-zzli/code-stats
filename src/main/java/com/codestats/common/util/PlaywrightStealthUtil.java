@@ -3,9 +3,9 @@ package com.codestats.common.util;
 import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.ColorScheme;
 import com.microsoft.playwright.options.WaitUntilState;
-import com.framework.spring.config.ConfigLoader;
-import com.framework.log.LoggerFactory;
-import com.framework.log.core.Logger;
+import com.codestats.framework.spring.config.ConfigLoader;
+import com.codestats.framework.log.LoggerFactory;
+import com.codestats.framework.log.core.Logger;
 
 import java.util.Arrays;
 import java.util.HashMap;

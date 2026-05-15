@@ -1,8 +1,8 @@
 package com.codestats.common.cache;
 
 import com.codestats.common.cache.impl.LocalCache;
-import com.framework.log.LoggerFactory;
-import com.framework.log.core.Logger;
+import com.codestats.framework.log.LoggerFactory;
+import com.codestats.framework.log.core.Logger;
 
 import java.lang.reflect.Constructor;
 

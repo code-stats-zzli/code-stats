@@ -1,7 +1,7 @@
 package com.codestats.business.assistance.table.mysql.mapper;
 
-import com.framework.mybatis.annotation.Select;
-import com.framework.spring.annotation.Mapper;
+import com.codestats.framework.mybatis.annotation.Select;
+import com.codestats.framework.spring.annotation.Mapper;
 
 
 import java.util.List;

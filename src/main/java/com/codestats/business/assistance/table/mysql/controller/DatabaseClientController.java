@@ -1,15 +1,15 @@
 package com.codestats.business.assistance.table.mysql.controller;
 
-import com.framework.jdbc.metedata.datamodel.DataModel;
-import com.framework.jdbc.metedata.service.DatabaseMetadataService;
+import com.codestats.framework.jdbc.metedata.datamodel.DataModel;
+import com.codestats.framework.jdbc.metedata.service.DatabaseMetadataService;
 
-import com.framework.spring.annotation.Autowired;
-import com.framework.spring.annotation.Controller;
-import com.framework.spring.annotation.RequestMapping;
-import com.framework.spring.annotation.ResponseBody;
-import com.framework.spring.mvc.RequestContextHolder;
-import com.framework.tomcat.connector.Request;
-import com.framework.util.JsonUtil;
+import com.codestats.framework.spring.annotation.Autowired;
+import com.codestats.framework.spring.annotation.Controller;
+import com.codestats.framework.spring.annotation.RequestMapping;
+import com.codestats.framework.spring.annotation.ResponseBody;
+import com.codestats.framework.spring.mvc.RequestContextHolder;
+import com.codestats.framework.tomcat.connector.Request;
+import com.codestats.framework.util.JsonUtil;
 
 import java.net.URLDecoder;
 import java.util.*;

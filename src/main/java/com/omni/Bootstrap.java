@@ -11,7 +11,7 @@ public class Bootstrap {
         Catalina catalina = new Catalina();
         catalina.load();
         catalina.start();
-        log.info("Tomcat ready. Access http://localhost:8080/codestats/demo/index.html");
+        log.info("Tomcat ready. Access http://localhost:8080/omni/demo/index.html");
         try { Thread.sleep(Long.MAX_VALUE); } catch (InterruptedException e) {
             log.error("Main thread interrupted", e);
         }

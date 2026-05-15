@@ -32,7 +32,7 @@ public class Catalina {
         host.setAppBase("webapps");
         engine.addChild(host);
 
-        String contextPath = ConfigLoader.getProperty("context.path", "/codestats");
+        String contextPath = ConfigLoader.getProperty("context.path", "/omni");
         StandardContext context = new StandardContext();
         context.setName(contextPath);
         context.setDocBase("webapps/demo");
@@ -41,7 +41,7 @@ public class Catalina {
         context.addLifecycleListener(new ContextListenerDemo());
 
         String servletClassName = ConfigLoader.getProperty("servlet.class",
-                "com.framework.spring.mvc.DispatcherServlet");
+                "com.omni.framework.spring.mvc.DispatcherServlet");
         StandardWrapper wrapper = new StandardWrapper();
         wrapper.setName("dispatcher");
         wrapper.setServletClass(servletClassName);

@@ -1,13 +1,13 @@
 package org.test;
 
-import com.codestats.collector.FileCollector;
-import com.codestats.core.StatisticsResult;
-import com.codestats.filter.ExcludePathFilter;
-import com.codestats.filter.ExtensionFilter;
-import com.codestats.filter.FilterChain;
-import com.codestats.output.OutputManager;
-import com.codestats.statistics.LineCountStrategy;
-import com.codestats.statistics.StatisticStrategy;
+import com.omni.collector.FileCollector;
+import com.omni.core.StatisticsResult;
+import com.omni.filter.ExcludePathFilter;
+import com.omni.filter.ExtensionFilter;
+import com.omni.filter.FilterChain;
+import com.omni.output.OutputManager;
+import com.omni.statistics.LineCountStrategy;
+import com.omni.statistics.StatisticStrategy;
 
 public class CodeStats {
     public static void main(String[] args) {

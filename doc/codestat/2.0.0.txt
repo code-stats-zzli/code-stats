@@ -1,4 +1,4 @@
-com.codestats/
+com.omni/
 ├── engine/
 │   ├── CodeStatsEngine.java        // 主入口（类似 Spring Boot）
 │   └── EngineTemplate.java         // 模板方法（执行骨架）

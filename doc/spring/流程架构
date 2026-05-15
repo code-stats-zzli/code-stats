@@ -112,7 +112,7 @@ Catalina.load() 组装容器树：
 
 添加 ContextListenerDemo 监听器
 
-创建 StandardWrapper（name="dispatcher", servletClass="com.codestats.spring.mvc.DispatcherServlet"）
+创建 StandardWrapper（name="dispatcher", servletClass="com.omni.spring.mvc.DispatcherServlet"）
 
 添加 Servlet 映射 /* -> dispatcher
 
@@ -167,8 +167,8 @@ DispatcherServlet.service()（实际调用 doGet 或 doPost，均进入 processR
 DispatcherServlet.init() 中创建 SimpleApplicationContext，扫描包：
 
 text
-com.codestats.facade.controller, com.codestats.facade.service, com.codestats.facade.repository, com.codestats.facade.mapper
-（注意实际类在 com.codestats.business.assistance.table.mysql 下，若包路径不一致需调整）
+com.omni.facade.controller, com.omni.facade.service, com.omni.facade.repository, com.omni.facade.mapper
+（注意实际类在 com.omni.business.assistance.table.mysql 下，若包路径不一致需调整）
 
 容器通过 PackageScanner 找到所有类：
 

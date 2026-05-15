@@ -1,0 +1,33 @@
+package com.omni.framework.codestats.language;
+
+public enum Language {
+    UNKNOWN,
+    JAVA,
+    KOTLIN,
+    SCALA,
+    GROOVY,
+    PYTHON,
+    JAVASCRIPT,
+    TYPESCRIPT,
+    GO,
+    RUST,
+    C,
+    CPP,
+    CSHARP,
+    SWIFT,
+    PHP,
+    RUBY,
+    PERL,
+    LUA,
+    R,
+    SQL,
+    HTML,
+    CSS,
+    XML,
+    JSON,
+    YAML,
+    SHELL,
+    DOCKERFILE,
+    MAKEFILE,
+    PROPERTIES
+}

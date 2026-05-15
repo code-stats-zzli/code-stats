@@ -5,25 +5,25 @@
         <property name="log.pattern">%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n</property>
     </properties>
 
-    <appender name="CONSOLE" class="com.codestats.framework.log.appender.ConsoleAppender">
-        <layout class="com.codestats.framework.log.layout.PatternLayout">
+    <appender name="CONSOLE" class="com.omni.framework.log.appender.ConsoleAppender">
+        <layout class="com.omni.framework.log.layout.PatternLayout">
             <param name="pattern" value="${log.pattern}"/>
         </layout>
-        <filter class="com.codestats.framework.log.filter.LevelRangeFilter">
+        <filter class="com.omni.framework.log.filter.LevelRangeFilter">
             <param name="minLevel" value="INFO"/>
         </filter>
     </appender>
 
-    <appender name="FILE" class="com.codestats.framework.log.appender.RollingFileAppender">
+    <appender name="FILE" class="com.omni.framework.log.appender.RollingFileAppender">
         <param name="file" value="${log.dir}/app.log"/>
         <param name="maxFileSize" value="10MB"/>
         <param name="maxBackupIndex" value="5"/>
-        <layout class="com.codestats.framework.log.layout.PatternLayout">
+        <layout class="com.omni.framework.log.layout.PatternLayout">
             <param name="pattern" value="${log.pattern}"/>
         </layout>
     </appender>
 
-    <appender name="ASYNC" class="com.codestats.framework.log.appender.AsyncAppender">
+    <appender name="ASYNC" class="com.omni.framework.log.appender.AsyncAppender">
         <param name="queueSize" value="1024"/>
         <appender-ref ref="FILE"/>
     </appender>

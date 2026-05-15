@@ -1,6 +1,6 @@
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\business\assistance\table\mysql\component\SimpleDatabaseMetadataService.java ========
-package com.codestats.business.assistance.table.mysql.component;
+package com.omni.business.assistance.table.mysql.component;
 
 import com.framework.jdbc.metedata.service.AbatractDatabaseMetadataService;
 import com.framework.spring.annotation.Component;
@@ -11,7 +11,7 @@ public class SimpleDatabaseMetadataService extends AbatractDatabaseMetadataServi
 
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\business\assistance\table\mysql\controller\DatabaseClientController.java ========
-package com.codestats.business.assistance.table.mysql.controller;
+package com.omni.business.assistance.table.mysql.controller;
 
 import com.framework.jdbc.metedata.datamodel.DataModel;
 import com.framework.jdbc.metedata.service.DatabaseMetadataService;
@@ -133,7 +133,7 @@ public class DatabaseClientController {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\business\assistance\table\mysql\controller\DatabaseController.java ========
-package com.codestats.business.assistance.table.mysql.controller;
+package com.omni.business.assistance.table.mysql.controller;
 
 import com.framework.jdbc.metedata.datamodel.DataModel;
 import com.framework.jdbc.metedata.service.DatabaseMetadataService;
@@ -213,7 +213,7 @@ public class DatabaseController {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\business\assistance\table\mysql\controller\HelloController.java ========
-package com.codestats.business.assistance.table.mysql.controller;
+package com.omni.business.assistance.table.mysql.controller;
 
 import com.framework.spring.annotation.Controller;
 import com.framework.spring.annotation.RequestMapping;
@@ -241,9 +241,9 @@ public class HelloController {
 
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\business\assistance\table\mysql\controller\UserController.java ========
-package com.codestats.business.assistance.table.mysql.controller;
+package com.omni.business.assistance.table.mysql.controller;
 
-import com.codestats.business.assistance.table.mysql.service.UserService;
+import com.omni.business.assistance.table.mysql.service.UserService;
 import com.framework.spring.annotation.Autowired;
 import com.framework.spring.annotation.Controller;
 import com.framework.spring.annotation.RequestMapping;
@@ -275,7 +275,7 @@ public class UserController {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\business\assistance\table\mysql\mapper\UserMapper.java ========
-package com.codestats.business.assistance.table.mysql.mapper;
+package com.omni.business.assistance.table.mysql.mapper;
 
 import com.framework.mybatis.annotation.Select;
 import com.framework.spring.annotation.Mapper;
@@ -294,7 +294,7 @@ public interface UserMapper {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\business\assistance\table\mysql\repository\UserRepository.java ========
-package com.codestats.business.assistance.table.mysql.repository;
+package com.omni.business.assistance.table.mysql.repository;
 
 
 import com.framework.spring.annotation.Repository;
@@ -309,10 +309,10 @@ public class UserRepository {
 
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\business\assistance\table\mysql\service\UserService.java ========
-package com.codestats.business.assistance.table.mysql.service;
+package com.omni.business.assistance.table.mysql.service;
 
-import com.codestats.business.assistance.table.mysql.mapper.UserMapper;
-import com.codestats.business.assistance.table.mysql.repository.UserRepository;
+import com.omni.business.assistance.table.mysql.mapper.UserMapper;
+import com.omni.business.assistance.table.mysql.repository.UserRepository;
 import com.framework.spring.annotation.Autowired;
 import com.framework.spring.annotation.Service;
 
@@ -341,9 +341,9 @@ public class UserService {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\Application.java ========
-package com.codestats.lib.codestats;
+package com.omni.lib.codestats;
 
-import com.codestats.lib.codestats.bootstrap.CodestatsEngine;
+import com.omni.lib.codestats.bootstrap.CodestatsEngine;
 
 public class Application {
     public static void main(String[] args) {
@@ -352,13 +352,13 @@ public class Application {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\bootstrap\CodestatsEngine.java ========
-package com.codestats.lib.codestats.bootstrap;
+package com.omni.lib.codestats.bootstrap;
 
-import com.codestats.lib.codestats.config.Config;
-import com.codestats.lib.codestats.config.ConfigLoader;
-import com.codestats.lib.codestats.launcher.ConsoleLauncher;
-import com.codestats.lib.codestats.launcher.GuiLauncher;
-import com.codestats.lib.codestats.launcher.Launcher;
+import com.omni.lib.codestats.config.Config;
+import com.omni.lib.codestats.config.ConfigLoader;
+import com.omni.lib.codestats.launcher.ConsoleLauncher;
+import com.omni.lib.codestats.launcher.GuiLauncher;
+import com.omni.lib.codestats.launcher.Launcher;
 
 public class CodestatsEngine {
 
@@ -392,9 +392,9 @@ public class CodestatsEngine {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\collector\FileCollector.java ========
-package com.codestats.lib.codestats.collector;
+package com.omni.lib.codestats.collector;
 
-import com.codestats.lib.codestats.filter.CompositeFilter;
+import com.omni.lib.codestats.filter.CompositeFilter;
 import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -432,7 +432,7 @@ public class FileCollector {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\config\Config.java ========
-package com.codestats.lib.codestats.config;
+package com.omni.lib.codestats.config;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -541,7 +541,7 @@ public class Config {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\config\ConfigLoader.java ========
-package com.codestats.lib.codestats.config;
+package com.omni.lib.codestats.config;
 
 import org.yaml.snakeyaml.Yaml;
 import java.io.FileInputStream;
@@ -661,7 +661,7 @@ public class ConfigLoader {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\config\GitIgnoreLoader.java ========
-package com.codestats.lib.codestats.config;
+package com.omni.lib.codestats.config;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -690,9 +690,9 @@ public class GitIgnoreLoader {
 
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\core\FileInfo.java ========
-package com.codestats.lib.codestats.core;
+package com.omni.lib.codestats.core;
 
-import com.codestats.lib.codestats.language.Language;
+import com.omni.lib.codestats.language.Language;
 import java.nio.file.Path;
 
 public class FileInfo {
@@ -722,7 +722,7 @@ public class FileInfo {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\core\ProgressListener.java ========
-package com.codestats.lib.codestats.core;
+package com.omni.lib.codestats.core;
 
 @FunctionalInterface
 public interface ProgressListener {
@@ -730,7 +730,7 @@ public interface ProgressListener {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\core\ProgressMonitor.java ========
-package com.codestats.lib.codestats.core;
+package com.omni.lib.codestats.core;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -796,9 +796,9 @@ public class ProgressMonitor {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\core\StatisticsResult.java ========
-package com.codestats.lib.codestats.core;
+package com.omni.lib.codestats.core;
 
-import com.codestats.lib.codestats.language.Language;
+import com.omni.lib.codestats.language.Language;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -848,7 +848,7 @@ public class StatisticsResult {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\filter\CompositeFilter.java ========
-package com.codestats.lib.codestats.filter;
+package com.omni.lib.codestats.filter;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -862,7 +862,7 @@ public class CompositeFilter implements FileFilter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\filter\ExcludePathFilter.java ========
-package com.codestats.lib.codestats.filter;
+package com.omni.lib.codestats.filter;
 import java.nio.file.Path;
 import java.util.List;
 public class ExcludePathFilter implements FileFilter {
@@ -876,7 +876,7 @@ public class ExcludePathFilter implements FileFilter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\filter\ExtensionFilter.java ========
-package com.codestats.lib.codestats.filter;
+package com.omni.lib.codestats.filter;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -895,7 +895,7 @@ public class ExtensionFilter implements FileFilter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\filter\FileFilter.java ========
-package com.codestats.lib.codestats.filter;
+package com.omni.lib.codestats.filter;
 
 import java.nio.file.Path;
 
@@ -905,7 +905,7 @@ public interface FileFilter {
 
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\filter\FilterChain.java ========
-package com.codestats.lib.codestats.filter;
+package com.omni.lib.codestats.filter;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -923,8 +923,8 @@ public class FilterChain implements FileFilter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\filter\GitIgnoreFilter.java ========
-package com.codestats.lib.codestats.filter;
-import com.codestats.lib.codestats.config.GitIgnoreLoader;
+package com.omni.lib.codestats.filter;
+import com.omni.lib.codestats.config.GitIgnoreLoader;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.util.List;
@@ -942,18 +942,18 @@ public class GitIgnoreFilter implements FileFilter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\gui\CodeStatsController.java ========
-package com.codestats.lib.codestats.gui;
+package com.omni.lib.codestats.gui;
 
-import com.codestats.lib.codestats.core.FileInfo;
-import com.codestats.lib.codestats.core.ProgressMonitor;
-import com.codestats.lib.codestats.core.StatisticsResult;
-import com.codestats.lib.codestats.filter.CompositeFilter;
-import com.codestats.lib.codestats.filter.ExcludePathFilter;
-import com.codestats.lib.codestats.filter.ExtensionFilter;
-import com.codestats.lib.codestats.pipeline.CollectStage;
-import com.codestats.lib.codestats.pipeline.MergeFilesStage;
-import com.codestats.lib.codestats.pipeline.ParallelAnalyzeStage;
-import com.codestats.lib.codestats.sorter.SorterRegistry;
+import com.omni.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.ProgressMonitor;
+import com.omni.lib.codestats.core.StatisticsResult;
+import com.omni.lib.codestats.filter.CompositeFilter;
+import com.omni.lib.codestats.filter.ExcludePathFilter;
+import com.omni.lib.codestats.filter.ExtensionFilter;
+import com.omni.lib.codestats.pipeline.CollectStage;
+import com.omni.lib.codestats.pipeline.MergeFilesStage;
+import com.omni.lib.codestats.pipeline.ParallelAnalyzeStage;
+import com.omni.lib.codestats.sorter.SorterRegistry;
 
 import javax.swing.*;
 import java.nio.file.Path;
@@ -1107,9 +1107,9 @@ public class CodeStatsController {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\gui\CodeStatsGUI.java ========
-package com.codestats.lib.codestats.gui;
+package com.omni.lib.codestats.gui;
 
-import com.codestats.lib.codestats.config.ConfigLoader;
+import com.omni.lib.codestats.config.ConfigLoader;
 
 import javax.swing.*;
 
@@ -1127,7 +1127,7 @@ public class CodeStatsGUI extends JFrame {
         // ========== 加载配置并应用默认值 ==========
         try {
             // 传入空参数加载 yaml、环境变量，命令行参数通常为空
-            com.codestats.lib.codestats.config.Config config = ConfigLoader.load(new String[0]);
+            com.omni.lib.codestats.config.Config config = ConfigLoader.load(new String[0]);
             panel.applyDefaults(config);  // 将 rootDir 显示到界面并自动设置合并输出
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -1143,7 +1143,7 @@ public class CodeStatsGUI extends JFrame {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\gui\CodeStatsGUIPanel.java ========
-package com.codestats.lib.codestats.gui;
+package com.omni.lib.codestats.gui;
 
 import javax.swing.*;
 import java.awt.*;
@@ -1204,14 +1204,14 @@ public class CodeStatsGUIPanel extends JPanel {
     public void clearResults() { resultPanel.clearResults(); }
 
     // ============ 新增：暴露 applyDefaults ============
-    public void applyDefaults(com.codestats.lib.codestats.config.Config config) {
+    public void applyDefaults(com.omni.lib.codestats.config.Config config) {
         configPanel.applyDefaults(config);
     }
     // ================================================
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\gui\ConfigPanel.java ========
-package com.codestats.lib.codestats.gui;
+package com.omni.lib.codestats.gui;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -1367,7 +1367,7 @@ public class ConfigPanel extends JPanel {
      * 根据 Config 对象设置界面默认值。
      * 直接使用 config.getRootDir() 作为根目录，触发自动合并输出设置。
      */
-    public void applyDefaults(com.codestats.lib.codestats.config.Config config) {
+    public void applyDefaults(com.omni.lib.codestats.config.Config config) {
         if (config.getRootDir() != null) {
             String dir = config.getRootDir().toString();
             if (!dir.isEmpty()) {
@@ -1378,10 +1378,10 @@ public class ConfigPanel extends JPanel {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\gui\FileInfoTableModel.java ========
-package com.codestats.lib.codestats.gui;
+package com.omni.lib.codestats.gui;
 
-import com.codestats.lib.codestats.core.FileInfo;
-import com.codestats.lib.codestats.core.StatisticsResult;
+import com.omni.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.StatisticsResult;
 import javax.swing.table.AbstractTableModel;
 import java.util.ArrayList;
 import java.util.List;
@@ -1454,7 +1454,7 @@ public class FileInfoTableModel extends AbstractTableModel {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\gui\ProgressPanel.java ========
-package com.codestats.lib.codestats.gui;
+package com.omni.lib.codestats.gui;
 
 import javax.swing.*;
 import java.awt.*;
@@ -1528,7 +1528,7 @@ public class ProgressPanel extends JPanel {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\gui\ResultPanel.java ========
-package com.codestats.lib.codestats.gui;
+package com.omni.lib.codestats.gui;
 
 import javax.swing.*;
 import java.awt.*;
@@ -1574,7 +1574,7 @@ public class ResultPanel extends JPanel {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\language\Language.java ========
-package com.codestats.lib.codestats.language;
+package com.omni.lib.codestats.language;
 
 public enum Language {
     UNKNOWN,
@@ -1609,7 +1609,7 @@ public enum Language {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\language\LanguageDetector.java ========
-package com.codestats.lib.codestats.language;
+package com.omni.lib.codestats.language;
 
 import java.io.BufferedReader;
 import java.nio.file.Files;
@@ -1660,7 +1660,7 @@ public class LanguageDetector {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\language\LanguageSpec.java ========
-package com.codestats.lib.codestats.language;
+package com.omni.lib.codestats.language;
 
 public class LanguageSpec {
     private final Language language;
@@ -1712,10 +1712,10 @@ public class LanguageSpec {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\launcher\ConsoleLauncher.java ========
-package com.codestats.lib.codestats.launcher;
+package com.omni.lib.codestats.launcher;
 
-import com.codestats.lib.codestats.config.Config;
-import com.codestats.lib.codestats.pipeline.Pipeline;
+import com.omni.lib.codestats.config.Config;
+import com.omni.lib.codestats.pipeline.Pipeline;
 
 public class ConsoleLauncher implements Launcher {
     @Override
@@ -1725,10 +1725,10 @@ public class ConsoleLauncher implements Launcher {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\launcher\GuiLauncher.java ========
-package com.codestats.lib.codestats.launcher;
+package com.omni.lib.codestats.launcher;
 
-import com.codestats.lib.codestats.config.Config;
-import com.codestats.lib.codestats.gui.CodeStatsGUI;
+import com.omni.lib.codestats.config.Config;
+import com.omni.lib.codestats.gui.CodeStatsGUI;
 
 public class GuiLauncher implements Launcher {
     @Override
@@ -1741,20 +1741,20 @@ public class GuiLauncher implements Launcher {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\launcher\Launcher.java ========
-package com.codestats.lib.codestats.launcher;
+package com.omni.lib.codestats.launcher;
 
-import com.codestats.lib.codestats.config.Config;
+import com.omni.lib.codestats.config.Config;
 
 public interface Launcher {
     void launch(Config config) throws Exception;
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\output\ConsoleFormatter.java ========
-package com.codestats.lib.codestats.output;
+package com.omni.lib.codestats.output;
 
-import com.codestats.lib.codestats.core.FileInfo;
-import com.codestats.lib.codestats.core.StatisticsResult;
-import com.codestats.lib.codestats.language.Language;
+import com.omni.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.StatisticsResult;
+import com.omni.lib.codestats.language.Language;
 
 import java.io.IOException;
 import java.util.Comparator;
@@ -1796,7 +1796,7 @@ public class ConsoleFormatter extends OutputFormatter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\output\ConsoleWriter.java ========
-package com.codestats.lib.codestats.output;
+package com.omni.lib.codestats.output;
 
 import java.io.IOException;
 
@@ -1808,9 +1808,9 @@ public class ConsoleWriter implements OutputWriter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\output\CsvFormatter.java ========
-package com.codestats.lib.codestats.output;
+package com.omni.lib.codestats.output;
 
-import com.codestats.lib.codestats.core.StatisticsResult;
+import com.omni.lib.codestats.core.StatisticsResult;
 import java.io.IOException;
 import java.util.stream.Collectors;
 
@@ -1836,7 +1836,7 @@ public class CsvFormatter extends OutputFormatter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\output\FileWriter.java ========
-package com.codestats.lib.codestats.output;
+package com.omni.lib.codestats.output;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -1852,10 +1852,10 @@ public class FileWriter implements OutputWriter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\output\JsonFormatter.java ========
-package com.codestats.lib.codestats.output;
+package com.omni.lib.codestats.output;
 
-import com.codestats.lib.codestats.core.FileInfo;
-import com.codestats.lib.codestats.core.StatisticsResult;
+import com.omni.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.StatisticsResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import java.io.IOException;
@@ -1907,9 +1907,9 @@ public class JsonFormatter extends OutputFormatter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\output\OutputFormatter.java ========
-package com.codestats.lib.codestats.output;
+package com.omni.lib.codestats.output;
 
-import com.codestats.lib.codestats.core.StatisticsResult;
+import com.omni.lib.codestats.core.StatisticsResult;
 import java.io.IOException;
 
 public abstract class OutputFormatter {
@@ -1919,7 +1919,7 @@ public abstract class OutputFormatter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\output\OutputWriter.java ========
-package com.codestats.lib.codestats.output;
+package com.omni.lib.codestats.output;
 
 import java.io.IOException;
 
@@ -1928,11 +1928,11 @@ public interface OutputWriter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\pipeline\AggregateStage.java ========
-package com.codestats.lib.codestats.pipeline;
+package com.omni.lib.codestats.pipeline;
 
-import com.codestats.lib.codestats.core.FileInfo;
-import com.codestats.lib.codestats.core.StatisticsResult;
-import com.codestats.lib.codestats.sorter.SorterRegistry;
+import com.omni.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.StatisticsResult;
+import com.omni.lib.codestats.sorter.SorterRegistry;
 import java.util.Comparator;
 import java.util.List;
 
@@ -1954,12 +1954,12 @@ public class AggregateStage implements Stage<List<FileInfo>, StatisticsResult> {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\pipeline\AnalyzeStage.java ========
-package com.codestats.lib.codestats.pipeline;
+package com.omni.lib.codestats.pipeline;
 
-import com.codestats.lib.codestats.core.FileInfo;
-import com.codestats.lib.codestats.language.Language;
-import com.codestats.lib.codestats.language.LanguageDetector;
-import com.codestats.lib.codestats.language.LanguageSpec;
+import com.omni.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.language.Language;
+import com.omni.lib.codestats.language.LanguageDetector;
+import com.omni.lib.codestats.language.LanguageSpec;
 import java.io.BufferedReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -2048,9 +2048,9 @@ public class AnalyzeStage implements Stage<Path, FileInfo> {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\pipeline\CollectStage.java ========
-package com.codestats.lib.codestats.pipeline;
+package com.omni.lib.codestats.pipeline;
 
-import com.codestats.lib.codestats.filter.CompositeFilter;
+import com.omni.lib.codestats.filter.CompositeFilter;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -2083,7 +2083,7 @@ public class CollectStage implements Stage<Path, List<Path>> {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\pipeline\MergeFilesStage.java ========
-package com.codestats.lib.codestats.pipeline;
+package com.omni.lib.codestats.pipeline;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -2144,11 +2144,11 @@ public class MergeFilesStage implements Stage<List<Path>, Void> {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\pipeline\OutputStage.java ========
-package com.codestats.lib.codestats.pipeline;
+package com.omni.lib.codestats.pipeline;
 
-import com.codestats.lib.codestats.config.Config;
-import com.codestats.lib.codestats.core.StatisticsResult;
-import com.codestats.lib.codestats.output.*;
+import com.omni.lib.codestats.config.Config;
+import com.omni.lib.codestats.core.StatisticsResult;
+import com.omni.lib.codestats.output.*;
 
 import java.io.IOException;
 
@@ -2181,10 +2181,10 @@ public class OutputStage implements Stage<StatisticsResult, Void> {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\pipeline\ParallelAnalyzeStage.java ========
-package com.codestats.lib.codestats.pipeline;
+package com.omni.lib.codestats.pipeline;
 
-import com.codestats.lib.codestats.core.FileInfo;
-import com.codestats.lib.codestats.core.ProgressMonitor;
+import com.omni.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.ProgressMonitor;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -2221,14 +2221,14 @@ public class ParallelAnalyzeStage implements Stage<List<Path>, List<FileInfo>> {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\pipeline\Pipeline.java ========
-package com.codestats.lib.codestats.pipeline;
+package com.omni.lib.codestats.pipeline;
 
-import com.codestats.lib.codestats.config.Config;
-import com.codestats.lib.codestats.core.ProgressMonitor;
-import com.codestats.lib.codestats.filter.CompositeFilter;
-import com.codestats.lib.codestats.filter.ExcludePathFilter;
-import com.codestats.lib.codestats.filter.ExtensionFilter;
-import com.codestats.lib.codestats.filter.GitIgnoreFilter;
+import com.omni.lib.codestats.config.Config;
+import com.omni.lib.codestats.core.ProgressMonitor;
+import com.omni.lib.codestats.filter.CompositeFilter;
+import com.omni.lib.codestats.filter.ExcludePathFilter;
+import com.omni.lib.codestats.filter.ExtensionFilter;
+import com.omni.lib.codestats.filter.GitIgnoreFilter;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -2290,17 +2290,17 @@ public class Pipeline<T, R> {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\pipeline\Stage.java ========
-package com.codestats.lib.codestats.pipeline;
+package com.omni.lib.codestats.pipeline;
 
 public interface Stage<T, R> {
     R process(T input) throws Exception;
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\sorter\ByFileNameSorter.java ========
-package com.codestats.lib.codestats.sorter;
+package com.omni.lib.codestats.sorter;
 
 
-import com.codestats.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.FileInfo;
 
 import java.util.Comparator;
 
@@ -2313,9 +2313,9 @@ public class ByFileNameSorter implements ResultSorter {
 
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\sorter\ByLanguageSorter.java ========
-package com.codestats.lib.codestats.sorter;
+package com.omni.lib.codestats.sorter;
 
-import com.codestats.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.FileInfo;
 import java.util.Comparator;
 
 public class ByLanguageSorter implements ResultSorter {
@@ -2326,9 +2326,9 @@ public class ByLanguageSorter implements ResultSorter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\sorter\ByLinesSorter.java ========
-package com.codestats.lib.codestats.sorter;
+package com.omni.lib.codestats.sorter;
 
-import com.codestats.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.FileInfo;
 import java.util.Comparator;
 
 public class ByLinesSorter implements ResultSorter {
@@ -2339,9 +2339,9 @@ public class ByLinesSorter implements ResultSorter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\sorter\ByNameSorter.java ========
-package com.codestats.lib.codestats.sorter;
+package com.omni.lib.codestats.sorter;
 
-import com.codestats.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.FileInfo;
 import java.util.Comparator;
 
 public class ByNameSorter implements ResultSorter {
@@ -2352,9 +2352,9 @@ public class ByNameSorter implements ResultSorter {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\sorter\ResultSorter.java ========
-package com.codestats.lib.codestats.sorter;
+package com.omni.lib.codestats.sorter;
 
-import com.codestats.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.FileInfo;
 
 import java.util.Comparator;
 
@@ -2364,9 +2364,9 @@ public interface ResultSorter {
 
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\sorter\SorterRegistry.java ========
-package com.codestats.lib.codestats.sorter;
+package com.omni.lib.codestats.sorter;
 
-import com.codestats.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.FileInfo;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
@@ -2390,10 +2390,10 @@ public class SorterRegistry {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\statistics\LineCountStrategy.java ========
-package com.codestats.lib.codestats.statistics;
+package com.omni.lib.codestats.statistics;
 
 
-import com.codestats.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.FileInfo;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -2453,9 +2453,9 @@ public class LineCountStrategy implements StatisticStrategy {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\statistics\StatisticStrategy.java ========
-package com.codestats.lib.codestats.statistics;
+package com.omni.lib.codestats.statistics;
 
-import com.codestats.lib.codestats.core.FileInfo;
+import com.omni.lib.codestats.core.FileInfo;
 
 import java.nio.file.Path;
 
@@ -2465,7 +2465,7 @@ public interface StatisticStrategy {
 
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\test\SimpleSwingApp.java ========
-package com.codestats.lib.codestats.test;
+package com.omni.lib.codestats.test;
 
 import javax.swing.*;
 
@@ -2493,7 +2493,7 @@ public class SimpleSwingApp {
 }
 
 // ======== D:\work\space\CodeStats\src\main\java\com\demo\lib\codestats\util\GitIgnoreLoader.java ========
-package com.codestats.lib.codestats.util;
+package com.omni.lib.codestats.util;
 
 import java.io.IOException;
 import java.nio.file.FileSystems;
@@ -3854,7 +3854,7 @@ public class DispatcherServlet extends HttpServlet {
         System.out.println(">>> DispatcherServlet init: scanning and creating IoC container...");
         applicationContext = new SimpleApplicationContext();
         String packages = ConfigLoader.getProperty("scan.packages",
-                "com.codestats.*.business");
+                "com.omni.*.business");
         applicationContext.scanAndInit(packages);
         List<Object> controllers = applicationContext.getBeansWithAnnotation(Controller.class);
         System.out.println(">>> Controllers found: " + controllers.size());
@@ -5129,7 +5129,7 @@ public class Catalina {
         // 模拟解析 server.xml，这里硬编码配置：端口 8080，Servlet 映射
         int port = 8080;
         // 注册 Servlet 映射：路径 /hello 对应 HelloServlet
-        ServletMapping.addMapping("/hello", "com.codestats.tomcat.HelloServlet");
+        ServletMapping.addMapping("/hello", "com.omni.tomcat.HelloServlet");
         System.out.println("Catalina: 加载配置，端口=" + port);
         connector = new Connector(port);
         System.out.println("Catalina: Connector 创建完成");
@@ -5370,7 +5370,7 @@ public class PackageScanner {
     /**
      * 扫描匹配模式（支持 * 和 **）的包下的所有类
      *
-     * @param pattern 示例：com.codestats.*.controller 或 com.codestats.**
+     * @param pattern 示例：com.omni.*.controller 或 com.omni.**
      * @return 匹配的类集合
      */
     public static Set<Class<?>> scan(String pattern) throws Exception {

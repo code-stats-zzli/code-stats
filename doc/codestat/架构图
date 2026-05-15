@@ -16,7 +16,7 @@
 │           │                              │                       │
 │  ┌────────┴────────────┐    ┌───────────┴───────────────────┐   │
 │  │ 应用示例             │    │ 代码统计工具                  │   │
-│  │ com.codestats.business.* │    │ com.codestats.lib.codestats.*     │   │
+│  │ com.omni.business.* │    │ com.omni.lib.codestats.*     │   │
 │  │                      │    │                              │   │
 │  │ - HelloController   │    │ - Pipeline (收集→分析→输出)   │   │
 │  │ - UserController    │    │ - GUI (Swing) & Console      │   │

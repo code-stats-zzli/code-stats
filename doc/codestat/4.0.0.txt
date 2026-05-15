@@ -1,6 +1,6 @@
 项目结构
 text
-com.codestats
+com.omni
 ├── Application.java                     // 主入口，调用 CodestatsEngine.run()
 ├── bootstrap
 │   └── CodestatsEngine.java             // 引擎：加载配置、判断 GUI/Console，启动 Launcher

@@ -51,7 +51,7 @@
                 <archive>
                     <manifest>
                         <!-- 指定主类（运行时的入口） -->
-                        <mainClass>com.codestats.Bootstrap</mainClass>
+                        <mainClass>com.omni.Bootstrap</mainClass>
                         <!-- 将依赖添加到 classpath 中 -->
                         <addClasspath>true</addClasspath>
                         <classpathPrefix>lib/</classpathPrefix>

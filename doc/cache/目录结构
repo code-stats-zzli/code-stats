@@ -1,4 +1,4 @@
-com.codestats.common.cache
+com.omni.common.cache
 ├── Cache.java                     // 基础缓存接口
 ├── CacheConfig.java               // 配置类（TTL、最大容量、类型等）
 ├── CacheType.java                 // 缓存类型枚举

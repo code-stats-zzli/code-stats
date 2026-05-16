@@ -67,7 +67,7 @@ public class Request implements HttpServletRequest {
     }
 
     public void parse() throws Exception {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.ISO_8859_1));
+        BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
         String requestLine = reader.readLine();
         if (requestLine == null) return;
         String[] parts = requestLine.split(" ");

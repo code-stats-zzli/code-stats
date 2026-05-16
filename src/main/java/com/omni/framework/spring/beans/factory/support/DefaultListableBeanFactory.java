@@ -3,6 +3,7 @@ package com.omni.framework.spring.beans.factory.support;
 
 import com.omni.framework.spring.beans.factory.ConfigurableListableBeanFactory;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -48,10 +49,21 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 
     @Override
     public <T> Map<String, T> getBeansOfType(Class<T> type) throws Exception {
-        Map<String, T> result = new ConcurrentHashMap<>();
+        Map<String, T> result = new LinkedHashMap<>();
+        // 先从已实例化的单例中查找
+        for (Map.Entry<String, Object> entry : singletonObjects.entrySet()) {
+            if (type.isAssignableFrom(entry.getValue().getClass())) {
+                result.put(entry.getKey(), type.cast(entry.getValue()));
+            }
+        }
+        // 再从未实例化的 BeanDefinition 中查找
         for (String beanName : getBeanDefinitionNames()) {
+            if (result.containsKey(beanName)) continue;
             BeanDefinition bd = getBeanDefinition(beanName);
             if (bd.getBeanClass() != null && type.isAssignableFrom(bd.getBeanClass())) {
+                // 为避免过早实例化，此处暂不 getBean，等真正注入时再实例化
+                // 但为了返回 Bean 实例，这里需要调用 getBean 创建
+                // 注意：可能导致循环依赖，但实际注入阶段已安全
                 result.put(beanName, type.cast(getBean(beanName)));
             }
         }

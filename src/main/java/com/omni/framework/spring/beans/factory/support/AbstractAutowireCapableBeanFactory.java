@@ -25,6 +25,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
         if (bd.getBeanClass() == null) {
             bd.setBeanClass(Class.forName(bd.getBeanClassName()));
         }
+        System.out.println("Instantiating bean: " + bd.getBeanClass().getName());
         return bd.getBeanClass().getDeclaredConstructor().newInstance();
     }
 

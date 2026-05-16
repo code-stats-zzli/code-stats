@@ -2,11 +2,13 @@ package com.omni.business.assistance.agent.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.omni.framework.spring.annotation.Service;
-import com.omni.framework.spring.config.ConfigLoader;
+import com.omni.business.common.model.CharNgramLM;
+import com.omni.business.common.model.support.ProjectModelData;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
-import com.microsoft.playwright.Page;
+import com.omni.framework.spring.annotation.Service;
+import com.omni.framework.spring.config.ConfigLoader;
+import com.omni.framework.util.JsonUtil;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -23,6 +25,7 @@ public class AIChatService {
     public static final String BACKEND_OLLAMA = "ollama";
     public static final String BACKEND_DEEPSEEK = "deepseek";
     public static final String BACKEND_CUSTOM = "custom";
+    public static final String BACKEND_PROJECT = "project";   // 新增：项目助手
 
     private final String defaultBackend;
     private final boolean playwrightEnabled;
@@ -34,8 +37,10 @@ public class AIChatService {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
-    private final ConcurrentHashMap<String, Page> sessionPages = new ConcurrentHashMap<>();
-    private final boolean playwrightAvailable;
+    // 项目助手的相关组件
+    private final CharNgramLM ngramLM;
+    private final Map<String, String> projectKnowledge;
+    private final Map<String, List<Map<String, String>>> projectSessions = new ConcurrentHashMap<>();
 
     public AIChatService() {
         this.defaultBackend = ConfigLoader.getProperty("ai.backend.default", BACKEND_OLLAMA);
@@ -50,17 +55,25 @@ public class AIChatService {
                 .build();
         this.objectMapper = new ObjectMapper();
 
-        boolean tempAvailable = false;
-        if (playwrightEnabled) {
-            try {
-                tempAvailable = com.omni.common.util.PlaywrightStealthUtil.isAvailable();
-            } catch (Exception e) {
-                log.error("Playwright 不可用", e);
-            }
-        }
-        this.playwrightAvailable = tempAvailable;
-        log.info("AIChatService 初始化: backend={}, playwrightEnabled={}, playwrightAvailable={}",
-                defaultBackend, playwrightEnabled, playwrightAvailable);
+        // 初始化项目助手：加载预训练的 n-gram 模型和知识库
+        ProjectModelData modelData = new ProjectModelData();
+        this.ngramLM = new CharNgramLM(modelData.getTrigramProbs(), modelData.getVocab());
+        this.projectKnowledge = buildProjectKnowledgeBase();
+
+        log.info("AIChatService 初始化: backend={}, projectAssistant 已加载", defaultBackend);
+    }
+
+    private Map<String, String> buildProjectKnowledgeBase() {
+        Map<String, String> kb = new HashMap<>();
+        kb.put("什么是CodeStats", "CodeStats 是一个自研的 Java Web 平台，包含 IoC 容器、MVC、嵌入式 Tomcat、JDBC 连接池、MyBatis 风格 Mapper 和代码分析引擎。");
+        kb.put("框架核心组件", "核心组件包括：DispatcherServlet、SimpleApplicationContext、Pipeline-Valve 责任链、WebappClassLoader、JdbcTemplate 等。");
+        kb.put("如何启动", "通过 Bootstrap 的 main 方法启动，加载 Catalina 配置，创建 AnnotationConfigApplicationContext，然后启动 Connector 监听端口。");
+        kb.put("支持数据库", "支持 MySQL，通过 DatabaseMetadataService 获取元数据，提供树形浏览和表结构展示。");
+        kb.put("代码分析功能", "多线程统计代码行数，支持扩展名过滤、注释排除、复杂度估算，可生成 JSON/CSV 报告。");
+        kb.put("agent 模块", "AI Agent 模块集成大模型推理（支持 Ollama、DeepSeek API、自定义 API 以及内置项目助手），提供聊天接口。");
+        kb.put("目录管理", "提供基于 HTTP 的文件浏览、编辑、上传、下载，支持路径安全校验。");
+        kb.put("自研框架", "完全自研的轻量级框架，实现 IoC 容器、MVC、连接池、MyBatis 风格的注解 SQL 执行。");
+        return kb;
     }
 
     public String chat(String sessionId, String question, List<Map<String, String>> messages,
@@ -68,10 +81,12 @@ public class AIChatService {
                        String customUrlOverride, String customKeyOverride) {
         String useBackend = backend != null ? backend : defaultBackend;
 
-        if (BACKEND_CUSTOM.equals(useBackend) && playwrightAvailable && sessionId != null) {
-            return chatWithPlaywright(sessionId, question, 60);
+        // 项目助手分支
+        if (BACKEND_PROJECT.equals(useBackend)) {
+            return chatWithProject(sessionId, JsonUtil.toJson(messages));
         }
 
+        // 原有后端逻辑
         switch (useBackend) {
             case BACKEND_OLLAMA:
                 return chatWithOllama(model, messages, temperature);
@@ -89,42 +104,74 @@ public class AIChatService {
         }
     }
 
-    private String chatWithPlaywright(String sessionId, String question, int timeoutSeconds) {
-        if (!playwrightAvailable) {
-            return "Playwright 未启用或初始化失败，请检查配置和环境";
+    // ==================== 项目助手实现 ====================
+    private String chatWithProject(String sessionId, String question) {
+        if (sessionId == null) sessionId = "default";
+        List<Map<String, String>> history = projectSessions.computeIfAbsent(sessionId, k -> new ArrayList<>());
+
+        // 1. 尝试知识库匹配
+        String answer = matchKnowledge(question);
+        if (answer != null) {
+            saveHistory(history, question, answer);
+            return answer;
         }
-        Page page = sessionPages.computeIfAbsent(sessionId, this::createNewPlaywrightPage);
-        try {
-            page.waitForSelector("textarea:visible", new Page.WaitForSelectorOptions().setTimeout(10000));
-            page.locator("textarea").first().fill(question);
-            page.keyboard().press("Enter");
-            page.waitForSelector(".ds-markdown, .message-assistant, [class*='assistant']",
-                    new Page.WaitForSelectorOptions().setTimeout(timeoutSeconds * 1000L));
-            String reply = (String) page.evaluate("() => {\n" +
-                    "  const assistants = document.querySelectorAll('[class*=\"assistant\"]');\n" +
-                    "  if (assistants.length === 0) return '';\n" +
-                    "  const last = assistants[assistants.length - 1];\n" +
-                    "  return last.innerText.trim();\n" +
-                    "}");
-            return reply != null && !reply.isEmpty() ? reply : "未获取到回复";
-        } catch (Exception e) {
-            closeSession(sessionId);
-            throw new RuntimeException("Playwright 聊天失败: " + e.getMessage(), e);
+
+        // 2. 使用 n-gram 语言模型生成回答
+        String prompt = buildPromptFromHistory(history, question);
+        String generated = ngramLM.generate(prompt, 80);
+        String cleaned = cleanGenerated(generated);
+        if (cleaned.isEmpty()) {
+            cleaned = "抱歉，我是项目助手，暂时无法回答这个问题。你可以询问关于 CodeStats 架构、模块、功能等内容。";
         }
+        saveHistory(history, question, cleaned);
+        return cleaned;
     }
 
-    private Page createNewPlaywrightPage(String sessionId) {
-        Page page = com.omni.common.util.PlaywrightStealthUtil.createDefaultPage();
-        try {
-            com.omni.common.util.PlaywrightStealthUtil.navigateAndWait(page, "https://chat.deepseek.com/", 60);
-            page.waitForSelector("textarea:visible", new Page.WaitForSelectorOptions().setTimeout(30000));
-            return page;
-        } catch (Exception e) {
-            page.close();
-            throw new RuntimeException("无法加载 DeepSeek 页面: " + e.getMessage(), e);
+    private String matchKnowledge(String question) {
+        String q = question.toLowerCase().replaceAll("[？?]", "");
+        for (Map.Entry<String, String> entry : projectKnowledge.entrySet()) {
+            if (q.contains(entry.getKey().toLowerCase())) {
+                return entry.getValue();
+            }
         }
+        return null;
     }
 
+    private String buildPromptFromHistory(List<Map<String, String>> history, String question) {
+        StringBuilder sb = new StringBuilder();
+        int start = Math.max(0, history.size() - 3);
+        for (int i = start; i < history.size(); i++) {
+            sb.append("用户: ").append(history.get(i).get("user")).append("\n");
+            sb.append("助手: ").append(history.get(i).get("assistant")).append("\n");
+        }
+        sb.append("用户: ").append(question).append("\n");
+        sb.append("助手:");
+        return sb.toString();
+    }
+
+    private String cleanGenerated(String text) {
+        int end = text.indexOf('。');
+        if (end == -1) end = text.indexOf('?');
+        if (end != -1) text = text.substring(0, end + 1);
+        if (text.contains("用户:")) {
+            text = text.substring(text.lastIndexOf("助手:") + 3);
+        }
+        return text.trim();
+    }
+
+    private void saveHistory(List<Map<String, String>> history, String user, String assistant) {
+        Map<String, String> turn = new HashMap<>();
+        turn.put("user", user);
+        turn.put("assistant", assistant);
+        history.add(turn);
+        if (history.size() > 10) history.remove(0);
+    }
+
+    public void closeSession(String sessionId) {
+        projectSessions.remove(sessionId);
+    }
+
+    // ==================== Ollama 实现 ====================
     private String chatWithOllama(String model, List<Map<String, String>> messages, double temperature) {
         Map<String, Object> request = new HashMap<>();
         request.put("model", model != null ? model : "deepseek-r1:7b");
@@ -152,6 +199,7 @@ public class AIChatService {
         }
     }
 
+    // ==================== DeepSeek 实现 ====================
     private String chatWithDeepSeek(String model, List<Map<String, String>> messages, double temperature) {
         if (deepseekApiKey.isEmpty()) {
             return "DeepSeek API Key 未配置";
@@ -189,6 +237,7 @@ public class AIChatService {
         }
     }
 
+    // ==================== 自定义 API 实现 ====================
     private String chatWithCustom(String url, String apiKey, String model,
                                   List<Map<String, String>> messages, double temperature) {
         Map<String, Object> request = new HashMap<>();
@@ -232,18 +281,5 @@ public class AIChatService {
             log.warn("解析自定义 API 响应失败: {}", json, e);
             return json;
         }
-    }
-
-    public void closeSession(String sessionId) {
-        Page page = sessionPages.remove(sessionId);
-        if (page != null) {
-            try { page.close(); } catch (Exception e) { log.warn("关闭 Playwright 页面异常", e); }
-        }
-    }
-
-    public void closeAll() {
-        sessionPages.values().forEach(p -> { try { p.close(); } catch (Exception e) { log.warn("关闭页面异常", e); } });
-        sessionPages.clear();
-        com.omni.common.util.PlaywrightStealthUtil.close();
     }
 }

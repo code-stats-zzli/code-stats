@@ -81,7 +81,20 @@ public class MessageConverters {
         }
         @Override
         public void write(Object obj, OutputStream outputStream, String contentType) throws IOException {
-            String json = JsonUtil.toJson(obj);
+            //String json = JsonUtil.toJson(obj);
+            String json;
+            if (obj instanceof String) {
+                String str = (String) obj;
+                String trimmed = str.trim();
+                // 如果已经是 JSON 字符串（以 { 或 [ 开头），则直接使用
+                if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+                    json = str;
+                } else {
+                    json = JsonUtil.toJson(obj);
+                }
+            } else {
+                json = JsonUtil.toJson(obj);
+            }
             outputStream.write(json.getBytes(StandardCharsets.UTF_8));
         }
     }

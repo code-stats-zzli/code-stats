@@ -198,7 +198,7 @@
         newChatBtn.addEventListener('click', () => {
             conversationHistory = [];
             chatMessages.innerHTML = '';
-            appendMessage('assistant', '你好！我是 DeepSeek AI 助手，基于 Ollama 本地部署。请问有什么可以帮助你的？');
+            appendMessage('assistant', '你好！我是 DeepSeek AI 助手，支持多种后端（本地 Ollama / DeepSeek 官方 API / 自定义 / 项目助手）。请问有什么可以帮助你的？');
         });
     }
 })();

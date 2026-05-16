@@ -6,7 +6,6 @@ import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestMapping;
 import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.spring.mvc.RequestContextHolder;
-import com.omni.framework.tomcat.connector.Request;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.util.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -51,7 +50,6 @@ public class AIChatController {
                     messages.add(m);
                 }
             } else if (question != null && !question.trim().isEmpty()) {
-                // 简单模式：只有问题
                 messages.add(Map.of("role", "user", "content", question));
             }
 

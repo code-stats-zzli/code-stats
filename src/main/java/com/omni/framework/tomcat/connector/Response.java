@@ -79,16 +79,30 @@ public class Response implements HttpServletResponse {
         if (committed) return;
         byte[] bodyBytes;
         if (responseBody != null) {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            try {
+            // ★★★ 关键修复：如果 responseBody 已经是 JSON 字符串，直接获取字节，不再经过 MessageConverters
+            if (responseBody instanceof String) {
+                String str = (String) responseBody;
+                String trimmed = str.trim();
+                if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+                    // 已经是 JSON 格式，直接输出
+                    bodyBytes = str.getBytes(StandardCharsets.UTF_8);
+                } else {
+                    // 普通字符串，也许需要转换成 JSON 字符串（很少见），仍走转换器
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    MessageConverters.writeToResponse(responseBody, baos, contentType);
+                    bodyBytes = baos.toByteArray();
+                }
+            } else {
+                // 非字符串对象（Map/List/POJO），走转换器
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 MessageConverters.writeToResponse(responseBody, baos, contentType);
                 bodyBytes = baos.toByteArray();
-            } catch (Exception e) {
-                bodyBytes = responseBody.toString().getBytes(StandardCharsets.UTF_8);
             }
         } else {
             bodyBytes = new byte[0];
         }
+
+        // 以下发送响应头的代码保持不变（使用 PrintWriter 或直接写入）
         try (PrintWriter pw = new PrintWriter(output, true)) {
             pw.print("HTTP/1.1 " + statusCode + " " + statusMessage + "\r\n");
             pw.print("Content-Type: " + contentType + "\r\n");

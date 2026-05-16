@@ -6,7 +6,7 @@
     <title>AI Agent - 部署与对话</title>
     <link rel="stylesheet" href="../global-tech.css">
     <link rel="stylesheet" href="agent.css">
-    <script src="../global.js"></script>   <!-- 新增 -->
+    <script src="../global.js"></script>
 </head>
 <body>
 <div class="agent-container">
@@ -50,6 +50,7 @@
                             <option value="ollama" selected>本地 Ollama</option>
                             <option value="deepseek">DeepSeek 官网 API</option>
                             <option value="custom">自定义 API</option>
+                            <option value="project">📖 项目助手（内置知识库）</option>
                         </select>
                         <div id="customUrlGroup" style="display: none;">
                             <label>API 地址：</label>
@@ -62,7 +63,7 @@
                 <div class="chat-messages" id="chatMessages">
                     <div class="message assistant">
                         <div class="message-avatar">🧠</div>
-                        <div class="message-content">你好！我是 DeepSeek AI 助手，支持多种后端（本地 Ollama / DeepSeek 官方 API / 自定义）。请问有什么可以帮助你的？</div>
+                        <div class="message-content">你好！我是 DeepSeek AI 助手，支持多种后端（本地 Ollama / DeepSeek 官方 API / 自定义 / 项目助手）。请问有什么可以帮助你的？</div>
                     </div>
                 </div>
                 <div class="chat-input-area">
@@ -72,7 +73,7 @@
             </div>
         </div>
 
-        <!-- AI 部署视图 -->
+        <!-- AI 部署视图（保持不变） -->
         <div id="deployView" class="view-pane">
             <div class="card">
                 <h2>🚀 本地部署 DeepSeek 大模型</h2>

@@ -16,6 +16,8 @@ import com.omni.framework.tomcat.servlet.HttpServletResponse;
 import java.io.File;
 import java.io.FileInputStream;
 import java.lang.reflect.Method;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -84,6 +86,11 @@ public class DispatcherServlet extends HttpServlet {
         processRequest(req, res);
     }
 
+    // 文件路径: com.omni.framework.spring.mvc.DispatcherServlet.java
+// 只需修改 processRequest 方法中的片段，完整文件见下方
+// 文件路径: com.omni.framework.spring.mvc.DispatcherServlet.java
+// 只修改 processRequest 方法中的片段
+
     private void processRequest(HttpServletRequest req, HttpServletResponse res) throws Exception {
         RequestContextHolder.setRequest(req);
         ResponseContextHolder.setResponse(res);
@@ -100,9 +107,15 @@ public class DispatcherServlet extends HttpServlet {
                     Object[] args = ParamBinder.resolveParameters(hm.method, req, res, pathVars);
                     Object result = hm.method.invoke(hm.controller, args);
                     if (hm.isResponseBody) {
-                        String json = toJson(result);
+                        String outStr;
+                        if (result instanceof String) {
+                            // ★ 关键修改：直接输出 String，不再进行任何 JSON 转换
+                            outStr = (String) result;
+                        } else {
+                            outStr = toJson(result);
+                        }
                         res.setContentType("application/json; charset=utf-8");
-                        res.write(json);
+                        res.write(outStr);
                     } else {
                         if (result != null) res.write(result.toString());
                     }
@@ -163,8 +176,8 @@ public class DispatcherServlet extends HttpServlet {
         if (firstSlash <= 0) return false;
         String webappRoot = cleanUri.substring(0, firstSlash);
         String subPath = cleanUri.substring(firstSlash + 1);
-        java.nio.file.Path base = java.nio.file.Paths.get("webapps", webappRoot);
-        java.nio.file.Path filePath = base.resolve(subPath).normalize();
+        Path base = Paths.get("webapps", webappRoot);
+        Path filePath = base.resolve(subPath).normalize();
         if (!filePath.startsWith(base)) return false;
         File file = filePath.toFile();
         if (!file.exists() || file.isDirectory()) return false;

@@ -5,12 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CodeStats Platform</title>
     <link rel="stylesheet" href="global-tech.css">
-    <!-- 在 global-tech.css 下方添加 -->
     <link rel="stylesheet" href="project-assistant.css">
     <link rel="stylesheet" href="index.css">
     <script src="global.js"></script>
+    <script src="project-assistant.js" defer></script>
 </head>
-<script src="project-assistant.js"></script>
 <body>
 <header class="topbar">
     <div class="topbar-brand">
@@ -33,7 +32,6 @@
         <button class="topbar-tab" data-tab="agent">
             <span class="tab-icon">🧠</span> Agent
         </button>
-        <!-- 新增开源工具页签 -->
         <button class="topbar-tab" data-tab="opensource">
             <span class="tab-icon">🧰</span> 开源工具
         </button>
@@ -60,7 +58,6 @@
     <div class="tab-panel" id="panel-agent">
         <iframe id="iframeAgent" src="agent/agent.html" title="AI Agent" class="panel-iframe"></iframe>
     </div>
-    <!-- 新增开源工具面板 -->
     <div class="tab-panel" id="panel-opensource">
         <iframe id="iframeOpensource" src="opensource/opensource.html" title="开源工具" class="panel-iframe"></iframe>
     </div>

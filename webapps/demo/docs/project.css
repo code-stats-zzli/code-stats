@@ -20,7 +20,59 @@ body { background: transparent; height:100vh; overflow:hidden; }
     margin-bottom: 20px;
 }
 h2, h3 { color: var(--accent-primary); margin-bottom: 16px; }
-p, li { line-height:1.6; color: var(--text-light); }
+p, li { line-height:1.6; ; }
 a { color: var(--accent-primary); text-decoration:none; }
 a:hover { text-decoration:underline; }
 code { background: #0a0f1a; padding:2px 6px; border-radius:6px; font-family: monospace; }
+/* 原有样式保持不变，新增以下内容 */
+
+/* 关键词高亮样式 */
+.keyword {
+    background: linear-gradient(120deg, rgba(0,102,255,0.15) 0%, rgba(0,102,255,0.05) 100%);
+    border-bottom: 1px dashed var(--accent-primary);
+    cursor: pointer;
+    padding: 0 4px;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+    font-weight: 500;
+    color: var(--accent-primary);
+}
+.keyword:hover {
+    background: rgba(0,102,255,0.25);
+    box-shadow: 0 0 4px rgba(0,102,255,0.3);
+    transform: translateY(-1px);
+}
+
+/* 导航栏提问按钮 */
+.nav-ask-btn {
+    background: rgba(0,102,255,0.1);
+    border: 1px solid rgba(0,102,255,0.3);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 11px;
+    margin-left: 10px;
+    cursor: pointer;
+    transition: 0.2s;
+    color: var(--accent-primary);
+}
+.nav-ask-btn:hover {
+    background: var(--accent-primary);
+    color: white;
+    transform: translateY(-1px);
+}
+
+/* 导航栏每个条目布局调整 */
+.nav-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+.nav-text {
+    flex: 1;
+}
+.nav-summary {
+    width: 100%;
+    margin-top: 4px;
+    font-size: 12px;
+}

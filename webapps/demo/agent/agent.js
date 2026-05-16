@@ -201,4 +201,15 @@
             appendMessage('assistant', '你好！我是 DeepSeek AI 助手，支持多种后端（本地 Ollama / DeepSeek 官方 API / 自定义 / 项目助手）。请问有什么可以帮助你的？');
         });
     }
+
+    // ========== 新增：监听来自父窗口的提问消息 ==========
+    window.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'ask') {
+            const question = event.data.question;
+            if (question && typeof sendMessage === 'function') {
+                userInput.value = question;
+                sendMessage();
+            }
+        }
+    });
 })();

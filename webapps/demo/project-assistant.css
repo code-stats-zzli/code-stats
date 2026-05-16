@@ -3,23 +3,52 @@
     position: fixed;
     bottom: 24px;
     right: 24px;
-    width: 56px;
-    height: 56px;
-    border-radius: 28px;
+    width: 60px;
+    height: 60px;
+    border-radius: 30px;
     background: linear-gradient(135deg, #0066ff, #7c3aed);
-    box-shadow: 0 4px 12px rgba(0,102,255,0.4);
+    box-shadow: 0 4px 15px rgba(0,102,255,0.5);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 28px;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
     z-index: 1000;
     color: white;
+    animation: pulse 1.5s infinite;
 }
+
 .assistant-fab:hover {
-    transform: scale(1.05);
-    box-shadow: 0 6px 20px rgba(0,102,255,0.5);
+    transform: scale(1.1);
+    box-shadow: 0 6px 25px rgba(0,102,255,0.7);
+    animation: none;
+}
+
+.assistant-fab::after {
+    content: "项目助手";
+    position: absolute;
+    right: 70px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 14px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    font-weight: normal;
+}
+
+.assistant-fab:hover::after {
+    opacity: 1;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(0,102,255,0.7); }
+    70% { box-shadow: 0 0 0 12px rgba(0,102,255,0); }
+    100% { box-shadow: 0 0 0 0 rgba(0,102,255,0); }
 }
 
 .assistant-chat-widget {
@@ -156,66 +185,6 @@
     background: rgba(0,0,0,0.02);
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* 项目助手浮动按钮 - 增强版 */
-.assistant-fab {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    width: 60px;
-    height: 60px;
-    border-radius: 30px;
-    background: linear-gradient(135deg, #0066ff, #7c3aed);
-    box-shadow: 0 4px 15px rgba(0,102,255,0.5);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-    transition: all 0.3s ease;
-    z-index: 1000;
-    color: white;
-    animation: pulse 1.5s infinite;
-}
-
-.assistant-fab:hover {
-    transform: scale(1.1);
-    box-shadow: 0 6px 25px rgba(0,102,255,0.7);
-    animation: none;
-}
-
-/* 鼠标悬浮时显示文字提示 */
-.assistant-fab::after {
-    content: "项目助手";
-    position: absolute;
-    right: 70px;
-    background: rgba(0,0,0,0.7);
-    color: white;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 14px;
-    white-space: nowrap;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s;
-    font-weight: normal;
-}
-
-.assistant-fab:hover::after {
-    opacity: 1;
-}
-
-@keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(0,102,255,0.7); }
-    70% { box-shadow: 0 0 0 12px rgba(0,102,255,0); }
-    100% { box-shadow: 0 0 0 0 rgba(0,102,255,0); }
-}
-
-/* 快捷按钮区域 */
 .assistant-quick-buttons {
     display: flex;
     flex-wrap: wrap;
@@ -238,4 +207,9 @@
     background: var(--accent-primary);
     color: white;
     transform: translateY(-1px);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
 }

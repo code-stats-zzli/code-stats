@@ -1,4 +1,4 @@
-// 项目助手独立聊天模块
+// ==================== 独立项目助手（父页面唯一实例） ====================
 (function() {
     let sessionId = sessionStorage.getItem('project_assistant_session');
     if (!sessionId) {
@@ -6,11 +6,9 @@
         sessionStorage.setItem('project_assistant_session', sessionId);
     }
 
-    // 缓存消息历史（仅用于前端展示，后端也维护一份）
     let messageHistory = [];
-
-    // 获取 DOM 元素（在初始化时创建）
     let widget, fab, messagesContainer, inputText, sendBtn, statusSpan;
+    let isWidgetVisible = false;
 
     function escapeHtml(str) {
         if (!str) return '';
@@ -56,27 +54,21 @@
         if (loading) loading.remove();
     }
 
-    async function sendMessage() {
-        const question = inputText.value.trim();
-        if (!question) return;
-        inputText.value = '';
+    async function sendMessageToAssistant(question) {
+        if (!question || !question.trim()) return;
         appendMessage('user', question);
         messageHistory.push({ role: 'user', content: question });
         showLoading();
         setStatus('项目助手正在思考...');
 
         try {
-            // 调用现有接口，指定 backend = "project"
             const response = await fetch(window.apiUrl('/agent/api/chat'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     sessionId: sessionId,
-                    messages: messageHistory,    // 后端会基于 sessionId 维护历史，这里也传递便于后端扩展
-                    backend: 'project',
-                    // 下面几个字段对于 project 后端无影响，但保留
-                    model: '',
-                    temperature: 0.7
+                    messages: messageHistory,
+                    backend: 'project'
                 })
             });
             const data = await response.json();
@@ -96,62 +88,65 @@
             appendMessage('assistant', `❌ 网络异常：${err.message}`);
             setStatus('连接失败，请检查后端服务', true);
         }
+        if (!isWidgetVisible) toggleWidget(true);
     }
 
     function clearMessages() {
         messagesContainer.innerHTML = '';
         messageHistory = [];
-        // 可选：向后端发送关闭会话请求（释放后端内存）
         fetch(window.apiUrl('/agent/api/close'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sessionId: sessionId })
         }).catch(e => console.warn('关闭会话失败', e));
-        // 重新生成 sessionId
         sessionId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8);
         sessionStorage.setItem('project_assistant_session', sessionId);
-        // 显示欢迎消息
-        appendMessage('assistant', '你好！我是 CodeStats 项目助手，你可以问我关于框架架构、模块功能等问题。');
+        appendMessage('assistant', '你好！我是 CodeStats 项目助手，可以点击页面中的高亮关键词向我提问。');
     }
 
     function toggleWidget(show) {
+        if (show === undefined) show = !isWidgetVisible;
         widget.style.display = show ? 'flex' : 'none';
+        isWidgetVisible = show;
+        if (show && messagesContainer.children.length === 0) {
+            appendMessage('assistant', '你好！我是 CodeStats 项目助手，可以点击页面中的高亮关键词向我提问。');
+        }
     }
 
     function initDOM() {
-        // 创建浮动按钮
+        if (document.querySelector('.assistant-fab')) return;
+
         const fabBtn = document.createElement('div');
         fabBtn.className = 'assistant-fab';
         fabBtn.innerHTML = '🤖';
         fabBtn.setAttribute('aria-label', '项目助手');
         document.body.appendChild(fabBtn);
 
-        // 创建聊天窗口
         const chatWidget = document.createElement('div');
         chatWidget.className = 'assistant-chat-widget';
         chatWidget.style.display = 'none';
         chatWidget.innerHTML = `
-        <div class="widget-header">
-            <span>📖 CodeStats 项目助手</span>
-            <button class="close-btn">✖</button>
-        </div>
-        <div class="assistant-messages"></div>
-        <div class="assistant-quick-buttons">
-            <button data-question="什么是 CodeStats？">📌 什么是 CodeStats？</button>
-            <button data-question="如何启动项目？">🚀 如何启动项目？</button>
-            <button data-question="框架核心组件有哪些？">⚙️ 框架核心组件有哪些？</button>
-            <button data-question="怎么配置数据库连接池？">🗄️ 怎么配置数据库连接池？</button>
-            <button data-question="代码分析模块如何使用？">📊 代码分析模块如何使用？</button>
-        </div>
-        <div class="assistant-input-area">
-            <textarea placeholder="询问关于 CodeStats 的问题，例如：什么是 CodeStats？" rows="2"></textarea>
-            <button>发送</button>
-        </div>
-        <div class="chat-status"></div>
-    `;
+            <div class="widget-header">
+                <span>📖 CodeStats 项目助手</span>
+                <button class="close-btn">✖</button>
+            </div>
+            <div class="assistant-messages"></div>
+            <div class="assistant-quick-buttons">
+                <button data-question="什么是 CodeStats？">📌 什么是 CodeStats？</button>
+                <button data-question="如何启动项目？">🚀 如何启动项目？</button>
+                <button data-question="框架核心组件有哪些？">⚙️ 框架核心组件有哪些？</button>
+                <button data-question="怎么配置数据库连接池？">🗄️ 怎么配置数据库连接池？</button>
+                <button data-question="代码分析模块如何使用？">📊 代码分析模块如何使用？</button>
+                <button data-question="目录管理支持哪些操作？">📁 目录管理支持哪些操作？</button>
+            </div>
+            <div class="assistant-input-area">
+                <textarea placeholder="询问关于 CodeStats 的问题..." rows="2"></textarea>
+                <button>发送</button>
+            </div>
+            <div class="chat-status"></div>
+        `;
         document.body.appendChild(chatWidget);
 
-        // 绑定全局引用
         fab = fabBtn;
         widget = chatWidget;
         messagesContainer = widget.querySelector('.assistant-messages');
@@ -159,34 +154,51 @@
         sendBtn = widget.querySelector('.assistant-input-area button');
         statusSpan = widget.querySelector('.chat-status');
 
-        // 添加欢迎消息
-        appendMessage('assistant', '你好！我是 CodeStats 项目助手，你可以问我关于框架架构、模块功能等问题。');
-
-        // 事件绑定
         fab.addEventListener('click', () => toggleWidget(true));
         widget.querySelector('.close-btn').addEventListener('click', () => toggleWidget(false));
-        sendBtn.addEventListener('click', sendMessage);
+        sendBtn.addEventListener('click', () => sendMessageToAssistant(inputText.value));
         inputText.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                sendMessage();
+                sendMessageToAssistant(inputText.value);
             }
         });
         const quickBtns = widget.querySelectorAll('.assistant-quick-buttons button');
         quickBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const question = btn.getAttribute('data-question');
-                if (question) {
-                    inputText.value = question;
-                    sendMessage();
-                }
+                if (question) sendMessageToAssistant(question);
             });
         });
-
-        // 点击窗口外部不关闭（符合预期），如要点击遮罩关闭可自行扩展
     }
 
-    // 页面加载完成后初始化
+    // 暴露全局方法供 iframe 调用
+    window.ProjectAssistant = {
+        sendQuestion: function(question) {
+            if (!widget) {
+                initDOM();
+                setTimeout(() => {
+                    if (window.ProjectAssistant) window.ProjectAssistant.sendQuestion(question);
+                }, 100);
+                return;
+            }
+            if (!isWidgetVisible) toggleWidget(true);
+            setTimeout(() => sendMessageToAssistant(question), 150);
+        },
+        showWidget: () => toggleWidget(true),
+        hideWidget: () => toggleWidget(false)
+    };
+
+    // 监听来自 iframe 的消息（备用）
+    window.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'askProjectAssistant') {
+            const question = event.data.question;
+            if (question && window.ProjectAssistant) {
+                window.ProjectAssistant.sendQuestion(question);
+            }
+        }
+    });
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initDOM);
     } else {

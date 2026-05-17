@@ -8,7 +8,62 @@
     const apiDetailDiv = document.getElementById('apiDetail');
     const searchInput = document.getElementById('apiSearch');
 
-    // 加载模块列表
+    // 辅助函数：根据参数名智能生成示例值
+    function getDefaultParamValue(name, typeHint = 'string') {
+        const lowerName = name.toLowerCase();
+        if (lowerName.includes('id')) return '1';
+        if (lowerName.includes('name')) return 'example_name';
+        if (lowerName.includes('page')) return '1';
+        if (lowerName.includes('size') || lowerName.includes('limit')) return '10';
+        if (lowerName.includes('email')) return 'test@example.com';
+        if (lowerName.includes('status')) return 'active';
+        if (typeHint === 'number' || typeHint === 'integer') return '0';
+        if (typeHint === 'boolean') return 'true';
+        return 'value';
+    }
+
+    // 格式化 JSON 字符串
+    function formatJsonString(jsonStr) {
+        try {
+            const parsed = JSON.parse(jsonStr);
+            return JSON.stringify(parsed, null, 2);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function fillParamExamples() {
+        const inputs = document.querySelectorAll('.param-input');
+        inputs.forEach(input => {
+            const name = input.dataset.name;
+            const typeSelect = input.closest('tr')?.querySelector('.param-type-select');
+            const typeHint = typeSelect ? typeSelect.value : 'string';
+            if (!input.value || input.value === '') {
+                input.value = getDefaultParamValue(name, typeHint);
+            }
+        });
+    }
+
+    function fillExampleJson() {
+        const bodyTextarea = document.getElementById('requestBody');
+        if (bodyTextarea) {
+            const example = { example: "value", id: 1, name: "sample" };
+            bodyTextarea.value = JSON.stringify(example, null, 2);
+        }
+    }
+
+    function beautifyRequestBody() {
+        const bodyTextarea = document.getElementById('requestBody');
+        if (bodyTextarea) {
+            const formatted = formatJsonString(bodyTextarea.value);
+            if (formatted) {
+                bodyTextarea.value = formatted;
+            } else {
+                alert('当前内容不是合法的 JSON，无法格式化');
+            }
+        }
+    }
+
     async function loadModules() {
         try {
             const resp = await fetch(window.apiUrl('/apiexplorer/api/modules'));
@@ -60,7 +115,6 @@
 
         apiTree.innerHTML = treeHtml;
 
-        // 绑定模块展开/折叠
         document.querySelectorAll('.module-node > .tree-item.module .toggle').forEach(toggle => {
             toggle.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -79,7 +133,6 @@
             });
         });
 
-        // 绑定API点击事件
         document.querySelectorAll('.api-node').forEach(node => {
             node.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -88,7 +141,6 @@
             });
         });
 
-        // 默认展开第一个模块，并选中第一个API
         const firstModule = document.querySelector('.module-node');
         if (firstModule) {
             const toggle = firstModule.querySelector('.toggle');
@@ -109,7 +161,6 @@
         if (!api) return;
         currentApi = api;
 
-        // 高亮选中的API
         document.querySelectorAll('.api-node').forEach(node => {
             node.classList.toggle('active', node.dataset.id === id);
         });
@@ -122,7 +173,10 @@
         if (api.parameters && api.parameters.length) {
             paramsHtml = `
                 <div class="params-section">
-                    <h4>📌 请求参数</h4>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <h4>📌 请求参数</h4>
+                        <button id="fillParamsBtn" class="btn-secondary" style="padding: 4px 12px; font-size:12px;">⚡ 一键填充示例参数</button>
+                    </div>
                     <table class="params-table">
                         <thead><tr><th>参数名</th><th>位置</th><th>类型</th><th>必填</th><th>值</th></tr></thead>
                         <tbody>
@@ -152,7 +206,11 @@
         if (api.requestBody) {
             bodyHtml = `
                 <div class="request-body">
-                    <h4>📦 请求 Body (JSON)</h4>
+                    <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 8px;">
+                        <h4>📦 请求 Body (JSON)</h4>
+                        <button id="beautifyJsonBtn" class="btn-secondary" style="padding: 4px 12px; font-size:12px;">🎨 JSON 格式化</button>
+                        <button id="exampleJsonBtn" class="btn-secondary" style="padding: 4px 12px; font-size:12px;">📋 示例 JSON</button>
+                    </div>
                     <textarea id="requestBody" placeholder='{"key": "value"}'></textarea>
                 </div>
             `;
@@ -182,6 +240,23 @@
         `;
 
         document.getElementById('sendRequestBtn').addEventListener('click', () => sendRequest(api));
+
+        if (api.requestBody) {
+            document.getElementById('beautifyJsonBtn')?.addEventListener('click', beautifyRequestBody);
+            document.getElementById('exampleJsonBtn')?.addEventListener('click', fillExampleJson);
+        }
+        if (api.parameters && api.parameters.length) {
+            document.getElementById('fillParamsBtn')?.addEventListener('click', fillParamExamples);
+            const inputs = document.querySelectorAll('.param-input');
+            inputs.forEach(input => {
+                const name = input.dataset.name;
+                const typeSelect = input.closest('tr')?.querySelector('.param-type-select');
+                const typeHint = typeSelect ? typeSelect.value : 'string';
+                if (!input.value) {
+                    input.placeholder = `例如: ${getDefaultParamValue(name, typeHint)}`;
+                }
+            });
+        }
     }
 
     async function sendRequest(api) {
@@ -260,14 +335,12 @@
         }
     }
 
-    // 搜索过滤
     searchInput.addEventListener('input', (e) => {
         const keyword = e.target.value.toLowerCase();
         if (!keyword) {
             renderTree(modules);
             return;
         }
-
         const filteredModules = [];
         modules.forEach(module => {
             const filteredApis = module.apis.filter(api =>
@@ -283,8 +356,6 @@
             }
         });
         renderTree(filteredModules);
-
-        // 展开所有模块以便查看搜索结果
         document.querySelectorAll('.module-node > .tree-item.module .toggle').forEach(toggle => {
             const childrenUl = toggle.closest('.module-node').querySelector(':scope > .tree-children');
             if (childrenUl && !childrenUl.classList.contains('open')) {
@@ -299,7 +370,7 @@
         return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
     }
 
-    // ---------- 双 Tab 切换逻辑（已移入此处，保证切换功能正常）----------
+    // 双 Tab 切换逻辑
     const tabButtons = document.querySelectorAll('.tab-button');
     const panes = document.querySelectorAll('.tab-pane');
 
@@ -329,6 +400,5 @@
         });
     });
 
-    // 启动加载接口列表
     loadModules();
 })();

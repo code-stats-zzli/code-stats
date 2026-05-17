@@ -388,3 +388,37 @@
     padding: 12px;
     font-size: 16px;
 }
+/* 新增：参数区域操作按钮样式 */
+.params-section .btn-secondary {
+    background: rgba(0,102,255,0.1);
+    border: 1px solid rgba(0,102,255,0.3);
+    border-radius: 20px;
+    transition: 0.2s;
+    cursor: pointer;
+}
+.params-section .btn-secondary:hover {
+    background: var(--accent-primary);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.request-body button {
+    background: rgba(0,102,255,0.1);
+    border: 1px solid rgba(0,102,255,0.3);
+    border-radius: 20px;
+    padding: 4px 12px;
+    cursor: pointer;
+}
+.request-body button:hover {
+    background: var(--accent-primary);
+    color: white;
+}
+
+/* 参数输入框视觉优化 */
+.param-input {
+    font-family: monospace;
+    background: white;
+    border-radius: 12px;
+    padding: 6px 10px;
+    width: 100%;
+}

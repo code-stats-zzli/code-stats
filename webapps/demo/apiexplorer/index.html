@@ -60,13 +60,16 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>📎 Headers (JSON格式)</label>
-                        <textarea id="customApiHeaders" rows="3" placeholder='{"Content-Type": "application/json", "Authorization": "Bearer token"}'></textarea>
-                        <small style="color: var(--text-muted);">示例: {"X-Custom-Header": "value"}</small>
+                        <label>📄 参数格式</label>
+                        <select id="bodyFormatSelect">
+                            <option value="json">JSON (application/json)</option>
+                            <option value="form">表单 (application/x-www-form-urlencoded)</option>
+                            <option value="text">纯文本 (text/plain)</option>
+                        </select>
                     </div>
-                    <div class="form-group">
-                        <label>📦 请求 Body (支持JSON/文本)</label>
-                        <textarea id="customApiBodyText" rows="6" placeholder='{\n  "title": "foo",\n  "body": "bar",\n  "userId": 1\n}'></textarea>
+                    <div class="form-group" id="customBodyContainer">
+                        <label>📦 请求 Body</label>
+                        <div id="bodyEditor"></div>
                     </div>
                     <button id="sendCustomRequestBtn" class="send-btn">🚀 发送自定义请求</button>
                     <div id="customResponseArea" class="response-area" style="display:none;"></div>

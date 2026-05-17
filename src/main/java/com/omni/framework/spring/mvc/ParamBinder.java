@@ -1,9 +1,9 @@
 package com.omni.framework.spring.mvc;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.omni.framework.spring.annotation.PathVariable;
+import com.omni.framework.spring.annotation.RequestBody;
 import com.omni.framework.spring.annotation.RequestParam;
-import com.omni.framework.tomcat.connector.Request;
-import com.omni.framework.tomcat.connector.Response;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
 
@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ParamBinder {
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public static Object[] resolveParameters(Method method, HttpServletRequest request, HttpServletResponse response,
                                              Map<String, String> pathVars) throws Exception {
@@ -25,13 +26,12 @@ public class ParamBinder {
             Parameter param = parameters[i];
             Class<?> type = param.getType();
 
-            // 注入 Request/Response
-            if (type == Request.class) {
-
+            // 注入 HttpServletRequest / HttpServletResponse
+            if (type == HttpServletRequest.class) {
                 args[i] = request;
                 continue;
             }
-            if (type == Response.class) {
+            if (type == HttpServletResponse.class) {
                 args[i] = response;
                 continue;
             }
@@ -60,7 +60,22 @@ public class ParamBinder {
                 continue;
             }
 
-            // 无注解但参数名为简单类型时，尝试从 query 中取同名参数（可选）
+            // @RequestBody (新增支持)
+            RequestBody requestBody = param.getAnnotation(RequestBody.class);
+            if (requestBody != null) {
+                String body = request.getBody();
+                if ((body == null || body.trim().isEmpty()) && requestBody.required()) {
+                    throw new IllegalArgumentException("Missing request body");
+                }
+                if (body != null && !body.trim().isEmpty()) {
+                    args[i] = objectMapper.readValue(body, type);
+                } else {
+                    args[i] = null;
+                }
+                continue;
+            }
+
+            // 无注解但为简单类型，尝试从 query 中取同名参数
             if (isSimpleType(type)) {
                 String value = queryParams.get(param.getName());
                 if (value != null) {

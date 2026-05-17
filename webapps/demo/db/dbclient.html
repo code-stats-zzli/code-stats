@@ -38,6 +38,7 @@
             <div class="sql-editor">
                 <div style="margin-bottom: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
                     <button id="exampleSqlBtn" class="btn-secondary">📋 示例SQL（当前表）</button>
+                    <button id="formatSqlBtn" class="btn-secondary">✨ 格式化SQL</button>
                     <button id="executeSqlBtn" class="btn-primary">🚀 执行查询</button>
                 </div>
                 <textarea id="sqlEditor" rows="6" placeholder="输入SQL查询语句，例如：SELECT * FROM user LIMIT 10"></textarea>
@@ -54,19 +55,16 @@
 <script src="dbclient-data.js"></script>
 <script src="dbclient-sql.js"></script>
 
-<!-- 主入口脚本：等待DOM加载完成后初始化 -->
+<!-- 主入口脚本 -->
 <script>
     (function() {
         function initAll() {
-            // 初始化核心模块
             DB.init();
-            // 初始化各功能模块（它们内部会获取DOM元素并绑定事件）
             TreeModule.init();
             PropertiesModule.init();
             DataModule.init();
             SqlModule.init();
 
-            // 绑定Tab切换事件（必须等DOM元素存在）
             const tabBtns = document.querySelectorAll('.tab-btn');
             const tabPanes = document.querySelectorAll('.tab-pane');
 
@@ -77,7 +75,6 @@
                 tabPanes.forEach(pane => {
                     pane.classList.toggle('active', pane.id === `tab-${tabName}`);
                 });
-                // 切换到数据Tab时，如果有选中的表则刷新数据
                 if (tabName === 'data' && DB.currentTable) {
                     DataModule.loadTableData();
                 }

@@ -4,6 +4,7 @@ const SqlModule = (function() {
     let sqlResultArea = null;
     let exampleSqlBtn = null;
     let executeSqlBtn = null;
+    let formatSqlBtn = null;
 
     let currentDbHint = null;
     let currentTableHint = null;
@@ -25,6 +26,41 @@ const SqlModule = (function() {
         if (!sqlEditor) return;
         const exampleSql = generateExampleSql();
         sqlEditor.value = exampleSql;
+    }
+
+    // 简单但实用的SQL格式化函数
+    function formatSql() {
+        if (!sqlEditor) return;
+        let sql = sqlEditor.value.trim();
+        if (!sql) return;
+        // 合并多余空白
+        let formatted = sql.replace(/\s+/g, ' ');
+        // 关键字转大写并加换行
+        formatted = formatted
+            .replace(/select/gi, 'SELECT')
+            .replace(/from/gi, 'FROM')
+            .replace(/where/gi, 'WHERE')
+            .replace(/join/gi, 'JOIN')
+            .replace(/left join/gi, 'LEFT JOIN')
+            .replace(/right join/gi, 'RIGHT JOIN')
+            .replace(/inner join/gi, 'INNER JOIN')
+            .replace(/order by/gi, 'ORDER BY')
+            .replace(/group by/gi, 'GROUP BY')
+            .replace(/having/gi, 'HAVING')
+            .replace(/limit/gi, 'LIMIT')
+            .replace(/union/gi, 'UNION')
+            .replace(/insert into/gi, 'INSERT INTO')
+            .replace(/values/gi, 'VALUES')
+            .replace(/update/gi, 'UPDATE')
+            .replace(/set/gi, 'SET')
+            .replace(/delete from/gi, 'DELETE FROM')
+            .replace(/create table/gi, 'CREATE TABLE')
+            .replace(/alter table/gi, 'ALTER TABLE')
+            .replace(/drop table/gi, 'DROP TABLE');
+        // 在每个主要子句前换行
+        formatted = formatted
+            .replace(/ (SELECT|FROM|WHERE|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|ORDER BY|GROUP BY|HAVING|LIMIT|UNION|INSERT INTO|VALUES|UPDATE|SET|DELETE FROM) /gi, '\n$1 ');
+        sqlEditor.value = formatted;
     }
 
     async function executeSql() {
@@ -82,9 +118,11 @@ const SqlModule = (function() {
             sqlResultArea = document.getElementById('sqlResultArea');
             exampleSqlBtn = document.getElementById('exampleSqlBtn');
             executeSqlBtn = document.getElementById('executeSqlBtn');
+            formatSqlBtn = document.getElementById('formatSqlBtn');
 
             if (exampleSqlBtn) exampleSqlBtn.addEventListener('click', fillExampleSql);
             if (executeSqlBtn) executeSqlBtn.addEventListener('click', executeSql);
+            if (formatSqlBtn) formatSqlBtn.addEventListener('click', formatSql);
 
             // 设置默认示例
             if (sqlEditor && sqlEditor.value === '') {

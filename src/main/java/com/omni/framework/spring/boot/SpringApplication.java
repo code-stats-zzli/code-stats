@@ -2,6 +2,7 @@ package com.omni.framework.spring.boot;
 
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
+import com.omni.framework.spring.config.ConfigLoader;
 import com.omni.framework.spring.context.SpringContextHolder;
 import com.omni.framework.spring.context.support.AnnotationConfigApplicationContext;
 import com.omni.framework.tomcat.Catalina;
@@ -29,14 +30,18 @@ public class SpringApplication {
         catalina.start();
         long tomcatEnd = System.currentTimeMillis();
         log.info("Tomcat started in {} ms", tomcatEnd - tomcatStart);
+
         // 3. 总启动耗时
         long totalTime = tomcatEnd - startTime;
         log.info("Omni startup time: {} ms", totalTime);
         // 打印启动图标
         printBanner();
-        log.info("Access http://localhost:28080/omni/demo/index.html");
+        // 4. 从配置中获取端口和 context path，动态输出访问地址
+        int port = Integer.parseInt(ConfigLoader.getProperty("server.port", "8080"));
+        String contextPath = ConfigLoader.getProperty("context.path", "/omni");
+        log.info("Access http://localhost:{}{}/demo/index.html", port, contextPath);
 
-        // 4. 等待（保持主线程存活）
+        // 5. 等待（保持主线程存活）
         try {
             Thread.sleep(Long.MAX_VALUE);
         } catch (InterruptedException e) {

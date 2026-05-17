@@ -1,13 +1,16 @@
+src/main/java/com/omni/framework/swag/
+├── annotation/
+│   ├── ApiOperation.java        (已存在)
+│   └── ApiModule.java           (新增)
+├── core/
+│   └── ApiDefinition.java       (已存在)
+└── handler/
+    └── SwagHandler.java         (新增)
+
+src/main/java/com/omni/business/assistance/api/controller/
+└── ApiExplorerController.java   (修改)
+
 webapps/demo/apiexplorer/
-├── index.html          # API 调试主页面
-├── apiexplorer.css     # 样式文件
-└── apiexplorer.js      # 交互逻辑
-
-src/main/java/com/omni/business/assistance/apiexplorer/
-├── controller/
-│   └── ApiExplorerController.java   # 提供 API 元数据接口
-└── model/
-    └── ApiDefinition.java            # API 定义模型
-
-com/omni/framework/spring/annotation/
-└── ApiOperation.java                 # API 文档注解
+├── index.html                   (修改)
+├── apiexplorer.css              (修改)
+└── apiexplorer.js               (修改)

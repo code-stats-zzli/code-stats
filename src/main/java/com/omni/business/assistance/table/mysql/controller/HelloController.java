@@ -5,7 +5,10 @@ import com.omni.framework.spring.annotation.RequestMapping;
 import com.omni.framework.spring.annotation.RequestParam;
 import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.spring.mvc.ModelAndView;
+import com.omni.framework.swag.annotation.ApiModule;
 
+
+@ApiModule(value = "HelloController", description = "HelloController")
 @Controller
 @RequestMapping("/hello")
 public class HelloController {

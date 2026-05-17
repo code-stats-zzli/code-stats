@@ -6,8 +6,11 @@ import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestMapping;
 import com.omni.framework.spring.annotation.ResponseBody;
+import com.omni.framework.swag.annotation.ApiModule;
 import com.omni.framework.swag.annotation.ApiOperation;
 
+
+@ApiModule(value = "UserController", description = "UserController")
 @Controller
 @RequestMapping("/user")
 public class UserController {

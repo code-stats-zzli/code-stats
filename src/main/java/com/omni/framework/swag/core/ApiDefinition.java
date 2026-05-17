@@ -6,11 +6,13 @@ import java.util.List;
 public class ApiDefinition {
     private String id;
     private String path;
-    private String method;          // GET / POST
+    private String method;          // GET / POST / PUT / DELETE
     private String summary;
     private String description;
     private List<ApiParameter> parameters = new ArrayList<>();
     private boolean requestBody;    // 是否需要 JSON Body
+    private String responseContentType;  // 响应内容类型，如 application/json, text/plain
+    private String responseExample;      // 响应示例（可选）
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -26,6 +28,10 @@ public class ApiDefinition {
     public void setParameters(List<ApiParameter> parameters) { this.parameters = parameters; }
     public boolean isRequestBody() { return requestBody; }
     public void setRequestBody(boolean requestBody) { this.requestBody = requestBody; }
+    public String getResponseContentType() { return responseContentType; }
+    public void setResponseContentType(String responseContentType) { this.responseContentType = responseContentType; }
+    public String getResponseExample() { return responseExample; }
+    public void setResponseExample(String responseExample) { this.responseExample = responseExample; }
 
     public static class ApiParameter {
         private String name;

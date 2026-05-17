@@ -12,16 +12,51 @@
 <div class="api-container">
     <aside class="api-sidebar">
         <div class="sidebar-header">
-            <h3>📡 API 列表</h3>
+            <h3>📡 API Explorer</h3>
             <div class="search-box">
                 <input type="text" id="apiSearch" placeholder="搜索接口...">
             </div>
         </div>
-        <div id="apiList" class="api-list">
-            <div class="loading">加载中...</div>
+        <div class="api-tree-wrapper">
+            <ul class="api-tree" id="apiTree">
+                <li class="loading">加载中...</li>
+            </ul>
         </div>
     </aside>
+
     <main class="api-content">
+        <div class="custom-api-panel" id="customApiPanel">
+            <div class="custom-api-header">
+                <span>🔧 自定义 API 请求</span>
+                <button id="toggleCustomBtn" class="btn-icon">展开</button>
+            </div>
+            <div class="custom-api-body" id="customApiBody" style="display: none;">
+                <div class="form-group">
+                    <label>请求地址</label>
+                    <input type="text" id="customApiUrl" placeholder="https://api.example.com/endpoint">
+                </div>
+                <div class="form-group">
+                    <label>请求方法</label>
+                    <select id="customApiMethod">
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="DELETE">DELETE</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>请求 Headers (JSON)</label>
+                    <textarea id="customApiHeaders" placeholder='{"Content-Type": "application/json"}' rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>请求 Body</label>
+                    <textarea id="customApiBodyText" placeholder='{"key": "value"}' rows="4"></textarea>
+                </div>
+                <button id="sendCustomRequestBtn" class="send-btn">🚀 发送自定义请求</button>
+                <div id="customResponseArea" class="response-area" style="display:none; margin-top: 12px;"></div>
+            </div>
+        </div>
+
         <div id="apiDetail" class="api-detail">
             <div class="empty-state">
                 <span class="empty-icon">🔍</span>

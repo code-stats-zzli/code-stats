@@ -10,6 +10,8 @@ public class SpringApplication {
     private static final Logger log = LoggerFactory.getLogger(SpringApplication.class);
 
     public static void run(Class<?> primarySource, String[] args) {
+
+
         long startTime = System.currentTimeMillis();
 
         // 1. 创建并刷新 ApplicationContext
@@ -27,10 +29,11 @@ public class SpringApplication {
         catalina.start();
         long tomcatEnd = System.currentTimeMillis();
         log.info("Tomcat started in {} ms", tomcatEnd - tomcatStart);
-
         // 3. 总启动耗时
         long totalTime = tomcatEnd - startTime;
-        log.info("Total startup time: {} ms", totalTime);
+        log.info("Omni startup time: {} ms", totalTime);
+        // 打印启动图标
+        printBanner();
         log.info("Access http://localhost:28080/omni/demo/index.html");
 
         // 4. 等待（保持主线程存活）
@@ -39,5 +42,19 @@ public class SpringApplication {
         } catch (InterruptedException e) {
             log.error("Main thread interrupted", e);
         }
+    }
+
+    private static void printBanner() {
+        String banner = "\n" +
+                "   ____  _     _     _     \n" +
+                "  / __ \\| |   (_)   | |    \n" +
+                " | |  | | |__  _  __| | __ \n" +
+                " | |  | | '_ \\| |/ _` |/ _ \\\n" +
+                " | |__| | |_) | | (_| |  __/\n" +
+                "  \\____/|_.__/| |\\__,_|\\___|\n" +
+                "               _/ |        \n" +
+                "              |__/         \n" +
+                ":: Omni Framework :: (v1.0)\n";
+        System.out.println(banner);
     }
 }

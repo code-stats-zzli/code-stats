@@ -1,6 +1,5 @@
 package com.omni.framework.log.layout;
 
-
 import com.omni.framework.log.core.LogEvent;
 
 import java.time.Instant;
@@ -24,14 +23,26 @@ public class PatternLayout extends Layout {
     public String format(LogEvent event) {
         StringBuffer sb = new StringBuffer();
         Matcher m = PLACEHOLDER_PATTERN.matcher(pattern);
+        boolean hasExplicitEx = false;
         while (m.find()) {
             String formatFlag = m.group(1);   // 如 "-5"
             String keyword = m.group(2);      // level, logger, d, t, msg, m, n, ex
             String option = m.group(3);       // 如 "yyyy-MM-dd HH:mm:ss.SSS" 或 "36"
             String replacement = convert(event, keyword, option, formatFlag);
             m.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+            if ("ex".equals(keyword)) {
+                hasExplicitEx = true;
+            }
         }
         m.appendTail(sb);
+
+        // ★ 关键修改：如果存在异常且 pattern 中没有显式 %ex，则自动追加堆栈信息
+        Throwable t = event.getThrowable();
+        if (t != null && !hasExplicitEx) {
+            sb.append(System.lineSeparator());
+            sb.append(convert(event, "ex", null, null));
+        }
+
         return sb.toString();
     }
 

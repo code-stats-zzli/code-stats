@@ -38,9 +38,10 @@
             <div class="sql-editor">
                 <div style="margin-bottom: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
                     <button id="exampleSqlBtn" class="btn-secondary">📋 示例SQL（当前表）</button>
-                    <button id="formatSqlBtn" class="btn-secondary">✨ 格式化SQL</button>
                     <button id="executeSqlBtn" class="btn-primary">🚀 执行查询</button>
+                    <button id="formatSqlBtn" class="btn-secondary">✨ 格式化SQL</button>
                 </div>
+                <!-- CodeMirror 容器 -->
                 <textarea id="sqlEditor" rows="6" placeholder="输入SQL查询语句，例如：SELECT * FROM user LIMIT 10"></textarea>
                 <div id="sqlResultArea" style="margin-top: 16px; overflow-x: auto;"></div>
             </div>
@@ -48,14 +49,14 @@
     </div>
 </div>
 
-<!-- 按顺序加载脚本模块 -->
+<!-- 原有模块脚本 -->
 <script src="dbclient-core.js"></script>
 <script src="dbclient-tree.js"></script>
 <script src="dbclient-properties.js"></script>
 <script src="dbclient-data.js"></script>
-<script src="dbclient-sql.js"></script>
+<!-- 新的增强版 SQL 编辑器 -->
+<script src="dbclient-sql-enhanced.js"></script>
 
-<!-- 主入口脚本 -->
 <script>
     (function() {
         function initAll() {
@@ -63,7 +64,8 @@
             TreeModule.init();
             PropertiesModule.init();
             DataModule.init();
-            SqlModule.init();
+            // 增强版 SQL 模块（已经自行初始化）
+            // 无需再调用旧版 SqlModule
 
             const tabBtns = document.querySelectorAll('.tab-btn');
             const tabPanes = document.querySelectorAll('.tab-pane');

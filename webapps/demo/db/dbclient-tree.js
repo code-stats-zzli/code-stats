@@ -103,7 +103,8 @@ const TreeModule = (function() {
                     // 触发各模块刷新
                     PropertiesModule.loadProperties(dbName, table.name);
                     DataModule.resetAndLoad(dbName, table.name);
-                    SqlModule.updateCurrentTableHint(dbName, table.name);
+                    // 兼容增强版 SQL 模块刷新提示
+                    if (window.__refreshSqlHints) window.__refreshSqlHints();
                 }, true);
                 const detailUl = document.createElement('ul');
                 detailUl.className = 'tree-children';

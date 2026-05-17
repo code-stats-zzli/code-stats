@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Explorer - 接口调试</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="apiexplorer.css">
+    <script src="../global.js"></script>
+</head>
+<body>
+<div class="api-container">
+    <aside class="api-sidebar">
+        <div class="sidebar-header">
+            <h3>📡 API 列表</h3>
+            <div class="search-box">
+                <input type="text" id="apiSearch" placeholder="搜索接口...">
+            </div>
+        </div>
+        <div id="apiList" class="api-list">
+            <div class="loading">加载中...</div>
+        </div>
+    </aside>
+    <main class="api-content">
+        <div id="apiDetail" class="api-detail">
+            <div class="empty-state">
+                <span class="empty-icon">🔍</span>
+                <p>从左侧选择一个接口</p>
+            </div>
+        </div>
+    </main>
+</div>
+<script src="apiexplorer.js"></script>
+</body>
+</html>

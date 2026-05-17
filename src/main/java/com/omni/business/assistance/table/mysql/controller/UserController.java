@@ -6,6 +6,7 @@ import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestMapping;
 import com.omni.framework.spring.annotation.ResponseBody;
+import com.omni.framework.swag.annotation.ApiOperation;
 
 @Controller
 @RequestMapping("/user")
@@ -17,11 +18,14 @@ public class UserController {
     @Autowired
     private IUserService userService0;
 
+
+    @ApiOperation(value = "获取用户信息", notes = "获取用户信息")
     @RequestMapping("/info")
     public String getUserInfo() {
         return userService.getUserInfo();
     }
 
+    @ApiOperation(value = "获取用户名称", notes = "根据用户 ID 返回用户名")
     @RequestMapping("/name")
     @ResponseBody
     public String getName() {

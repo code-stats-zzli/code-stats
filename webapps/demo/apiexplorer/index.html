@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API Explorer - 接口调试</title>
+    <title>API Explorer - 接口调试与自定义请求</title>
     <link rel="stylesheet" href="../global-tech.css">
     <link rel="stylesheet" href="apiexplorer.css">
     <script src="../global.js"></script>
@@ -25,46 +25,57 @@
     </aside>
 
     <main class="api-content">
-        <div class="custom-api-panel" id="customApiPanel">
-            <div class="custom-api-header">
-                <span>🔧 自定义 API 请求</span>
-                <button id="toggleCustomBtn" class="btn-icon">展开</button>
+        <!-- 双标签页容器 -->
+        <div class="api-tabs">
+            <div class="tab-bar">
+                <button class="tab-button active" data-tab="api-debug">🔧 接口调试</button>
+                <button class="tab-button" data-tab="custom-request">✨ 自定义请求</button>
             </div>
-            <div class="custom-api-body" id="customApiBody" style="display: none;">
-                <div class="form-group">
-                    <label>请求地址</label>
-                    <input type="text" id="customApiUrl" placeholder="https://api.example.com/endpoint">
-                </div>
-                <div class="form-group">
-                    <label>请求方法</label>
-                    <select id="customApiMethod">
-                        <option value="GET">GET</option>
-                        <option value="POST">POST</option>
-                        <option value="PUT">PUT</option>
-                        <option value="DELETE">DELETE</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>请求 Headers (JSON)</label>
-                    <textarea id="customApiHeaders" placeholder='{"Content-Type": "application/json"}' rows="2"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>请求 Body</label>
-                    <textarea id="customApiBodyText" placeholder='{"key": "value"}' rows="4"></textarea>
-                </div>
-                <button id="sendCustomRequestBtn" class="send-btn">🚀 发送自定义请求</button>
-                <div id="customResponseArea" class="response-area" style="display:none; margin-top: 12px;"></div>
-            </div>
-        </div>
 
-        <div id="apiDetail" class="api-detail">
-            <div class="empty-state">
-                <span class="empty-icon">🔍</span>
-                <p>从左侧选择一个接口</p>
+            <!-- 接口调试标签页（原有完整功能） -->
+            <div class="tab-pane active" id="apiDebugPane">
+                <div id="apiDetail" class="api-detail">
+                    <div class="empty-state">
+                        <span class="empty-icon">🔍</span>
+                        <p>从左侧选择一个接口</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 自定义请求标签页（全新独立功能） -->
+            <div class="tab-pane" id="customRequestPane">
+                <div class="custom-request-container">
+                    <div class="form-group">
+                        <label>🌐 请求地址 (URL)</label>
+                        <input type="text" id="customApiUrl" placeholder="https://api.example.com/endpoint" value="https://jsonplaceholder.typicode.com/posts">
+                    </div>
+                    <div class="form-group">
+                        <label>⚙️ 请求方法</label>
+                        <select id="customApiMethod">
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                            <option value="PATCH">PATCH</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>📎 Headers (JSON格式)</label>
+                        <textarea id="customApiHeaders" rows="3" placeholder='{"Content-Type": "application/json", "Authorization": "Bearer token"}'></textarea>
+                        <small style="color: var(--text-muted);">示例: {"X-Custom-Header": "value"}</small>
+                    </div>
+                    <div class="form-group">
+                        <label>📦 请求 Body (支持JSON/文本)</label>
+                        <textarea id="customApiBodyText" rows="6" placeholder='{\n  "title": "foo",\n  "body": "bar",\n  "userId": 1\n}'></textarea>
+                    </div>
+                    <button id="sendCustomRequestBtn" class="send-btn">🚀 发送自定义请求</button>
+                    <div id="customResponseArea" class="response-area" style="display:none;"></div>
+                </div>
             </div>
         </div>
     </main>
 </div>
 <script src="apiexplorer.js"></script>
+<script src="custom-request.js"></script>
 </body>
 </html>

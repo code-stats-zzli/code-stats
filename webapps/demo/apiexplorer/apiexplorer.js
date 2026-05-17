@@ -1,4 +1,5 @@
 (function() {
+    // ---------- API 调试核心逻辑 ----------
     let modules = [];
     let currentApi = null;
     let allApis = [];
@@ -7,11 +8,7 @@
     const apiDetailDiv = document.getElementById('apiDetail');
     const searchInput = document.getElementById('apiSearch');
 
-    // 自定义 API 面板元素
-    const toggleCustomBtn = document.getElementById('toggleCustomBtn');
-    const customApiBody = document.getElementById('customApiBody');
-    const sendCustomRequestBtn = document.getElementById('sendCustomRequestBtn');
-
+    // 加载模块列表
     async function loadModules() {
         try {
             const resp = await fetch(window.apiUrl('/apiexplorer/api/modules'));
@@ -37,7 +34,6 @@
         }
 
         const treeHtml = modulesData.map(module => {
-            const moduleId = 'module-' + encodeURIComponent(module.moduleName);
             const apiItems = module.apis.map(api => `
                 <li class="tree-node api-node" data-id="${api.id}" data-path="${api.path}" data-method="${api.method}">
                     <div class="tree-item api">
@@ -64,7 +60,7 @@
 
         apiTree.innerHTML = treeHtml;
 
-        // 绑定模块展开/折叠事件
+        // 绑定模块展开/折叠
         document.querySelectorAll('.module-node > .tree-item.module .toggle').forEach(toggle => {
             toggle.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -92,7 +88,7 @@
             });
         });
 
-        // 默认展开第一个模块
+        // 默认展开第一个模块，并选中第一个API
         const firstModule = document.querySelector('.module-node');
         if (firstModule) {
             const toggle = firstModule.querySelector('.toggle');
@@ -101,7 +97,6 @@
                 childrenUl.classList.add('open');
                 if (toggle) toggle.textContent = '▼';
             }
-            // 选中第一个API
             const firstApi = firstModule.querySelector('.api-node');
             if (firstApi) {
                 selectApi(firstApi.dataset.id);
@@ -114,7 +109,7 @@
         if (!api) return;
         currentApi = api;
 
-        // 高亮
+        // 高亮选中的API
         document.querySelectorAll('.api-node').forEach(node => {
             node.classList.toggle('active', node.dataset.id === id);
         });
@@ -265,67 +260,7 @@
         }
     }
 
-    // 自定义请求功能
-    let customPanelVisible = false;
-    toggleCustomBtn.addEventListener('click', () => {
-        customPanelVisible = !customPanelVisible;
-        customApiBody.style.display = customPanelVisible ? 'block' : 'none';
-        toggleCustomBtn.textContent = customPanelVisible ? '收起' : '展开';
-    });
-
-    sendCustomRequestBtn.addEventListener('click', async () => {
-        const url = document.getElementById('customApiUrl').value.trim();
-        if (!url) {
-            alert('请输入请求地址');
-            return;
-        }
-        const method = document.getElementById('customApiMethod').value;
-        let headers = {};
-        const headersText = document.getElementById('customApiHeaders').value.trim();
-        if (headersText) {
-            try {
-                headers = JSON.parse(headersText);
-            } catch (e) {
-                alert('Headers 格式错误，请输入有效的 JSON');
-                return;
-            }
-        }
-        let body = document.getElementById('customApiBodyText').value.trim();
-        if (body && !headers['Content-Type']) {
-            headers['Content-Type'] = 'application/json';
-        }
-
-        const responseDiv = document.getElementById('customResponseArea');
-        responseDiv.style.display = 'block';
-        responseDiv.innerHTML = '<div class="loading">⏳ 请求中...</div>';
-
-        try {
-            const options = {
-                method: method,
-                headers: headers
-            };
-            if (body) {
-                options.body = body;
-            }
-            const resp = await fetch(url, options);
-            const responseText = await resp.text();
-            let formatted = responseText;
-            try {
-                const json = JSON.parse(responseText);
-                formatted = JSON.stringify(json, null, 2);
-            } catch (e) {}
-            responseDiv.innerHTML = `
-                <div style="margin-bottom: 8px; color: ${resp.ok ? '#10b981' : '#ef4444'}">
-                    <strong>状态码: ${resp.status} ${resp.statusText}</strong>
-                </div>
-                <pre style="margin:0; white-space:pre-wrap;">${escapeHtml(formatted)}</pre>
-            `;
-        } catch (err) {
-            responseDiv.innerHTML = `<div style="color:#ef4444;">❌ 请求失败: ${err.message}</div>`;
-        }
-    });
-
-    // 搜索过滤（实时过滤树）
+    // 搜索过滤
     searchInput.addEventListener('input', (e) => {
         const keyword = e.target.value.toLowerCase();
         if (!keyword) {
@@ -364,5 +299,36 @@
         return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
     }
 
+    // ---------- 双 Tab 切换逻辑（已移入此处，保证切换功能正常）----------
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const panes = document.querySelectorAll('.tab-pane');
+
+    function switchTab(tabId) {
+        tabButtons.forEach(btn => {
+            const target = btn.getAttribute('data-tab');
+            if (target === tabId) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+        panes.forEach(pane => {
+            if ((tabId === 'api-debug' && pane.id === 'apiDebugPane') ||
+                (tabId === 'custom-request' && pane.id === 'customRequestPane')) {
+                pane.classList.add('active');
+            } else {
+                pane.classList.remove('active');
+            }
+        });
+    }
+
+    tabButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const tabId = btn.getAttribute('data-tab');
+            if (tabId) switchTab(tabId);
+        });
+    });
+
+    // 启动加载接口列表
     loadModules();
 })();

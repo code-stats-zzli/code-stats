@@ -28,6 +28,7 @@
 .search-box input {
     width: 100%;
     background: white;
+    color: #1e293b;
 }
 
 .api-tree-wrapper {
@@ -127,45 +128,62 @@
     gap: 20px;
 }
 
-.custom-api-panel {
-    background: var(--bg-card);
-    backdrop-filter: blur(16px);
-    border-radius: 24px;
-    border: 1px solid rgba(0,102,255,0.25);
-    overflow: hidden;
+/* 双标签页样式 */
+.api-tabs {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: transparent;
 }
 
-.custom-api-header {
+.tab-bar {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 20px;
-    background: rgba(0,102,255,0.1);
-    cursor: pointer;
+    gap: 8px;
+    padding: 0 0 12px 0;
+    border-bottom: 1px solid rgba(0,102,255,0.25);
+    margin-bottom: 20px;
+}
+
+.tab-button {
+    background: transparent;
+    border: none;
+    padding: 8px 24px;
+    font-size: 15px;
     font-weight: 600;
+    border-radius: 40px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+    backdrop-filter: blur(4px);
+}
+
+.tab-button:hover {
+    background: rgba(0,102,255,0.1);
     color: var(--accent-primary);
 }
 
-.custom-api-body {
-    padding: 20px;
-    border-top: 1px solid rgba(0,102,255,0.15);
+.tab-button.active {
+    background: var(--accent-primary);
+    color: white;
+    box-shadow: 0 4px 12px rgba(0,102,255,0.3);
 }
 
-.form-group {
-    margin-bottom: 16px;
+.tab-pane {
+    display: none;
+    flex: 1;
+    animation: fadeIn 0.2s ease;
 }
 
-.form-group label {
+.tab-pane.active {
     display: block;
-    margin-bottom: 6px;
-    font-size: 13px;
-    font-weight: 500;
 }
 
-.form-group input, .form-group select, .form-group textarea {
-    width: 100%;
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px);}
+    to { opacity: 1; transform: translateY(0);}
 }
 
+/* 接口详情卡片 */
 .api-detail {
     background: var(--bg-card);
     backdrop-filter: blur(16px);
@@ -228,6 +246,7 @@
 .param-type-select {
     width: 100px;
     background: white;
+    color: #1e293b;
 }
 
 .request-body {
@@ -305,4 +324,67 @@
     text-align: center;
     padding: 40px;
     color: var(--text-muted);
+}
+
+/* 自定义请求容器独立样式 - 修复输入框背景过深问题 */
+.custom-request-container {
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border-radius: 24px;
+    border: 1px solid rgba(0,102,255,0.25);
+    padding: 24px;
+}
+
+.custom-request-container .form-group {
+    margin-bottom: 20px;
+}
+
+.custom-request-container label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    font-size: 14px;
+}
+
+/* 输入框背景使用稍浅的深色，文字使用高亮灰色 */
+.custom-request-container input,
+.custom-request-container select,
+.custom-request-container textarea {
+    width: 100%;
+    background: #1e293b;      /* 深灰背景，不再纯黑 */
+    border: 1px solid rgba(0,102,255,0.4);
+    border-radius: 16px;
+    padding: 12px 16px;
+    color: #f1f5f9;           /* 亮白色文字 */
+    font-family: monospace;
+    transition: 0.2s;
+}
+
+.custom-request-container input::placeholder,
+.custom-request-container textarea::placeholder {
+    color: #94a3b8;           /* 占位符浅灰，可见 */
+}
+
+.custom-request-container input:focus,
+.custom-request-container select:focus,
+.custom-request-container textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(0,102,255,0.3);
+    background: #0f172a;       /* 聚焦时稍微变深但文字仍清晰 */
+    color: #ffffff;
+}
+
+.custom-request-container select {
+    background: #1e293b;
+    color: #f1f5f9;
+}
+
+.custom-request-container .send-btn {
+    margin-top: 12px;
+    width: 100%;
+    background: var(--accent-primary);
+    padding: 12px;
+    font-size: 16px;
 }

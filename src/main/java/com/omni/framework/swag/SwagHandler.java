@@ -12,7 +12,7 @@ import java.lang.reflect.Parameter;
 import java.util.*;
 
 /**
- * Swagger 风格 API 元数据处理器
+ * Swagger 风格 API 元数据处理器（核心解析器）
  * 负责扫描所有 Controller，提取 API 定义并按模块分组
  */
 public class SwagHandler {
@@ -35,6 +35,7 @@ public class SwagHandler {
 
     /**
      * 获取所有 API 定义（按模块分组）
+     * 核心解析方法，供上层业务服务调用
      */
     public static List<ModuleApiResult> getModuleApis() throws Exception {
         Map<String, ModuleApiResult> moduleMap = new LinkedHashMap<>();
@@ -48,7 +49,7 @@ public class SwagHandler {
                 continue;
             }
 
-            // 获取模块信息
+            // 获取模块信息（优先使用 @ApiModule 注解）
             String moduleName = "未分组";
             String moduleDesc;
             ApiModule apiModule = clazz.getAnnotation(ApiModule.class);
@@ -57,7 +58,7 @@ public class SwagHandler {
                 moduleDesc = apiModule.description();
             } else {
                 moduleDesc = "";
-                // 根据包名自动推断模块
+                // 根据包名自动推断模块（默认逻辑）
                 String pkg = clazz.getPackage().getName();
                 if (pkg.contains(".agent")) moduleName = "AI Agent";
                 else if (pkg.contains(".codestat")) moduleName = "代码分析";
@@ -137,7 +138,7 @@ public class SwagHandler {
                 }
                 api.setRequestBody(hasRequestBody);
 
-                // 推断响应 Content-Type 和示例
+                // 推断响应信息
                 inferResponseInfo(method, api);
 
                 moduleResult.getApis().add(api);
@@ -148,7 +149,7 @@ public class SwagHandler {
     }
 
     /**
-     * 检测 HTTP 方法（简单规则：方法名包含 get/post/delete/put）
+     * 检测 HTTP 方法
      */
     private static String detectMethod(Method method) {
         String name = method.getName().toLowerCase();
@@ -167,7 +168,6 @@ public class SwagHandler {
         String contentType = "application/json";
         String example = "{}";
 
-        // 检查是否有 @ResponseBody 注解
         boolean hasResponseBody = method.isAnnotationPresent(ResponseBody.class);
         if (!hasResponseBody && returnType == String.class) {
             contentType = "text/html";
@@ -184,10 +184,6 @@ public class SwagHandler {
         } else if (returnType == boolean.class || returnType == Boolean.class) {
             contentType = "application/json";
             example = "true";
-        } else {
-            // 复杂对象，尝试生成简单示例
-            contentType = "application/json";
-            example = "{\n  \"field\": \"value\"\n}";
         }
 
         api.setResponseContentType(contentType);

@@ -3,6 +3,7 @@ package com.omni.framework.jdbc;
 
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
+import com.omni.framework.util.ReflectionUtil;
 
 import java.beans.IntrospectionException;
 import java.beans.Introspector;
@@ -146,9 +147,13 @@ public class JdbcTemplate {
     /**
      * 通用 Bean 属性 RowMapper：自动将列名（下划线转驼峰）映射到 JavaBean 属性
      */
+    /**
+     * 通用 Bean 属性 RowMapper：自动将列名（下划线转驼峰）映射到 JavaBean 属性
+     */
     public static <T> RowMapper<T> beanRowMapper(Class<T> clazz) {
         return rs -> {
-            T bean = clazz.getDeclaredConstructor().newInstance();
+            // ★ 使用工具类安全创建实例，避免无参构造缺失异常
+            T bean = ReflectionUtil.newInstance(clazz);
             ResultSetMetaData meta = rs.getMetaData();
             int columnCount = meta.getColumnCount();
             PropertyDescriptor[] props = Introspector.getBeanInfo(clazz).getPropertyDescriptors();
@@ -167,7 +172,6 @@ public class JdbcTemplate {
                     if (value != null && setter.getParameterTypes()[0].isAssignableFrom(value.getClass())) {
                         setter.invoke(bean, value);
                     } else if (value != null) {
-                        // 类型转换简单处理，可扩展
                         setter.invoke(bean, convert(value, setter.getParameterTypes()[0]));
                     }
                 }

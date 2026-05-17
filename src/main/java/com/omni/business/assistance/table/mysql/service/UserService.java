@@ -1,4 +1,3 @@
-// 文件路径: src/main/java/com/omni/business/assistance/table/mysql/service/UserService.java
 package com.omni.business.assistance.table.mysql.service;
 
 import com.omni.business.assistance.table.mysql.dto.UserResponse;
@@ -46,6 +45,7 @@ public class UserService {
     }
 
     public List<UserResponse> listAllUsers() {
+        // ★ 修正：正确接收 List<User>，而不是单个 User
         List<User> users = userMapper.getAllUsers();
         List<UserResponse> responses = new ArrayList<>();
         for (User user : users) {
@@ -58,7 +58,6 @@ public class UserService {
         User user = new User();
         user.setName(request.getName());
         user.setAge(request.getAge());
-        // 假设 id 由数据库自增，但 Mapper 未配置返回生成 key，暂不设置 id
         int rows = userMapper.insertUser(user);
         return rows > 0;
     }

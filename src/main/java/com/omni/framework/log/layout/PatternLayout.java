@@ -1,6 +1,7 @@
 package com.omni.framework.log.layout;
 
 import com.omni.framework.log.core.LogEvent;
+import com.omni.framework.util.ExceptionUtil;  // ★ 新增引用
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -36,11 +37,12 @@ public class PatternLayout extends Layout {
         }
         m.appendTail(sb);
 
-        // ★ 关键修改：如果存在异常且 pattern 中没有显式 %ex，则自动追加堆栈信息
+        // 如果存在异常且 pattern 中没有显式 %ex，则自动追加完整堆栈（包含 cause 链）
         Throwable t = event.getThrowable();
         if (t != null && !hasExplicitEx) {
             sb.append(System.lineSeparator());
-            sb.append(convert(event, "ex", null, null));
+            // ★ 使用工具类获取完整异常堆栈（包含所有 cause 链）
+            sb.append(ExceptionUtil.getFullStackTrace(t));
         }
 
         return sb.toString();
@@ -85,12 +87,8 @@ public class PatternLayout extends Layout {
             case "ex":
                 Throwable t = event.getThrowable();
                 if (t == null) return "";
-                StringBuilder sb = new StringBuilder();
-                sb.append(t.toString()).append("\n");
-                for (StackTraceElement ste : t.getStackTrace()) {
-                    sb.append("\tat ").append(ste).append("\n");
-                }
-                return sb.toString();
+                // ★ 使用工具类获取完整异常堆栈（包含所有 cause 链）
+                return ExceptionUtil.getFullStackTrace(t);
             default:
                 return "%" + keyword;
         }

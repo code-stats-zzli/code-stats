@@ -1,3 +1,4 @@
+// 文件路径: src/main/java/com/omni/business/assistance/table/mysql/controller/UserManageController.java
 package com.omni.business.assistance.table.mysql.controller;
 
 import com.omni.business.assistance.table.mysql.dto.UserCreateRequest;
@@ -12,6 +13,7 @@ import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.swag.annotation.ApiModule;
 import com.omni.framework.swag.annotation.ApiOperation;
 import com.omni.framework.util.JsonUtil;
+import com.omni.framework.spring.annotation.PathVariable;
 
 import java.util.HashMap;
 import java.util.List;
@@ -32,7 +34,7 @@ public class UserManageController {
     @ApiOperation(value = "获取用户信息", notes = "根据用户ID返回用户详情")
     @RequestMapping("/get/{id}")
     @ResponseBody
-    public String getUserById(Integer id) {
+    public String getUserById(@PathVariable("id") Integer id) {
         Map<String, Object> result = new HashMap<>();
         if (id == null || id <= 0) {
             result.put("success", false);
@@ -118,7 +120,7 @@ public class UserManageController {
     @ApiOperation(value = "删除用户", notes = "根据用户ID删除用户")
     @RequestMapping("/delete/{id}")
     @ResponseBody
-    public String deleteUser(Integer id) {
+    public String deleteUser(@PathVariable("id") Integer id) {
         Map<String, Object> result = new HashMap<>();
         if (id == null || id <= 0) {
             result.put("success", false);

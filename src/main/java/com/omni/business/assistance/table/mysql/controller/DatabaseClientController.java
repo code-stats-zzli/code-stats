@@ -167,10 +167,14 @@ public class DatabaseClientController {
      * POST /dbclient/api/sqlQuery
      * Body: {"db":"数据库名", "sql":"SELECT * FROM user"}
      */
+    /**
+     * 执行自定义SQL查询
+     * POST /dbclient/api/sqlQuery
+     * Body: {"db":"数据库名", "sql":"SELECT * FROM user"}
+     */
     @RequestMapping("/api/sqlQuery")
     @ResponseBody
-    public String executeSql(@RequestBody String body) {
-        Map<String, Object> req = JsonUtil.parseJson(body);
+    public String executeSql(@RequestBody Map<String, Object> req) {
         String db = (String) req.get("db");
         String sql = (String) req.get("sql");
         if (db == null || sql == null) {

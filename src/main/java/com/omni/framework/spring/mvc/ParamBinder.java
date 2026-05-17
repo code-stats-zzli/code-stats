@@ -68,7 +68,7 @@ public class ParamBinder {
                     throw new IllegalArgumentException("Missing request body");
                 }
                 if (body != null && !body.trim().isEmpty()) {
-                    args[i] = objectMapper.readValue(body, type);
+                    args[i] = type == String.class ? body :objectMapper.readValue(body, type);
                 } else {
                     args[i] = null;
                 }

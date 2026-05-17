@@ -28,8 +28,8 @@
         <appender-ref ref="FILE"/>
     </appender>
 
-    <logger name="com.demo" level="DEBUG" additivity="false">
-        <appender-ref ref="ASYNC"/>
+    <logger name="com.omni" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
     </logger>
 
     <root level="INFO">

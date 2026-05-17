@@ -128,6 +128,8 @@ public class DispatcherServlet extends HttpServlet {
             res.setStatus(404, "Not Found");
             res.write("<h1>404 - Not Found</h1>");
             res.send();
+        } catch (Throwable e) {
+            log.error("processRequest error:",e);
         } finally {
             RequestContextHolder.clear();
             ResponseContextHolder.clear();

@@ -53,7 +53,7 @@ public class Configuration {
             if (layoutNodes.getLength() > 0) {
                 Element layoutElem = (Element) layoutNodes.item(0);
                 String layoutClass = layoutElem.getAttribute("class");
-                if ("com.framework.log.layout.PatternLayout".equals(layoutClass)) {
+                if ("com.omni.framework.log.layout.PatternLayout".equals(layoutClass)) {
                     String pattern = getParamValue(layoutElem, "pattern", properties);
                     if (pattern == null) pattern = "%d [%t] %-5level %logger - %msg%n";
                     PatternLayout layout = new PatternLayout(replaceProperties(pattern, properties));
@@ -65,7 +65,7 @@ public class Configuration {
             for (int j = 0; j < filterNodes.getLength(); j++) {
                 Element filterElem = (Element) filterNodes.item(j);
                 String filterClass = filterElem.getAttribute("class");
-                if ("com.framework.log.filter.LevelRangeFilter".equals(filterClass)) {
+                if (("com.omni.framework.log.filter.LevelRangeFilter").equals(filterClass)) {
                     LevelRangeFilter filter = new LevelRangeFilter();
                     String min = getParamValue(filterElem, "minLevel", properties);
                     String max = getParamValue(filterElem, "maxLevel", properties);
@@ -99,8 +99,9 @@ public class Configuration {
         if (rootNodes.getLength() > 0) {
             Element rootElem = (Element) rootNodes.item(0);
             String levelStr = rootElem.getAttribute("level");
+            boolean additivity = "true".equals(rootElem.getAttribute("additivity"));
             Level level = Level.toLevel(levelStr);
-            rootConfig = new LoggerConfig("ROOT", level, true);
+            rootConfig = new LoggerConfig("ROOT", level, additivity);
             NodeList refs = rootElem.getElementsByTagName("appender-ref");
             for (int j = 0; j < refs.getLength(); j++) {
                 String ref = ((Element) refs.item(j)).getAttribute("ref");

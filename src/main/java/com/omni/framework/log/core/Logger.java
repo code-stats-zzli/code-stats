@@ -102,7 +102,7 @@ public class Logger {
             appender.doAppend(event);
         }
         // 支持 additivity 传播到父 Logger
-        if (config.additive && !"ROOT".equals(name)) {
+        if (config.additive && !"ROOT".equals(config.name)) {
             propagateToParent(level, msg, t);
         }
     }

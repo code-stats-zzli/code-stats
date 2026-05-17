@@ -21,10 +21,10 @@ public class UserService {
     }
 
     public String getUserNameById(Integer id) {
-        return userMapper.selectUserNameById(id);
+        return "";
     }
 
     public List<String> getAllUserNames() {
-        return userMapper.selectAllUserNames();
+        return null;
     }
 }

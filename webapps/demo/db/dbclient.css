@@ -23,3 +23,97 @@ body { font-family: 'Inter', sans-serif; display: flex; height:100vh; background
 table { width:100%; margin-top:10px; }
 .props-table td:first-child { font-weight:600; width:180px; color:var(--accent-primary); }
 .empty-state, .error { padding:20px; color:var(--text-muted); font-style:italic; }
+/* 数据表样式 */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.data-table th {
+    background: rgba(0,102,255,0.15);
+    padding: 8px;
+    position: sticky;
+    top: 0;
+}
+.data-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(0,102,255,0.1);
+}
+.pagination button {
+    margin: 0 4px;
+    padding: 4px 10px;
+    background: rgba(0,102,255,0.1);
+    border: 1px solid rgba(0,102,255,0.3);
+    border-radius: 20px;
+    cursor: pointer;
+}
+.pagination button.active {
+    background: var(--accent-primary);
+    color: white;
+}
+.sql-editor textarea {
+    width: 100%;
+    font-family: monospace;
+    background: #f8fafc;
+    color: #1e293b;
+}
+.sql-result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.sql-result-table th, .sql-result-table td {
+    border: 1px solid #cbd5e1;
+    padding: 6px;
+}
+/* 数据表样式 */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.data-table th {
+    background: rgba(0,102,255,0.15);
+    padding: 8px;
+    position: sticky;
+    top: 0;
+}
+.data-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(0,102,255,0.1);
+}
+.pagination button {
+    margin: 0 4px;
+    padding: 4px 10px;
+    background: rgba(0,102,255,0.1);
+    border: 1px solid rgba(0,102,255,0.3);
+    border-radius: 20px;
+    cursor: pointer;
+}
+.pagination button.active {
+    background: var(--accent-primary);
+    color: white;
+}
+.sql-editor textarea {
+    width: 100%;
+    font-family: monospace;
+    background: #f8fafc;
+    color: #1e293b;
+}
+.sql-result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.sql-result-table th, .sql-result-table td {
+    border: 1px solid #cbd5e1;
+    padding: 6px;
+}
+.loading, .error, .empty-state {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-muted);
+}
+.error {
+    color: #dc2626;
+}

@@ -1,12 +1,11 @@
 package com.omni.framework.util;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.Collection;
-import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 轻量级 JSON 序列化工具，增强版支持任意 JavaBean 的反射序列化。
@@ -14,6 +13,8 @@ import java.util.Set;
  * 自动忽略 static 和 transient 字段，防止循环引用导致栈溢出。
  */
 public class JsonUtil {
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 将任意 Java 对象序列化为 JSON 字符串。
@@ -167,5 +168,68 @@ public class JsonUtil {
             }
         }
         return sb.toString();
+    }
+
+
+
+    // 原有 toJson 方法保持不变 ...
+
+    /**
+     * 将 JSON 字符串解析为 Map<String, Object>
+     * @param json JSON 字符串
+     * @return 解析后的 Map，若解析失败返回空 Map
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> parseJson(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return new HashMap<>();
+        }
+        try {
+            return objectMapper.readValue(json, Map.class);
+        } catch (Exception e) {
+            // 降级：尝试使用简单的手工解析（兼容原有简单格式）
+            return simpleParseJson(json);
+        }
+    }
+
+    /**
+     * 将 JSON 字符串解析为指定类型的对象
+     * @param json JSON 字符串
+     * @param clazz 目标类型
+     * @return 解析后的对象
+     */
+    public static <T> T parseJson(String json, Class<T> clazz) {
+        if (json == null || json.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, clazz);
+        } catch (Exception e) {
+            throw new RuntimeException("JSON 解析失败: " + json, e);
+        }
+    }
+
+    /**
+     * 简单的 JSON 解析（仅支持扁平结构，作为 Jackson 失败时的降级）
+     */
+    private static Map<String, Object> simpleParseJson(String json) {
+        Map<String, Object> map = new HashMap<>();
+        if (json == null || json.trim().isEmpty()) return map;
+        String trimmed = json.trim();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            String inner = trimmed.substring(1, trimmed.length() - 1);
+            if (inner.isEmpty()) return map;
+            // 按逗号分割，但要注意字符串内的逗号不分割（简单实现不处理复杂嵌套）
+            String[] pairs = inner.split(",");
+            for (String pair : pairs) {
+                String[] kv = pair.split(":", 2);
+                if (kv.length == 2) {
+                    String key = kv[0].trim().replaceAll("^\"|\"$", "");
+                    String value = kv[1].trim().replaceAll("^\"|\"$", "");
+                    map.put(key, value);
+                }
+            }
+        }
+        return map;
     }
 }

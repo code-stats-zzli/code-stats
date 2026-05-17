@@ -5,7 +5,7 @@
     <title>Database Explorer</title>
     <link rel="stylesheet" href="../global-tech.css">
     <link rel="stylesheet" href="dbclient.css">
-    <script src="../global.js"></script>   <!-- 新增 -->
+    <script src="../global.js"></script>
 </head>
 <body>
 <div class="sidebar">
@@ -19,13 +19,81 @@
         <button class="tab-btn active" data-tab="properties">属性</button>
         <button class="tab-btn" data-tab="data">数据</button>
         <button class="tab-btn" data-tab="diagram">图</button>
+        <button class="tab-btn" data-tab="sql">SQL查询</button>
     </div>
     <div class="tab-content">
-        <div class="tab-pane active" id="tab-properties"><div id="propertiesContent"><h2>Select a table</h2></div></div>
-        <div class="tab-pane" id="tab-data"><div id="dataContent"><p>数据视图（暂无数据）</p></div></div>
-        <div class="tab-pane" id="tab-diagram"><div id="diagramContent"><p>ER图（未实现）</p></div></div>
+        <div class="tab-pane active" id="tab-properties">
+            <div id="propertiesContent"><h2>Select a table</h2></div>
+        </div>
+        <div class="tab-pane" id="tab-data">
+            <div id="dataContent">
+                <div id="dataTableWrapper"></div>
+                <div id="paginationBar" style="margin-top: 16px; display: flex; gap: 8px; align-items: center;"></div>
+            </div>
+        </div>
+        <div class="tab-pane" id="tab-diagram">
+            <div id="diagramContent"><p>ER图（未实现）</p></div>
+        </div>
+        <div class="tab-pane" id="tab-sql">
+            <div class="sql-editor">
+                <div style="margin-bottom: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button id="exampleSqlBtn" class="btn-secondary">📋 示例SQL（当前表）</button>
+                    <button id="executeSqlBtn" class="btn-primary">🚀 执行查询</button>
+                </div>
+                <textarea id="sqlEditor" rows="6" placeholder="输入SQL查询语句，例如：SELECT * FROM user LIMIT 10"></textarea>
+                <div id="sqlResultArea" style="margin-top: 16px; overflow-x: auto;"></div>
+            </div>
+        </div>
     </div>
 </div>
-<script src="dbclient.js"></script>
+
+<!-- 按顺序加载脚本模块 -->
+<script src="dbclient-core.js"></script>
+<script src="dbclient-tree.js"></script>
+<script src="dbclient-properties.js"></script>
+<script src="dbclient-data.js"></script>
+<script src="dbclient-sql.js"></script>
+
+<!-- 主入口脚本：等待DOM加载完成后初始化 -->
+<script>
+    (function() {
+        function initAll() {
+            // 初始化核心模块
+            DB.init();
+            // 初始化各功能模块（它们内部会获取DOM元素并绑定事件）
+            TreeModule.init();
+            PropertiesModule.init();
+            DataModule.init();
+            SqlModule.init();
+
+            // 绑定Tab切换事件（必须等DOM元素存在）
+            const tabBtns = document.querySelectorAll('.tab-btn');
+            const tabPanes = document.querySelectorAll('.tab-pane');
+
+            function switchTab(tabName) {
+                tabBtns.forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.tab === tabName);
+                });
+                tabPanes.forEach(pane => {
+                    pane.classList.toggle('active', pane.id === `tab-${tabName}`);
+                });
+                // 切换到数据Tab时，如果有选中的表则刷新数据
+                if (tabName === 'data' && DB.currentTable) {
+                    DataModule.loadTableData();
+                }
+            }
+
+            tabBtns.forEach(btn => {
+                btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initAll);
+        } else {
+            initAll();
+        }
+    })();
+</script>
 </body>
 </html>

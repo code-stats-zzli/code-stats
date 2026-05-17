@@ -1,12 +1,10 @@
 package com.omni.business.assistance.table.mysql.controller;
 
+import com.omni.business.assistance.table.mysql.service.TableDataService;
 import com.omni.framework.jdbc.metedata.datamodel.DataModel;
 import com.omni.framework.jdbc.metedata.service.DatabaseMetadataService;
 
-import com.omni.framework.spring.annotation.Autowired;
-import com.omni.framework.spring.annotation.Controller;
-import com.omni.framework.spring.annotation.RequestMapping;
-import com.omni.framework.spring.annotation.ResponseBody;
+import com.omni.framework.spring.annotation.*;
 import com.omni.framework.spring.mvc.RequestContextHolder;
 import com.omni.framework.tomcat.connector.Request;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
@@ -15,12 +13,19 @@ import com.omni.framework.util.JsonUtil;
 import java.net.URLDecoder;
 import java.util.*;
 
+import static com.omni.framework.util.ParamUtils.parseQueryParams;
+
 @Controller
 @RequestMapping("/dbclient")
 public class DatabaseClientController {
 
     @Autowired
     private DatabaseMetadataService metadataService;
+
+    // 在类中添加以下两个方法
+
+    @Autowired
+    private TableDataService tableDataService;   // 注入服务
 
     @RequestMapping("/api/databases")
     @ResponseBody
@@ -124,5 +129,58 @@ public class DatabaseClientController {
             }
         }
         return map;
+    }
+
+
+
+    /**
+     * 获取表数据（分页）
+     * GET /dbclient/api/tableData?db=xxx&table=xxx&page=1&pageSize=20
+     */
+    @RequestMapping("/api/tableData")
+    @ResponseBody
+    public String getTableData() {
+        Map<String, String> params = parseQueryParams();
+        String db = params.get("db");
+        String table = params.get("table");
+        if (db == null || table == null) {
+            return buildErrorJson("缺少参数 db 或 table");
+        }
+        int page = 1;
+        int pageSize = 20;
+        try {
+            page = Integer.parseInt(params.getOrDefault("page", "1"));
+            pageSize = Integer.parseInt(params.getOrDefault("pageSize", "20"));
+            if (page < 1) page = 1;
+            if (pageSize < 1 || pageSize > 200) pageSize = 20;
+        } catch (NumberFormatException ignored) {}
+        try {
+            Map<String, Object> result = tableDataService.getTableData(db, table, page, pageSize);
+            return JsonUtil.toJson(result);
+        } catch (Exception e) {
+            return buildErrorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * 执行自定义SQL查询
+     * POST /dbclient/api/sqlQuery
+     * Body: {"db":"数据库名", "sql":"SELECT * FROM user"}
+     */
+    @RequestMapping("/api/sqlQuery")
+    @ResponseBody
+    public String executeSql(@RequestBody String body) {
+        Map<String, Object> req = JsonUtil.parseJson(body);
+        String db = (String) req.get("db");
+        String sql = (String) req.get("sql");
+        if (db == null || sql == null) {
+            return buildErrorJson("缺少参数 db 或 sql");
+        }
+        try {
+            List<Map<String, Object>> result = tableDataService.executeCustomSql(db, sql);
+            return JsonUtil.toJson(result);
+        } catch (Exception e) {
+            return buildErrorJson(e.getMessage());
+        }
     }
 }

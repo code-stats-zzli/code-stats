@@ -45,6 +45,28 @@ const DBModule = (function() {
             console.error('加载表列表失败', err);
             tableContainer.innerHTML = '<div class="error">加载失败</div>';
         }
+    }// dbclient-db.js - 修改默认选中第一张表
+// 在原 DBModule 的 loadTables 方法最后添加自动选中逻辑
+    async function loadTables(dbName) {
+        try {
+            const tables = await DB.fetchJSON(DB.apiBase + '/tables?db=' + encodeURIComponent(dbName));
+            allTables = tables.map(t => t.name);
+            renderTableList(allTables);
+            // ★ 新增：自动选中第一张表
+            if (allTables.length > 0 && !DB.getCurrentTable()) {
+                const firstTable = allTables[0];
+                DB.setCurrentTable(firstTable);
+                // 触发各模块加载
+                PropertiesModule.loadProperties(dbName, firstTable);
+                DataModule.resetAndLoad(dbName, firstTable);
+                if (window.__refreshSqlHints) window.__refreshSqlHints();
+                // 更新视图源字段
+                if (window.ViewModule) window.ViewModule.updateCurrentViewSql();
+            }
+        } catch (err) {
+            console.error('加载表列表失败', err);
+            tableContainer.innerHTML = '<div class="error">加载失败</div>';
+        }
     }
 
     function renderTableList(tables) {
@@ -58,7 +80,7 @@ const DBModule = (function() {
         for (const t of tables) {
             const activeClass = (currentTable === t) ? 'active' : '';
             html += `
-                <div class="table-item ${activeClass}" data-table="${DB.escapeHtml(t)}">
+                <div class="table-item ${activeClass}" data-table="${DB.escapeHtml(t)}" draggable="true">
                     <span class="icon">📄</span>
                     <span class="name">${DB.escapeHtml(t)}</span>
                 </div>

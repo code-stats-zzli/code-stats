@@ -13,6 +13,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class Connector implements Lifecycle {
     private static final Logger log = LoggerFactory.getLogger(Connector.class);
@@ -69,7 +70,19 @@ public class Connector implements Lifecycle {
     @Override
     public void stop() { running = false; try { if (serverSocket != null) serverSocket.close(); } catch (IOException e) { log.warn("Close server socket error", e); } }
     @Override
-    public void destroy() { stop(); if (threadPool != null) threadPool.shutdown(); }
+    public void destroy() {
+        stop();
+        if (threadPool != null && !threadPool.isShutdown()) {
+            threadPool.shutdownNow();
+            try {
+                if (!threadPool.awaitTermination(5, TimeUnit.SECONDS)) {
+                    log.warn("Thread pool did not terminate gracefully");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
     @Override public void addLifecycleListener(LifecycleListener listener) {}
     @Override public LifecycleListener[] findLifecycleListeners() { return new LifecycleListener[0]; }
     @Override public void removeLifecycleListener(LifecycleListener listener) {}

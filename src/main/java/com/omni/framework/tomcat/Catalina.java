@@ -1,5 +1,6 @@
 package com.omni.framework.tomcat;
 
+import com.omni.framework.jdbc.DataSourceUtils;
 import com.omni.framework.spring.config.ConfigLoader;
 import com.omni.framework.tomcat.connector.Connector;
 import com.omni.framework.tomcat.container.*;
@@ -57,7 +58,9 @@ public class Catalina {
     }
 
     public void stop() {
-        server.stop();
-        server.destroy();
+        if (server != null) {
+            server.stop();
+            server.destroy();
+        }
     }
 }

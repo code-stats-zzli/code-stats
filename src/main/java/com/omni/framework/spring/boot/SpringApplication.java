@@ -1,5 +1,6 @@
 package com.omni.framework.spring.boot;
 
+import com.omni.framework.jdbc.DataSourceUtils;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.config.ConfigLoader;
@@ -7,12 +8,12 @@ import com.omni.framework.spring.context.SpringContextHolder;
 import com.omni.framework.spring.context.support.AnnotationConfigApplicationContext;
 import com.omni.framework.tomcat.Catalina;
 
+import java.util.concurrent.CountDownLatch;
+
 public class SpringApplication {
     private static final Logger log = LoggerFactory.getLogger(SpringApplication.class);
 
     public static void run(Class<?> primarySource, String[] args) {
-
-
         long startTime = System.currentTimeMillis();
 
         // 1. 创建并刷新 ApplicationContext
@@ -34,19 +35,37 @@ public class SpringApplication {
         // 3. 总启动耗时
         long totalTime = tomcatEnd - startTime;
         log.info("Omni startup time: {} ms", totalTime);
-        // 打印启动图标
         printBanner();
-        // 4. 从配置中获取端口和 context path，动态输出访问地址
+
+        // 4. 输出访问地址
         int port = Integer.parseInt(ConfigLoader.getProperty("server.port", "8080"));
         String contextPath = ConfigLoader.getProperty("context.path", "/omni");
         log.info("Access http://localhost:{}{}/demo/index.html", port, contextPath);
 
-        // 5. 等待（保持主线程存活）
+        // 5. 优雅关闭：等待关闭信号（Ctrl+C 或 IDEA 停止按钮）
+        final CountDownLatch latch = new CountDownLatch(1);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            log.info("Shutdown hook triggered, stopping Tomcat...");
+            try {
+                catalina.stop();
+                context.getBeanFactory().destroySingletons();// 关闭数据库连接池
+                DataSourceUtils.closePool();
+                log.info("Catalina stopped and resources released.");
+                log.info("Tomcat stopped successfully.");
+            } catch (Exception e) {
+                log.error("Error during shutdown", e);
+            } finally {
+                latch.countDown();
+            }
+        }));
+
         try {
-            Thread.sleep(Long.MAX_VALUE);
+            latch.await();  // 等待关闭信号
         } catch (InterruptedException e) {
-            log.error("Main thread interrupted", e);
+            Thread.currentThread().interrupt();
+            log.warn("Main thread interrupted");
         }
+        log.info("Application shutdown complete.");
     }
 
     private static void printBanner() {

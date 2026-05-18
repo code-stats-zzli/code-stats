@@ -8,65 +8,81 @@
     <script src="../global.js"></script>
 </head>
 <body>
-<div class="sidebar">
-    <div class="tree-nav">
-        <h3>Connections</h3>
-        <ul class="tree-root" id="treeRoot"></ul>
-    </div>
-</div>
-<div class="main">
-    <div class="tab-header">
-        <button class="tab-btn active" data-tab="properties">属性</button>
-        <button class="tab-btn" data-tab="data">数据</button>
-        <button class="tab-btn" data-tab="diagram">图</button>
-        <button class="tab-btn" data-tab="sql">SQL查询</button>
-    </div>
-    <div class="tab-content">
-        <div class="tab-pane active" id="tab-properties">
-            <div id="propertiesContent"><h2>Select a table</h2></div>
+<div class="db-layout">
+    <!-- 顶部工具栏：只保留数据库选择器 -->
+    <div class="db-toolbar">
+        <div class="db-selector">
+            <label>数据库：</label>
+            <select id="dbSelect"></select>
         </div>
-        <div class="tab-pane" id="tab-data">
-            <div id="dataContent">
-                <div id="dataTableWrapper"></div>
-                <div id="paginationBar" style="margin-top: 16px; display: flex; gap: 8px; align-items: center;"></div>
+    </div>
+
+    <!-- 主体：左侧表列表 + 右侧内容区 -->
+    <div class="db-main-row">
+        <div class="table-list-panel">
+            <h3>📋 表列表</h3>
+            <!-- 过滤表输入框移至表列表顶部 -->
+            <div class="table-filter-inline">
+                <input type="text" id="tableFilter" placeholder="输入表名过滤...">
             </div>
+            <div id="tableListContainer" class="table-list"></div>
         </div>
-        <div class="tab-pane" id="tab-diagram">
-            <div id="diagramContent"><p>ER图（未实现）</p></div>
-        </div>
-        <div class="tab-pane" id="tab-sql">
-            <div class="sql-editor">
-                <div style="margin-bottom: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
-                    <button id="exampleSqlBtn" class="btn-secondary">📋 示例SQL（当前表）</button>
-                    <button id="executeSqlBtn" class="btn-primary">🚀 执行查询</button>
-                    <button id="formatSqlBtn" class="btn-secondary">✨ 格式化SQL</button>
+        <div class="content-panel">
+            <div class="tab-header">
+                <button class="tab-btn active" data-tab="properties">属性</button>
+                <button class="tab-btn" data-tab="data">数据</button>
+                <button class="tab-btn" data-tab="diagram">图</button>
+                <button class="tab-btn" data-tab="sql">SQL查询</button>
+            </div>
+            <div class="tab-content">
+                <div class="tab-pane active" id="tab-properties">
+                    <div id="propertiesContent"><h2>请从左侧选择一张表</h2></div>
                 </div>
-                <!-- CodeMirror 容器 -->
-                <textarea id="sqlEditor" rows="6" placeholder="输入SQL查询语句，例如：SELECT * FROM user LIMIT 10"></textarea>
-                <div id="sqlResultArea" style="margin-top: 16px; overflow-x: auto;"></div>
+                <div class="tab-pane" id="tab-data">
+                    <div id="dataContent">
+                        <div id="dataTableWrapper"></div>
+                        <div id="paginationBar" style="margin-top: 16px;"></div>
+                    </div>
+                </div>
+                <div class="tab-pane" id="tab-diagram">
+                    <div id="diagramContent"><p>ER图（未实现）</p></div>
+                </div>
+                <div class="tab-pane" id="tab-sql">
+                    <div class="sql-editor">
+                        <div style="margin-bottom: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button id="exampleSqlBtn" class="btn-secondary">📋 示例SQL（当前表）</button>
+                            <button id="executeSqlBtn" class="btn-primary">🚀 执行查询</button>
+                            <button id="formatSqlBtn" class="btn-secondary">✨ 格式化SQL</button>
+                            <button id="clearSqlBtn" class="btn-secondary">🗑️ 清空SQL</button>
+                        </div>
+                        <textarea id="sqlEditor" rows="6" placeholder="输入SQL查询语句，例如：SELECT * FROM user LIMIT 10"></textarea>
+                        <div id="sqlResultArea" style="margin-top: 16px; overflow-x: auto;"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- 原有模块脚本 -->
 <script src="dbclient-core.js"></script>
-<script src="dbclient-tree.js"></script>
 <script src="dbclient-properties.js"></script>
 <script src="dbclient-data.js"></script>
-<!-- 新的增强版 SQL 编辑器 -->
 <script src="dbclient-sql-enhanced.js"></script>
+<script src="dbclient-db.js"></script>
 
 <script>
     (function() {
         function initAll() {
             DB.init();
-            TreeModule.init();
             PropertiesModule.init();
             DataModule.init();
-            // 增强版 SQL 模块（已经自行初始化）
-            // 无需再调用旧版 SqlModule
+            if (window.DBModule && typeof window.DBModule.init === 'function') {
+                window.DBModule.init();
+            } else {
+                console.error('DBModule not loaded');
+            }
 
+            // 标签页切换
             const tabBtns = document.querySelectorAll('.tab-btn');
             const tabPanes = document.querySelectorAll('.tab-pane');
 
@@ -77,7 +93,7 @@
                 tabPanes.forEach(pane => {
                     pane.classList.toggle('active', pane.id === `tab-${tabName}`);
                 });
-                if (tabName === 'data' && DB.currentTable) {
+                if (tabName === 'data' && DB.getCurrentTable()) {
                     DataModule.loadTableData();
                 }
             }

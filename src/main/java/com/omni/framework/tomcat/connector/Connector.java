@@ -11,6 +11,7 @@ import com.omni.framework.log.core.Logger;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -38,8 +39,21 @@ public class Connector implements Lifecycle {
                 serverSocket = new ServerSocket(port);
                 log.info("Connector listening on {}", port);
                 while (running) {
-                    Socket socket = serverSocket.accept();
-                    threadPool.submit(() -> process(socket));
+                    try {
+                        Socket socket = serverSocket.accept();
+                        threadPool.submit(() -> process(socket));
+                    } catch (SocketException e) {
+                        // 当 serverSocket.close() 被调用时，accept() 会抛出 SocketException
+                        // 这是正常的停止信号，不打印错误栈
+                        if (running) {
+                            log.error("Socket error while running", e);
+                        } else {
+                            log.info("Connector stopped, accept interrupted.");
+                        }
+                        break;  // 退出循环
+                    } catch (IOException e) {
+                        log.error("Accept failed", e);
+                    }
                 }
             } catch (IOException e) {
                 log.error("Connector error", e);
@@ -68,8 +82,17 @@ public class Connector implements Lifecycle {
     }
 
     @Override
-    public void stop() { running = false; try { if (serverSocket != null) serverSocket.close(); } catch (IOException e) { log.warn("Close server socket error", e); } }
-    @Override
+    public void stop() {
+        running = false;
+        try {
+            if (serverSocket != null && !serverSocket.isClosed()) {
+                serverSocket.close();
+            }
+        } catch (IOException e) {
+            log.warn("Close server socket error", e);
+        }
+        // 可选：等待现有请求处理完（简化）
+    }@Override
     public void destroy() {
         stop();
         if (threadPool != null && !threadPool.isShutdown()) {

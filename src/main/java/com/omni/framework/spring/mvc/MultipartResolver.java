@@ -49,7 +49,7 @@ public class MultipartResolver {
             if (filename != null) {
                 fileFields.put(name, content.toByteArray());
             } else {
-                textFields.put(name, content.toString(StandardCharsets.UTF_8));
+                textFields.put(name, content.toString(String.valueOf(StandardCharsets.UTF_8)));
             }
             // 检查下一个 boundary
             if (isFinalBoundary()) break;
@@ -88,7 +88,7 @@ public class MultipartResolver {
                     // 空行结束 headers
                     return headers;
                 }
-                String line = lineBuf.toString(StandardCharsets.US_ASCII);
+                String line = lineBuf.toString(String.valueOf(StandardCharsets.US_ASCII));
                 lineBuf.reset();
                 int colon = line.indexOf(':');
                 if (colon > 0) {

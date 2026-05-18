@@ -4,6 +4,7 @@ package com.omni.framework.tomcat.connector;
 
 import com.omni.framework.spring.mvc.MessageConverters;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
+import com.omni.framework.util.FileUtils;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -144,7 +145,7 @@ public class Response implements HttpServletResponse {
             }
             pw.print("\r\n");
             pw.flush();
-            inputStream.transferTo(output);
+            FileUtils.transferTo(inputStream, output);
             output.flush();
         }
         committed = true;

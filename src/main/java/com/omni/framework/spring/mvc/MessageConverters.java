@@ -1,5 +1,6 @@
 package com.omni.framework.spring.mvc;
 
+import com.omni.framework.util.FileUtils;
 import com.omni.framework.util.JsonUtil;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -50,7 +51,7 @@ public class MessageConverters {
         }
         @Override
         public String read(InputStream inputStream, Class<?> clazz) throws IOException {
-            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            return FileUtils.readInputStreamToString(inputStream);
         }
         @Override
         public boolean canWrite(Class<?> clazz, String acceptType) {
@@ -70,7 +71,7 @@ public class MessageConverters {
         }
         @Override
         public Object read(InputStream inputStream, Class<?> clazz) throws IOException {
-            String json = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            String json = FileUtils.readInputStreamToString(inputStream);
             // 简易反序列化：此处仅演示，实际可用 Jackson 或反射
             // 由于 JsonUtil 只提供序列化，这里简单返回字符串，用户可根据需要扩展
             return json;

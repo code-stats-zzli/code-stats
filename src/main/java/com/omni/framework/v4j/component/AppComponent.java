@@ -42,7 +42,7 @@ public  class AppComponent extends Component {
 
     {
         // 设置模板字符串
-        template = """
+        template =""; /*"""
             <div style="%s">
                 <h1>{{ title }}</h1>
                 <p>Count: {{ data.count }}</p>
@@ -50,14 +50,14 @@ public  class AppComponent extends Component {
                 <button onclick="increment()">+</button>
                 <button onclick="decrement()">-</button>
             </div>
-        """.formatted(getStyleString());  // 注意：这里需要动态获取样式，实际应在 render 时读取
+        """.formatted(getStyleString()); */ // 注意：这里需要动态获取样式，实际应在 render 时读取
         // 为了动态样式，重写 render 方法会更准确，但这里简单演示
     }
 
     // 为了让模板中使用动态样式，重写 render
     @Override
     public void render() {
-        String dynamicTemplate = """
+        String dynamicTemplate = template ="";/* """
             <div style="%s">
                 <h1>{{ title }}</h1>
                 <p>Count: {{ data.count }}</p>
@@ -65,7 +65,7 @@ public  class AppComponent extends Component {
                 <button>+</button>
                 <button>-</button>
             </div>
-        """.formatted(getStyleString());
+        """.formatted(getStyleString());*/
         // 重新编译模板
         String rendered = compileTemplate(dynamicTemplate);
         System.out.println("[Render] 组件渲染:\n" + rendered);

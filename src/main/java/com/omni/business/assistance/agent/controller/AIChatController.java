@@ -7,6 +7,7 @@ import com.omni.framework.spring.annotation.RequestMapping;
 import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.spring.mvc.RequestContextHolder;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
+import com.omni.framework.util.DataUtil;
 import com.omni.framework.util.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -50,7 +51,7 @@ public class AIChatController {
                     messages.add(m);
                 }
             } else if (question != null && !question.trim().isEmpty()) {
-                messages.add(Map.of("role", "user", "content", question));
+                messages.add(DataUtil.toMap("role", "user", "content", question));
             }
 
             if (messages.isEmpty()) {
@@ -78,13 +79,13 @@ public class AIChatController {
             JsonNode root = objectMapper.readTree(body);
             String sessionId = root.has("sessionId") ? root.get("sessionId").asText() : null;
             if (sessionId != null) chatService.closeSession(sessionId);
-            return JsonUtil.toJson(Map.of("success", true));
+            return JsonUtil.toJson(DataUtil.toMap("success", true));
         } catch (Exception e) {
             return errorResponse(e.getMessage());
         }
     }
 
     private String errorResponse(String msg) {
-        return JsonUtil.toJson(Map.of("success", false, "error", msg));
+        return JsonUtil.toJson(DataUtil.toMap("success", false, "error", msg));
     }
 }

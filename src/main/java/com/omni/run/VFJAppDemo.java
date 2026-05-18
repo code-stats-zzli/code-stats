@@ -1,3 +1,4 @@
+/*
 package com.omni.run;
 
 
@@ -54,13 +55,15 @@ class CounterComponent extends Component {
     }
 
     {
-        template = """
+        template = "";*/
+/*"
             <div class="counter" style="%s">
                 <h2>计数: {{ data.count }}</h2>
                 <button @click="add">增加</button>
                 <button @click="sub">减少</button>
             </div>
-        """;
+        """;*//*
+
     }
 
     @Override
@@ -96,4 +99,4 @@ class UserCardComponent extends Component {
             </div>
         """;
     }
-}
+}*/

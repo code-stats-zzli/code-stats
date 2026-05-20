@@ -22,3 +22,16 @@ CREATE TABLE IF NOT EXISTS `datasource_config` (
 -- 插入一条示例数据（可选）
 INSERT INTO `datasource_config` (`id`, `name`, `db_type`, `host`, `port`, `database_name`, `username`, `password`, `driver_class`, `version`, `status`)
 VALUES (REPLACE(UUID(), '-', ''), '本地MySQL', 'mysql', 'localhost', 3306, 'test', 'root', '123456', 'com.mysql.cj.jdbc.Driver', '8.0', 1);
+
+-- 1. 驱动表（Jar 存储在数据库）
+CREATE TABLE `driver_jar` (
+      `id` VARCHAR(32) PRIMARY KEY COMMENT 'UUID',
+      `code` VARCHAR(64) NOT NULL UNIQUE COMMENT '驱动编码',
+      `name` VARCHAR(100) NOT NULL COMMENT '驱动显示名称',
+      `jar_data` LONGBLOB NOT NULL COMMENT 'Jar文件二进制数据',
+      `file_name` VARCHAR(100) NOT NULL COMMENT '原始文件名',
+      `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. 数据源表（新增 driver_code 字段）
+ALTER TABLE `datasource_config` ADD COLUMN `driver_code` VARCHAR(64) DEFAULT NULL COMMENT '关联的驱动编码';

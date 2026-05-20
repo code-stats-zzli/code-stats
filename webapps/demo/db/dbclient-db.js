@@ -2,11 +2,10 @@
 const DBModule = (function() {
     let tableFilter = null;
     let tableContainer = null;
-    let allTables = [];           // 存储 { database, name, type }
+    let allTables = [];
     let currentFilter = '';
-    let currentRequest = null;    // AbortController 引用
+    let currentRequest = null;
 
-    // 加载所有表（支持请求取消）
     async function loadAllTables() {
         if (!tableContainer) {
             console.error('tableContainer 未找到');
@@ -17,14 +16,12 @@ const DBModule = (function() {
             return;
         }
 
-        // 取消正在进行的请求
         if (currentRequest) currentRequest.abort();
         currentRequest = new AbortController();
         const signal = currentRequest.signal;
 
         tableContainer.innerHTML = '<div class="loading">加载表列表中...</div>';
         try {
-            // 注意：DB.fetchJSON 会自动附加 dsId 参数
             const url = DB.apiBase + '/tables/all';
             const resp = await fetch(url + (url.includes('?') ? '&' : '?') + `dsId=${currentDataSourceId}`, { signal });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -32,10 +29,7 @@ const DBModule = (function() {
             allTables = tables;
             renderTableList(allTables);
         } catch (err) {
-            if (err.name === 'AbortError') {
-                console.log('表加载请求已取消');
-                return;
-            }
+            if (err.name === 'AbortError') return;
             console.error('加载表列表失败', err);
             tableContainer.innerHTML = '<div class="error">加载失败，请检查网络或数据源配置</div>';
         } finally {
@@ -43,7 +37,6 @@ const DBModule = (function() {
         }
     }
 
-    // 渲染表列表（支持过滤）
     function renderTableList(tables) {
         if (!tableContainer) return;
         const filterText = currentFilter.toLowerCase();
@@ -61,17 +54,15 @@ const DBModule = (function() {
         let html = '';
         for (const t of filtered) {
             const activeClass = (DB.getCurrentTable() === t.name && DB.getCurrentDb() === t.database) ? 'active' : '';
-            const displayName = `${escapeHtml(t.database)}.${escapeHtml(t.name)}`;
             html += `
                 <div class="table-item ${activeClass}" data-table="${escapeHtml(t.name)}" data-database="${escapeHtml(t.database)}">
                     <span class="icon">📄</span>
-                    <span class="name">${displayName}</span>
+                    <span class="name">${escapeHtml(t.name)}</span>
                 </div>
             `;
         }
         tableContainer.innerHTML = html;
 
-        // 绑定点击事件
         document.querySelectorAll('.table-item').forEach(el => {
             el.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -82,9 +73,20 @@ const DBModule = (function() {
                 }
             });
         });
+
+        // 默认选中第一张表（仅当没有选中任何表时）
+        if (!DB.getCurrentTable() && filtered.length > 0) {
+            const firstItem = document.querySelector('.table-item');
+            if (firstItem) {
+                const dbName = firstItem.dataset.database;
+                const tableName = firstItem.dataset.table;
+                if (dbName && tableName) {
+                    selectTable(dbName, tableName);
+                }
+            }
+        }
     }
 
-    // 选中表，触发各模块更新
     function selectTable(dbName, tableName) {
         DB.setCurrentDb(dbName);
         DB.setCurrentTable(tableName);
@@ -92,20 +94,22 @@ const DBModule = (function() {
         document.querySelectorAll('.table-item').forEach(el => {
             el.classList.toggle('active', el.dataset.table === tableName && el.dataset.database === dbName);
         });
-        // 通知右侧模块刷新
-        if (window.PropertiesModule && window.PropertiesModule.loadProperties) {
+        // 触发右侧模块刷新（使用全局模块，确保它们已初始化）
+        if (window.PropertiesModule && typeof window.PropertiesModule.loadProperties === 'function') {
             window.PropertiesModule.loadProperties(dbName, tableName);
+        } else {
+            console.error('PropertiesModule.loadProperties 未定义');
         }
-        if (window.DataModule && window.DataModule.resetAndLoad) {
+        if (window.DataModule && typeof window.DataModule.resetAndLoad === 'function') {
             window.DataModule.resetAndLoad(dbName, tableName);
+        } else {
+            console.error('DataModule.resetAndLoad 未定义');
         }
         if (window.__refreshSqlHints) window.__refreshSqlHints();
         if (window.ViewModule && window.ViewModule.updateCurrentViewSql) window.ViewModule.updateCurrentViewSql();
-        // 触发自定义事件，方便其他模块监听
         DB.notify(dbName, tableName);
     }
 
-    // 过滤输入防抖
     let filterTimer = null;
     function filterTables() {
         if (filterTimer) clearTimeout(filterTimer);
@@ -133,7 +137,6 @@ const DBModule = (function() {
     return { init, loadAllTables, clear };
 })();
 
-// 初始化 DBModule（在页面 DOM 加载完成后）
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => DBModule.init());
 } else {

@@ -3,7 +3,10 @@ const PropertiesModule = (function() {
     let propertiesContent = null;
 
     async function loadProperties(dbName, tableName) {
-        if (!propertiesContent) return;
+        if (!propertiesContent) {
+            console.error('propertiesContent 未初始化');
+            return;
+        }
         if (!dbName || !tableName) {
             propertiesContent.innerHTML = '<h2>请从左侧选择一张表</h2>';
             return;
@@ -13,13 +16,13 @@ const PropertiesModule = (function() {
             const columns = await DB.fetchJSON(DB.apiBase + '/columns?db=' + encodeURIComponent(dbName) + '&table=' + encodeURIComponent(tableName));
             renderProperties(columns, dbName, tableName);
         } catch (err) {
+            console.error('加载列信息失败', err);
             propertiesContent.innerHTML = `<div class="error">加载失败: ${err.message}</div>`;
         }
     }
 
     function renderProperties(columns, dbName, tableName) {
         let html = `<h2>${DB.escapeHtml(dbName)}.${DB.escapeHtml(tableName)}</h2>`;
-        // 表基本信息（静态示例，实际可从元数据获取）
         html += '<table class="props-table"><tbody>';
         html += '<tr><td>引擎</td><td>InnoDB</td></tr>';
         html += '<tr><td>字符集</td><td>utf8mb4</td></tr>';
@@ -45,13 +48,23 @@ const PropertiesModule = (function() {
         propertiesContent.innerHTML = html;
     }
 
-    return {
-        init: function() {
-            propertiesContent = document.getElementById('propertiesContent');
-            if (!propertiesContent) {
-                console.error('PropertiesModule: propertiesContent not found');
-            }
-        },
-        loadProperties: loadProperties
-    };
+    function clear() {
+        if (propertiesContent) propertiesContent.innerHTML = '<h2>请从左侧选择一张表</h2>';
+    }
+
+    function init() {
+        propertiesContent = document.getElementById('propertiesContent');
+        if (!propertiesContent) {
+            console.error('PropertiesModule: propertiesContent not found');
+        }
+    }
+
+    return { init, loadProperties, clear };
 })();
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => PropertiesModule.init());
+} else {
+    PropertiesModule.init();
+}
+window.PropertiesModule = PropertiesModule;

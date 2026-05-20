@@ -10,7 +10,10 @@ const DataModule = (function() {
     let currentTable = null;
 
     async function loadTableData() {
-        if (!dataContent || !paginationBar) return;
+        if (!dataContent || !paginationBar) {
+            console.error('DataModule 元素未找到');
+            return;
+        }
         if (!currentDb || !currentTable) {
             dataContent.innerHTML = '<p>请从左侧选择一张表</p>';
             paginationBar.innerHTML = '';
@@ -30,6 +33,7 @@ const DataModule = (function() {
             renderDataTable(result.records || []);
             renderPagination();
         } catch (err) {
+            console.error('加载表数据失败', err);
             dataContent.innerHTML = `<div class="error">加载失败: ${err.message}</div>`;
             paginationBar.innerHTML = '';
         }
@@ -79,7 +83,6 @@ const DataModule = (function() {
         html += '</div>';
         paginationBar.innerHTML = html;
 
-        // 绑定分页点击事件
         paginationBar.querySelectorAll('button[data-page]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const page = parseInt(btn.dataset.page);
@@ -98,14 +101,19 @@ const DataModule = (function() {
         loadTableData();
     }
 
-    return {
-        init: function() {
-            dataContent = document.getElementById('dataContent');
-            paginationBar = document.getElementById('paginationBar');
-            if (!dataContent) console.error('DataModule: dataContent not found');
-            if (!paginationBar) console.error('DataModule: paginationBar not found');
-        },
-        loadTableData: loadTableData,
-        resetAndLoad: resetAndLoad
-    };
+    function init() {
+        dataContent = document.getElementById('dataContent');
+        paginationBar = document.getElementById('paginationBar');
+        if (!dataContent) console.error('DataModule: dataContent not found');
+        if (!paginationBar) console.error('DataModule: paginationBar not found');
+    }
+
+    return { init, loadTableData, resetAndLoad };
 })();
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => DataModule.init());
+} else {
+    DataModule.init();
+}
+window.DataModule = DataModule;

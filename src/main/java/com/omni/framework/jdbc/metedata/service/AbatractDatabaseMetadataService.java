@@ -21,11 +21,13 @@ import java.util.List;
 public class AbatractDatabaseMetadataService implements DatabaseMetadataService {
 
     // ==================== 基础通用实现（保持不变） ====================
-
+    protected Connection getConnection() throws Exception {
+        return DataSourceUtils.getConnection();
+    }
     @Override
     public List<DatabaseInfo> getDatabases() throws Exception {
         List<DatabaseInfo> databases = new ArrayList<>();
-        try (Connection conn = DataSourceUtils.getConnection()) {
+        try (Connection conn = getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
             try (ResultSet rs = metaData.getCatalogs()) {
                 while (rs.next()) {
@@ -39,7 +41,7 @@ public class AbatractDatabaseMetadataService implements DatabaseMetadataService 
     @Override
     public List<TableInfo> getTables(String catalog, String schemaPattern, String tableNamePattern) throws Exception {
         List<TableInfo> tables = new ArrayList<>();
-        try (Connection conn = DataSourceUtils.getConnection()) {
+        try (Connection conn = getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
             try (ResultSet rs = metaData.getTables(catalog, schemaPattern, tableNamePattern, null)) {
                 while (rs.next()) {
@@ -53,7 +55,7 @@ public class AbatractDatabaseMetadataService implements DatabaseMetadataService 
     @Override
     public List<ColumnInfo> getColumns(String catalog, String schemaPattern, String tableName) throws Exception {
         List<ColumnInfo> columns = new ArrayList<>();
-        try (Connection conn = DataSourceUtils.getConnection()) {
+        try (Connection conn = getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
             try (ResultSet rs = metaData.getColumns(catalog, schemaPattern, tableName, null)) {
                 while (rs.next()) {

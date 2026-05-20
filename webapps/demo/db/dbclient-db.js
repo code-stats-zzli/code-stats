@@ -1,68 +1,22 @@
-// ========== 数据库模块：下拉框 + 表列表 + 过滤 ==========
+// ========== 数据库模块：直接加载数据源下的所有表（跨数据库） ==========
 const DBModule = (function() {
-    let dbSelect = null;
     let tableFilter = null;
     let tableContainer = null;
-    let allTables = [];
+    let allTables = [];      // 存储 { database, name, type }
     let currentFilter = '';
 
-    async function loadDatabases() {
-        try {
-            const databases = await DB.fetchJSON(DB.apiBase + '/databases');
-            dbSelect.innerHTML = '<option value="">请选择数据库</option>';
-            for (const db of databases) {
-                const option = document.createElement('option');
-                option.value = db;
-                option.textContent = db;
-                dbSelect.appendChild(option);
-            }
-            const currentDb = DB.getCurrentDb();
-            if (currentDb && databases.includes(currentDb)) {
-                dbSelect.value = currentDb;
-                await onDatabaseSelected(currentDb);
-            } else if (databases.length > 0) {
-                dbSelect.value = databases[0];
-                await onDatabaseSelected(databases[0]);
-            }
-        } catch (err) {
-            console.error('加载数据库列表失败', err);
-            dbSelect.innerHTML = '<option>加载失败</option>';
+    async function loadAllTables() {
+        if (!tableContainer) return;
+        if (!currentDataSourceId) {
+            tableContainer.innerHTML = '<div class="empty-state">请选择数据源</div>';
+            return;
         }
-    }
-
-    async function onDatabaseSelected(dbName) {
-        if (!dbName) return;
-        DB.setCurrentDb(dbName);
-        await loadTables(dbName);
-    }
-
-    async function loadTables(dbName) {
+        tableContainer.innerHTML = '<div class="loading">加载表列表中...</div>';
         try {
-            const tables = await DB.fetchJSON(DB.apiBase + '/tables?db=' + encodeURIComponent(dbName));
-            allTables = tables.map(t => t.name);
+            const url = DB.apiBase + '/tables/all';
+            const tables = await DB.fetchJSON(url);
+            allTables = tables;
             renderTableList(allTables);
-        } catch (err) {
-            console.error('加载表列表失败', err);
-            tableContainer.innerHTML = '<div class="error">加载失败</div>';
-        }
-    }// dbclient-db.js - 修改默认选中第一张表
-// 在原 DBModule 的 loadTables 方法最后添加自动选中逻辑
-    async function loadTables(dbName) {
-        try {
-            const tables = await DB.fetchJSON(DB.apiBase + '/tables?db=' + encodeURIComponent(dbName));
-            allTables = tables.map(t => t.name);
-            renderTableList(allTables);
-            // ★ 新增：自动选中第一张表
-            if (allTables.length > 0 && !DB.getCurrentTable()) {
-                const firstTable = allTables[0];
-                DB.setCurrentTable(firstTable);
-                // 触发各模块加载
-                PropertiesModule.loadProperties(dbName, firstTable);
-                DataModule.resetAndLoad(dbName, firstTable);
-                if (window.__refreshSqlHints) window.__refreshSqlHints();
-                // 更新视图源字段
-                if (window.ViewModule) window.ViewModule.updateCurrentViewSql();
-            }
         } catch (err) {
             console.error('加载表列表失败', err);
             tableContainer.innerHTML = '<div class="error">加载失败</div>';
@@ -76,13 +30,15 @@ const DBModule = (function() {
             return;
         }
         const currentTable = DB.getCurrentTable();
+        const currentDb = DB.getCurrentDb();
         let html = '';
         for (const t of tables) {
-            const activeClass = (currentTable === t) ? 'active' : '';
+            const activeClass = (currentTable === t.name && currentDb === t.database) ? 'active' : '';
+            const displayName = `${t.database}.${t.name}`;
             html += `
-                <div class="table-item ${activeClass}" data-table="${DB.escapeHtml(t)}" draggable="true">
+                <div class="table-item ${activeClass}" data-table="${escapeHtml(t.name)}" data-database="${escapeHtml(t.database)}">
                     <span class="icon">📄</span>
-                    <span class="name">${DB.escapeHtml(t)}</span>
+                    <span class="name">${escapeHtml(displayName)}</span>
                 </div>
             `;
         }
@@ -91,23 +47,25 @@ const DBModule = (function() {
         document.querySelectorAll('.table-item').forEach(el => {
             el.addEventListener('click', () => {
                 const tableName = el.dataset.table;
-                if (tableName) {
-                    selectTable(tableName);
+                const dbName = el.dataset.database;
+                if (tableName && dbName) {
+                    selectTable(dbName, tableName);
                 }
             });
         });
     }
 
-    function selectTable(tableName) {
+    function selectTable(dbName, tableName) {
+        DB.setCurrentDb(dbName);
         DB.setCurrentTable(tableName);
         document.querySelectorAll('.table-item').forEach(el => {
-            el.classList.toggle('active', el.dataset.table === tableName);
+            el.classList.toggle('active', el.dataset.table === tableName && el.dataset.database === dbName);
         });
-        const db = DB.getCurrentDb();
-        if (db && tableName) {
-            PropertiesModule.loadProperties(db, tableName);
-            DataModule.resetAndLoad(db, tableName);
+        if (dbName && tableName) {
+            PropertiesModule.loadProperties(dbName, tableName);
+            DataModule.resetAndLoad(dbName, tableName);
             if (window.__refreshSqlHints) window.__refreshSqlHints();
+            if (window.ViewModule && window.ViewModule.updateCurrentViewSql) window.ViewModule.updateCurrentViewSql();
         }
     }
 
@@ -117,27 +75,30 @@ const DBModule = (function() {
         if (!filterText) {
             renderTableList(allTables);
         } else {
-            const filtered = allTables.filter(t => t.toLowerCase().includes(filterText));
+            const filtered = allTables.filter(t =>
+                t.name.toLowerCase().includes(filterText) ||
+                t.database.toLowerCase().includes(filterText)
+            );
             renderTableList(filtered);
         }
     }
 
+    function clear() {
+        if (tableContainer) tableContainer.innerHTML = '';
+        allTables = [];
+    }
+
     function init() {
-        dbSelect = document.getElementById('dbSelect');
         tableFilter = document.getElementById('tableFilter');
         tableContainer = document.getElementById('tableListContainer');
-        if (!dbSelect || !tableFilter || !tableContainer) {
+        if (!tableFilter || !tableContainer) {
             console.error('DBModule: 必要元素未找到');
             return;
         }
-        dbSelect.addEventListener('change', (e) => {
-            onDatabaseSelected(e.target.value);
-        });
         tableFilter.addEventListener('input', filterTables);
-        loadDatabases();
     }
 
-    return { init };
+    return { init, loadAllTables, clear };
 })();
 
 window.DBModule = DBModule;

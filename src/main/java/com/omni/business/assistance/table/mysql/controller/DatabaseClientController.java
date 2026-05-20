@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 import static com.omni.framework.util.ParamUtils.parseQueryParams;
 
 @Controller
-@RequestMapping("/dbclient")
+@RequestMapping("/dbclient1")
 public class DatabaseClientController {
 
     @Autowired

@@ -1,9 +1,8 @@
-<!-- dbclient.html - 视图标签页简化版，无左侧面板 -->
 <!DOCTYPE html>
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>Database Explorer - 增强版视图转换</title>
+    <title>Database Explorer - 基于数据源</title>
     <link rel="stylesheet" href="../global-tech.css">
     <link rel="stylesheet" href="dbclient.css">
     <script src="../global.js"></script>
@@ -12,13 +11,8 @@
 <div class="db-layout">
     <div class="db-toolbar">
         <div class="db-selector">
-            <label>数据库：</label>
-            <select id="dbSelect"></select>
-        </div>
-        <!-- 在 db-toolbar 内增加 -->
-        <div class="db-selector">
             <label>数据源：</label>
-            <select id="dataSourceSelect" style="min-width: 180px;"></select>
+            <select id="dataSourceSelect" style="min-width: 220px;"></select>
             <button id="manageDataSourceBtn" class="btn-secondary">⚙️ 管理</button>
         </div>
     </div>
@@ -28,7 +22,7 @@
         <div class="table-list-panel" id="tableListPanel">
             <h3>📋 表列表</h3>
             <div class="table-filter-inline">
-                <input type="text" id="tableFilter" placeholder="输入表名过滤...">
+                <input type="text" id="tableFilter" placeholder="输入表名或数据库名过滤...">
             </div>
             <div id="tableListContainer" class="table-list"></div>
         </div>
@@ -51,7 +45,6 @@
                         <div id="paginationBar" style="margin-top: 16px;"></div>
                     </div>
                 </div>
-                <!-- 视图标签页：仅画布 + 底部SQL -->
                 <div class="tab-pane" id="tab-diagram">
                     <div class="diagram-simple-container">
                         <div class="canvas-area">
@@ -60,7 +53,6 @@
                                 <div id="diagramPlaceholder" class="canvas-placeholder">拖拽左侧表至此处生成视图</div>
                             </div>
                         </div>
-                        <!-- 底部SQL面板 -->
                         <div id="sqlViewPanel" class="sql-preview-panel">
                             <div class="sql-header">
                                 <strong>📄 当前视图 SQL</strong>
@@ -90,7 +82,7 @@
     </div>
 </div>
 
-<!-- 右键菜单 -->
+<!-- 右键菜单 (保留，未变) -->
 <div id="contextMenu" class="context-menu" style="display:none;">
     <ul style="list-style: none; margin: 0; padding: 4px 0;">
         <li data-action="viewData" class="context-item">📊 查看数据</li>
@@ -100,7 +92,7 @@
     </ul>
 </div>
 
-<!-- 字段转换弹窗 -->
+<!-- 字段转换弹窗 (保留) -->
 <div id="transformModal" class="modal" style="display:none;">
     <div class="modal-content" style="width: 80%; max-width: 1000px;">
         <div class="modal-header">
@@ -108,12 +100,10 @@
             <span class="close-modal" id="closeModalBtn">&times;</span>
         </div>
         <div class="modal-body" style="display: flex; gap: 20px; min-height: 400px;">
-            <!-- 左侧：源字段列表 -->
             <div style="flex:1; border-right: 1px solid #e2e8f0; padding-right: 16px;">
                 <h4>📋 源字段（可拖拽）</h4>
                 <div id="modalSourceFields" class="source-fields-list" style="max-height: 400px; overflow-y: auto;"></div>
             </div>
-            <!-- 右侧：转换规则列表 -->
             <div style="flex:2;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <h4>🔄 转换规则</h4>
@@ -163,6 +153,10 @@
             if (window.ViewModule && typeof window.ViewModule.init === 'function') {
                 window.ViewModule.init();
             }
+            // 初始化数据源列表并加载表
+            if (typeof loadDataSources === 'function') loadDataSources();
+
+            // Tab 切换
             const tabBtns = document.querySelectorAll('.tab-btn');
             const tabPanes = document.querySelectorAll('.tab-pane');
             function switchTab(tabName) {

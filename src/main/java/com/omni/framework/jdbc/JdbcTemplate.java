@@ -158,7 +158,7 @@ public class JdbcTemplate {
 
     // ==================== 辅助方法 ====================
 
-    protected Connection getConnection() throws SQLException {
+    public Connection getConnection() throws SQLException {
         return DataSourceUtils.getConnection();
     }
 

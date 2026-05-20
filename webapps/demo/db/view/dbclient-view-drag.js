@@ -4,8 +4,10 @@ const ViewDrag = (function() {
     let tables = null;
     let transformNodes = null;
     let refreshCallback = null; // 用于刷新画布的回调
+    let core = null;
 
-    function initDrag(core, renderTableNodeFn, renderTransformNodeFn, onRefresh) {
+    function initDrag(coreInstance, renderTableNodeFn, renderTransformNodeFn, onRefresh) {
+        core = coreInstance;
         svg = core.getSvg();
         tables = core.getTables();
         transformNodes = core.getTransformNodes();
@@ -20,8 +22,9 @@ const ViewDrag = (function() {
         document.addEventListener('dragstart', (e) => {
             const target = e.target.closest('.table-item');
             if (!target) return;
+            // 直接从元素上读取 data-database 和 data-table
+            const dbName = target.dataset.database;
             const tableName = target.dataset.table;
-            const dbName = DB.getCurrentDb();
             if (dbName && tableName) {
                 e.dataTransfer.setData('text/plain', JSON.stringify({ dbName, tableName }));
                 e.dataTransfer.effectAllowed = 'copy';
@@ -61,7 +64,6 @@ const ViewDrag = (function() {
             };
             tablesMap.set(tableName, tableObj);
             core.refreshAll(renderTableNodeFn, renderTransformNodeFn);
-            // 重新绑定拖拽移动事件
             setupNodeDragging(core, renderTableNodeFn, renderTransformNodeFn);
         } catch (err) {
             console.error('加载表失败', err);
@@ -74,7 +76,6 @@ const ViewDrag = (function() {
         const transformNodesMap = core.getTransformNodes();
         const svg = core.getSvg();
 
-        // 为所有表节点绑定移动事件（由于节点重新渲染后需要重新绑定，这里采用事件委托到 svg 上）
         svg.removeEventListener('mousedown', onMouseDown);
         svg.removeEventListener('mousemove', onMouseMove);
         svg.removeEventListener('mouseup', onMouseUp);
@@ -84,7 +85,7 @@ const ViewDrag = (function() {
 
         let dragTarget = null;
         let dragStart = null;
-        let dragType = null; // 'table' or 'transform'
+        let dragType = null;
         let dragId = null;
 
         function onMouseDown(e) {
@@ -121,7 +122,6 @@ const ViewDrag = (function() {
                     tbl.x = e.clientX - dragStart.x;
                     tbl.y = e.clientY - dragStart.y;
                     tbl.nodeGroup.setAttribute('transform', `translate(${tbl.x}, ${tbl.y})`);
-                    // 更新关联的连线（需调用外部连线更新函数，由转换模块提供）
                     if (window.ViewTransform && window.ViewTransform.updateEdgesForTable) {
                         window.ViewTransform.updateEdgesForTable(dragId);
                     }

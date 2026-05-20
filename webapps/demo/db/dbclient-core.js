@@ -1,5 +1,38 @@
-// ========== 数据源管理扩展 ==========
+// ========== 全局 DB 对象定义（必须最先加载） ==========
+const DB = (function() {
+    let currentDb = null;
+    let currentTable = null;
+    const subscribers = [];
+    const apiBase = window.apiUrl('/dbclient/api');
+
+    async function fetchJSON(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+    }
+
+    function setCurrentDb(db) { currentDb = db; }
+    function getCurrentDb() { return currentDb; }
+    function setCurrentTable(table) { currentTable = table; }
+    function getCurrentTable() { return currentTable; }
+    function subscribe(callback) { subscribers.push(callback); }
+    function notify(db, table) { subscribers.forEach(fn => fn(db, table)); }
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+    }
+
+    return {
+        apiBase, fetchJSON,
+        setCurrentDb, getCurrentDb, setCurrentTable, getCurrentTable,
+        subscribe, notify,
+        escapeHtml
+    };
+})();
+
+// ========== 数据源管理（增强版） ==========
 let currentDataSourceId = null;
+let abortController = null;
 
 async function loadDataSources() {
     const select = document.getElementById('dataSourceSelect');
@@ -8,28 +41,36 @@ async function loadDataSources() {
         const resp = await fetch(window.apiUrl('/datasource/api/list'));
         if (!resp.ok) throw new Error();
         const data = await resp.json();
-        // 不再包含默认数据源选项
         select.innerHTML = data.map(ds => `<option value="${ds.id}" ${currentDataSourceId == ds.id ? 'selected' : ''}>${escapeHtml(ds.name)} (${ds.dbType})</option>`).join('');
         if (data.length === 0) {
             select.innerHTML = '<option disabled>暂无数据源，请先管理</option>';
             currentDataSourceId = null;
-            const container = document.getElementById('tableListContainer');
-            if (container) container.innerHTML = '<div class="empty-state">请先添加数据源</div>';
-            if (window.PropertiesModule && window.PropertiesModule.clear) window.PropertiesModule.clear();
-            if (window.DataModule && window.DataModule.resetAndLoad) window.DataModule.resetAndLoad(null, null);
+            clearTableListAndPanels();
         } else {
+
             if (!currentDataSourceId || !data.find(d => d.id == currentDataSourceId)) {
-                currentDataSourceId = data[0].id;
+                //currentDataSourceId = data[0].id;
                 select.value = currentDataSourceId;
             }
             onDataSourceChange();
+            // 关键：数据源就绪后立即加载表列表
+
         }
     } catch (err) {
+        console.error('loadDataSources error:', err);
         select.innerHTML = '<option disabled>加载数据源失败</option>';
     }
 }
 
-window.refreshDataSourceSelect = loadDataSources;
+function clearTableListAndPanels() {
+    const container = document.getElementById('tableListContainer');
+    if (container) container.innerHTML = '<div class="empty-state">请选择数据源</div>';
+    DB.setCurrentDb(null);
+    DB.setCurrentTable(null);
+    if (window.PropertiesModule && window.PropertiesModule.clear) window.PropertiesModule.clear();
+    if (window.DataModule && window.DataModule.resetAndLoad) window.DataModule.resetAndLoad(null, null);
+    if (window.ViewModule && window.ViewModule.refreshCanvasSize) window.ViewModule.refreshCanvasSize();
+}
 
 function onDataSourceChange() {
     const select = document.getElementById('dataSourceSelect');
@@ -37,27 +78,19 @@ function onDataSourceChange() {
     const newId = select.value;
     if (currentDataSourceId !== newId) {
         currentDataSourceId = newId;
-        // 重置当前数据库和表
-        DB.setCurrentDb(null);
-        DB.setCurrentTable(null);
-        // 重新加载表列表
-        if (window.DBModule && window.DBModule.loadAllTables) {
+        // 取消正在进行的表加载请求
+        if (abortController) abortController.abort();
+        clearTableListAndPanels();
+        // 调用 DBModule 加载表列表（DBModule 必须已初始化）
+        if (window.DBModule && typeof window.DBModule.loadAllTables === 'function') {
             window.DBModule.loadAllTables();
-        }
-        // 清空右侧内容
-        if (window.PropertiesModule && window.PropertiesModule.clear) {
-            window.PropertiesModule.clear();
-        }
-        if (window.DataModule && window.DataModule.resetAndLoad) {
-            window.DataModule.resetAndLoad(null, null);
-        }
-        if (window.ViewModule && window.ViewModule.refreshCanvasSize) {
-            window.ViewModule.refreshCanvasSize();
+        } else {
+            console.warn('DBModule.loadAllTables 未定义，请确保 dbclient-db.js 已加载');
         }
     }
 }
 
-// 绑定事件和初始化
+// 绑定数据源下拉框事件
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         const select = document.getElementById('dataSourceSelect');
@@ -82,7 +115,7 @@ if (document.readyState === 'loading') {
     loadDataSources();
 }
 
-// 修改 fetchJSON 函数，自动添加 dsId 参数
+// 包装 DB.fetchJSON，自动附加 dsId
 const originalFetchJSON = DB.fetchJSON;
 DB.fetchJSON = async function(url) {
     let finalUrl = url;
@@ -95,7 +128,5 @@ DB.fetchJSON = async function(url) {
     return await res.json();
 };
 
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
-}
+window.refreshDataSourceSelect = loadDataSources;
+function escapeHtml(str) { return DB.escapeHtml(str); }

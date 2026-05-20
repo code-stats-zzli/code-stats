@@ -82,7 +82,7 @@
     </div>
 </div>
 
-<!-- 右键菜单 (保留，未变) -->
+<!-- 右键菜单 -->
 <div id="contextMenu" class="context-menu" style="display:none;">
     <ul style="list-style: none; margin: 0; padding: 4px 0;">
         <li data-action="viewData" class="context-item">📊 查看数据</li>
@@ -92,7 +92,7 @@
     </ul>
 </div>
 
-<!-- 字段转换弹窗 (保留) -->
+<!-- 字段转换弹窗 -->
 <div id="transformModal" class="modal" style="display:none;">
     <div class="modal-content" style="width: 80%; max-width: 1000px;">
         <div class="modal-header">
@@ -144,7 +144,6 @@
 <script>
     (function() {
         function initAll() {
-            DB.init();
             PropertiesModule.init();
             DataModule.init();
             if (window.DBModule && typeof window.DBModule.init === 'function') {
@@ -153,10 +152,9 @@
             if (window.ViewModule && typeof window.ViewModule.init === 'function') {
                 window.ViewModule.init();
             }
-            // 初始化数据源列表并加载表
+            // 初始化数据源（会触发 loadAllTables）
             if (typeof loadDataSources === 'function') loadDataSources();
 
-            // Tab 切换
             const tabBtns = document.querySelectorAll('.tab-btn');
             const tabPanes = document.querySelectorAll('.tab-pane');
             function switchTab(tabName) {

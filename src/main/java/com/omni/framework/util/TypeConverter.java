@@ -116,6 +116,12 @@ public final class TypeConverter {
                 return (T) String.valueOf(value);
             }
         }
+        // ★ 新增：处理 Boolean 到 Integer（JDBC 中 TINYINT(1) 可能映射为 Boolean）
+        if (value instanceof Boolean) {
+            if (targetType == Integer.class || targetType == int.class) {
+                return (T) Integer.valueOf(((Boolean) value) ? 1 : 0);
+            }
+        }
 
         // 6. 处理 LocalDateTime <-> Date/Timestamp
         if (value instanceof LocalDateTime) {

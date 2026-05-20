@@ -1,6 +1,6 @@
 -- 创建数据源配置表，id 使用 CHAR(32) 存储 UUID（无连字符）
 CREATE TABLE IF NOT EXISTS `datasource_config` (
-                                                   `id` CHAR(32) NOT NULL COMMENT '主键，UUID',
+                                                   `id` VARCHAR(64) NOT NULL COMMENT '主键，UUID',
     `name` VARCHAR(100) NOT NULL COMMENT '数据源名称',
     `db_type` VARCHAR(20) NOT NULL DEFAULT 'mysql' COMMENT '数据库类型：mysql, oracle, postgresql',
     `host` VARCHAR(255) NOT NULL COMMENT '主机地址',

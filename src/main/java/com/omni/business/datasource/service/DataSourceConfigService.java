@@ -6,7 +6,6 @@ import com.omni.framework.jdbc.JdbcTemplate;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Service;
-
 import java.util.List;
 
 @Service
@@ -25,25 +24,23 @@ public class DataSourceConfigService {
     public boolean save(DataSourceConfig config) throws Exception {
         config.generateIdIfNull();
         if (config.getId() == null || config.getId().isEmpty()) {
-            // 新增
             int rows = jdbcTemplate.update(
                     "INSERT INTO datasource_config (id, name, db_type, host, port, database_name, username, password, " +
-                            "driver_class, driver_jar, connection_properties, version, status, driver_code, create_time, update_time) " +
-                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                            "driver_class, driver_jar, connection_properties, version, status, create_time, update_time) " +
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
                     config.getId(), config.getName(), config.getDbType(), config.getHost(), config.getPort(),
                     config.getDatabaseName(), config.getUsername(), config.getPassword(), config.getDriverClass(),
                     config.getDriverJar(), config.getConnectionProperties(), config.getVersion(),
-                    config.getStatus() != null ? config.getStatus() : 1, config.getDriverCode()
+                    config.getStatus() != null ? config.getStatus() : 1
             );
             return rows > 0;
         } else {
-            // 更新
             int rows = jdbcTemplate.update(
                     "UPDATE datasource_config SET name=?, db_type=?, host=?, port=?, database_name=?, username=?, password=?, " +
-                            "driver_class=?, driver_jar=?, connection_properties=?, version=?, status=?, driver_code=?, update_time=NOW() WHERE id=?",
+                            "driver_class=?, driver_jar=?, connection_properties=?, version=?, status=?, update_time=NOW() WHERE id=?",
                     config.getName(), config.getDbType(), config.getHost(), config.getPort(), config.getDatabaseName(),
                     config.getUsername(), config.getPassword(), config.getDriverClass(), config.getDriverJar(),
-                    config.getConnectionProperties(), config.getVersion(), config.getStatus(), config.getDriverCode(), config.getId()
+                    config.getConnectionProperties(), config.getVersion(), config.getStatus(), config.getId()
             );
             if (rows > 0 && config.getStatus() == 1) {
                 DynamicDataSourceManager.refreshDataSource(config);

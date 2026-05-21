@@ -19,7 +19,8 @@ public class DataSourceConfig {
     private Integer status;
     private Date createTime;
     private Date updateTime;
-    private String driverCode;  // 新增：关联的驱动编码
+
+    // 移除 driverCode 字段
 
     public boolean generateIdIfNull() {
         if (id == null || id.trim().isEmpty()) {
@@ -29,7 +30,7 @@ public class DataSourceConfig {
         return false;
     }
 
-    // Getters and Setters
+    // getters and setters (无 driverCode)
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getName() { return name; }
@@ -60,6 +61,4 @@ public class DataSourceConfig {
     public void setCreateTime(Date createTime) { this.createTime = createTime; }
     public Date getUpdateTime() { return updateTime; }
     public void setUpdateTime(Date updateTime) { this.updateTime = updateTime; }
-    public String getDriverCode() { return driverCode; }
-    public void setDriverCode(String driverCode) { this.driverCode = driverCode; }
 }

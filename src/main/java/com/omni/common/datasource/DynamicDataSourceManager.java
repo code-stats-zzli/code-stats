@@ -31,7 +31,7 @@ public class DynamicDataSourceManager {
         return dataSourcePool.computeIfAbsent(config.getId(), id -> {
             // 1. 使用 DriverLoader 加载驱动并注册
             try {
-                Driver driver = DriverLoader.getDriver(config.getDbType(), config.getVersion(), config.getDriverCode());
+                Driver driver = DriverLoader.getDriver(config.getDbType(), config.getVersion());
                 // 注册驱动（如果 DriverManager 尚未注册）
                 // 注意：每个驱动实例只需要注册一次，这里简单注册，避免重复注册可做缓存
                 DriverManager.registerDriver(new DriverProxy(driver));

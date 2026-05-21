@@ -1,0 +1,152 @@
+下面给出 所有常见 HTTP 请求格式 的典型示例，包括编码类型（Content-Type）和对应的请求体结构。每种格式适用于不同的业务场景，比如表单提交、文件上传、API 交互等。
+
+1. application/x-www-form-urlencoded（传统表单提交）
+特点：键值对编码，特殊字符被转义（如空格 → +，& 作为分隔符）。
+场景：简单文本表单，无文件上传。
+请求示例：
+
+http
+POST /login HTTP/1.1
+Host: example.com
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 29
+
+username=alice&password=123456
+浏览器原生 <form> 默认格式（未设置 enctype 时）。
+
+2. multipart/form-data（文件上传 + 混合表单）
+特点：由 boundary 分割多个部分，每个部分可包含普通字段或文件（二进制）。
+场景：上传文件、提交混合数据（如用户头像 + 文本信息）。
+请求示例：
+
+http
+POST /upload HTTP/1.1
+Host: example.com
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Length: 742
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="username"
+
+alice
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="avatar"; filename="photo.jpg"
+Content-Type: image/jpeg
+
+[二进制数据]
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+enctype="multipart/form-data" 时浏览器生成此格式。
+
+3. application/json（REST API 常用）
+特点：结构化数据，支持嵌套、数组等复杂类型。
+场景：前后端分离 API、移动端接口。
+请求示例：
+
+http
+POST /api/user HTTP/1.1
+Host: example.com
+Content-Type: application/json
+Content-Length: 48
+
+{
+  "username": "alice",
+  "age": 28,
+  "hobbies": ["reading", "coding"]
+}
+4. text/plain（纯文本）
+特点：无格式的原始文本，通常用于日志、消息推送等。
+场景：简单文本数据交换。
+请求示例：
+
+http
+POST /log HTTP/1.1
+Host: example.com
+Content-Type: text/plain
+Content-Length: 21
+
+This is a log entry.
+5. application/xml（XML 数据交换）
+特点：结构严谨，支持 schema 校验。
+场景：老旧企业系统、SOAP 服务。
+请求示例：
+
+http
+POST /api/order HTTP/1.1
+Host: example.com
+Content-Type: application/xml
+Content-Length: 142
+
+<?xml version="1.0" encoding="UTF-8"?>
+<order>
+  <id>123</id>
+  <amount>99.50</amount>
+  <currency>USD</currency>
+</order>
+6. application/octet-stream（任意二进制流）
+特点：不指定具体类型，原样传输二进制数据。
+场景：直接上传文件内容（无额外表单字段）。
+请求示例：
+
+http
+POST /upload/raw HTTP/1.1
+Host: example.com
+Content-Type: application/octet-stream
+Content-Length: 20480
+
+[纯二进制文件内容，无额外元数据]
+7. application/x-protobuf（Protobuf 二进制）
+特点：高效、体积小，常用于微服务内部通信。
+场景：gRPC、高性能 API。
+请求示例：
+
+http
+POST /api/data HTTP/1.1
+Host: example.com
+Content-Type: application/x-protobuf
+Content-Length: 68
+
+[二进制 protobuf 序列化数据]
+8. application/graphql（GraphQL 查询）
+特点：使用 GraphQL 语言描述查询或变更。
+场景：GraphQL API。
+请求示例：
+
+http
+POST /graphql HTTP/1.1
+Host: example.com
+Content-Type: application/graphql
+Content-Length: 58
+
+{
+  user(id: "alice") {
+    name
+    email
+  }
+}
+也可以使用 application/json 包裹 query 字符串。
+
+9. application/x-www-form-urlencoded + 嵌套数据（模拟）
+虽然原生不支持嵌套，但常见做法是用 URL 编码的 JSON 字符串：
+
+http
+POST /api/filter HTTP/1.1
+Host: example.com
+Content-Type: application/x-www-form-urlencoded
+
+filter=%7B%22age%22%3A%7B%22%24gt%22%3A18%7D%7D
+后端自行解析 filter 参数为 JSON 对象。
+
+10. 混合示例：一个请求同时包含 JSON 和文件？（不完全标准）
+原则上 HTTP 协议中只能选择一种 Content-Type，但可以通过 multipart/mixed 或 multipart/related 实现复杂混合（如 SOAP with attachment）。不过极少使用。
+
+总结表格
+Content-Type	典型场景	是否支持文件
+application/x-www-form-urlencoded	简单表单、登录、搜索	❌
+multipart/form-data	文件上传、复杂表单	✅
+application/json	REST API、前后端分离	❌
+text/plain	日志、简单文本传输	❌
+application/xml	旧系统集成、SOAP	❌
+application/octet-stream	二进制文件直接上传	✅（仅文件内容）
+application/x-protobuf	高性能 RPC、gRPC	❌
+application/graphql	GraphQL API	❌
+在实际开发中，根据需要选择最合适的 Content-Type，并确保后端能够正确解析。对于你的自研框架，Request.parse() 和 MultipartResolver 已经覆盖了前三种最常用的格式（urlencoded、multipart、JSON/纯文本）。

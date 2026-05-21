@@ -90,20 +90,14 @@ const DBModule = (function() {
     function selectTable(dbName, tableName) {
         DB.setCurrentDb(dbName);
         DB.setCurrentTable(tableName);
-        // 更新高亮
         document.querySelectorAll('.table-item').forEach(el => {
             el.classList.toggle('active', el.dataset.table === tableName && el.dataset.database === dbName);
         });
-        // 触发右侧模块刷新（使用全局模块，确保它们已初始化）
         if (window.PropertiesModule && typeof window.PropertiesModule.loadProperties === 'function') {
             window.PropertiesModule.loadProperties(dbName, tableName);
-        } else {
-            console.error('PropertiesModule.loadProperties 未定义');
         }
         if (window.DataModule && typeof window.DataModule.resetAndLoad === 'function') {
             window.DataModule.resetAndLoad(dbName, tableName);
-        } else {
-            console.error('DataModule.resetAndLoad 未定义');
         }
         if (window.__refreshSqlHints) window.__refreshSqlHints();
         if (window.ViewModule && window.ViewModule.updateCurrentViewSql) window.ViewModule.updateCurrentViewSql();

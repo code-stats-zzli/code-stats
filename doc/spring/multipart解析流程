@@ -1,0 +1,169 @@
+下面以一个相对复杂的 multipart/form-data 请求为例，完整展示从原始 HTTP 报文到控制器方法参数注入的全过程。该请求包含：
+
+普通文本字段（name, description）
+
+一个 JSON 字符串字段（metadata）
+
+两个文件：一个小型文本文件（log.txt）和一个大型 JAR 文件（driver.jar）
+
+相同字段名出现多次（file 字段重复，模拟多文件上传）
+
+1. 原始 HTTP 请求报文
+http
+POST /driver/api/upload HTTP/1.1
+Host: localhost:8080
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Length: 78453
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="name"
+
+MySQL Driver 8.0.33
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="description"
+
+This is a JDBC driver for MySQL 8.0, used for database connection.
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="metadata"
+Content-Type: application/json
+
+{"version":"8.0.33","vendor":"Oracle","license":"GPL"}
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="file"; filename="log.txt"
+Content-Type: text/plain
+
+This is a small log file content.
+Line 2 of log.
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="file"; filename="mysql-connector-java-8.0.33.jar"
+Content-Type: application/java-archive
+
+[二进制 JAR 文件内容，共约 2.3MB]
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+2. 解析核心步骤
+步骤 1：解析 Content-Type 获取 boundary
+MultipartResolver 构造时，从 Content-Type 头中提取 boundary 字符串：
+
+java
+String boundaryStr = extractBoundary(contentType);
+// boundaryStr = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
+this.boundary = ("--" + boundaryStr).getBytes(StandardCharsets.US_ASCII);
+// boundary 字节数组: "--" + 上述字符串
+步骤 2：基于边界查找并分割各个 Part
+2.1 查找第一个边界
+findBoundary() 方法在输入流中跳跃查找，直到找到与 boundary 完全匹配的字节序列。
+
+找到后，消费边界后的 \r\n，并标记当前流位置。
+
+2.2 解析 Part 头部
+readPartHeaders() 逐行读取，直到遇到空行（\r\n），解析出 Content-Disposition 等头部字段。
+
+第一个 Part 的头部：
+
+text
+Content-Disposition: form-data; name="name"
+没有 filename 参数 → 判定为普通文本字段。
+
+2.3 读取 Part 内容（文本字段）
+对于没有 filename 的 Part，调用 readPartContentToByteArray()（逻辑简化版）读取字节直到下一个边界出现，然后转为字符串存入 textFields。
+
+text
+textFields["name"] = "MySQL Driver 8.0.33"
+2.4 重复 2.2–2.3 解析第二个文本字段
+text
+description = "This is a JDBC driver for MySQL 8.0, used for database connection."
+2.5 解析第三个 Part（JSON 字段）
+头部包含 Content-Type: application/json，但依然没有 filename → 仍作为文本字段，原样存储 JSON 字符串。
+
+text
+textFields["metadata"] = "{\"version\":\"8.0.33\",\"vendor\":\"Oracle\",\"license\":\"GPL\"}"
+2.6 解析文件 Part（第一个文件，log.txt）
+头部：
+
+text
+Content-Disposition: form-data; name="file"; filename="log.txt"
+Content-Type: text/plain
+存在 filename → 进入文件处理分支。
+
+调用 readPartContentToTempFile()：将内容写入临时文件（如 upload_1234567890.tmp）。
+
+获取文件大小、Content-Type。
+
+创建 FileItem 对象，存入 fileFields，key 为字段名 "file"。
+
+注意：由于同名 file 字段出现两次，后一个会覆盖前一个？实际上 fileFields 是 Map<String, FileItem>，第二次 put 会替换第一次。
+更好的设计：若需支持多文件同名字段，应使用 Map<String, List<FileItem>>。但当前简化设计仅保留最后一个，符合简单场景。
+
+2.7 解析文件 Part（第二个文件，JAR）
+同样流程，创建另一个临时文件（如 upload_1234567891.tmp），覆盖 fileFields 中 "file" 对应的 FileItem。最终 fileFields 中只有最后一个文件。
+
+2.8 遇到结束边界
+读取到 ------WebKitFormBoundary7MA4YWxkTrZu0gW-- 时结束解析。
+
+3. 控制器方法接收参数
+假设控制器方法定义为：
+
+java
+@RequestMapping("/upload")
+@ResponseBody
+public String upload(
+    @RequestParam("name") String name,
+    @RequestParam(value = "description", required = false) String desc,
+    @RequestPart("file") FileItem fileItem
+) { ... }
+参数绑定过程 (ParamBinder.resolveParameters)：
+
+name → 从 queryParams 中取（GET 请求）或从 textFields 中取？
+实际实现中，@RequestParam 默认从 query string 获取，但我们也可以在 ParamBinder 中扩展从 multipart 文本字段获取。
+为了简单，通常 multipart 请求的普通字段建议用 @RequestPart 或自定义逻辑。这里假设我们已扩展 ParamBinder 支持从 multipart 文本字段读取 @RequestParam。
+
+fileItem → 通过 @RequestPart 注解，从 multipartResolver.getFileItem("file") 获取并直接注入。
+
+4. 临时文件生命周期
+创建：在 readPartContentToTempFile() 中通过 Files.createTempFile() 创建，前缀 upload_，后缀 .tmp。
+
+使用：控制器方法中可通过 fileItem.getInputStream() 读取内容，或调用 fileItem.getBytes() 一次性加载到内存（小文件）。
+
+清理：请求处理结束后，DispatcherServlet 的 finally 块调用 multipartResolver.cleanup()，遍历所有 FileItem 并调用 close()，删除临时文件。
+
+5. 关键代码流程时序图（文字描述）
+text
+HTTP Request
+    │
+    ▼
+Connector → 解析请求 → 创建 Request 对象 → 调用 DispatcherServlet.service()
+    │
+    ▼
+DispatcherServlet.processRequest()
+    │
+    ├─ 获取 MultipartResolver（懒加载，第一次调用 getMultipartResolver() 时解析）
+    │       │
+    │       └─ MultipartResolver 构造：提取 boundary，开始 parse()
+    │               │
+    │               ├─ findBoundary()
+    │               ├─ while (有Part)
+    │               │     ├─ readPartHeaders()
+    │               │     ├─ 判断是否有 filename
+    │               │     │     ├─ 有 → readPartContentToTempFile() → 创建 FileItem → 存入 fileFields
+    │               │     │     └─ 无 → readPartContentToByteArray() → 存入 textFields
+    │               │     └─ 查找下一个边界
+    │               └─ 解析完成
+    │
+    ├─ ParamBinder.resolveParameters()
+    │       ├─ 遍历方法参数
+    │       ├─ 遇到 @RequestPart → 从 multipartResolver.getFileItem() 获取 FileItem
+    │       └─ 构造参数数组
+    │
+    ├─ 调用控制器方法，传入 FileItem 对象
+    │
+    └─ finally { multipartResolver.cleanup() }  // 删除所有临时文件
+6. 复杂场景下的注意事项
+大文件处理：readPartContentToTempFile() 采用边读边写的方式，不会将文件内容全部留在内存，适合大文件。
+
+文件名编码：filename 可能包含非 ASCII 字符，需根据 RFC 5987 处理（实际实现可简化，此处略）。
+
+同名文件字段：若需支持多文件，应将 fileFields 改为 Map<String, List<FileItem>>，并在解析时 computeIfAbsent 添加。
+
+临时文件目录：可通过 System.getProperty("java.io.tmpdir") 获取，也可自定义配置。
+
+以上即是一个相对复杂的 multipart 请求从报文到参数注入的完整解析过程，涵盖普通文本、JSON 字符串、多个文件（含大文件）的处理，并突出了临时文件存储和生命周期管理。

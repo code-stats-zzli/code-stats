@@ -49,7 +49,7 @@ async function loadDataSources() {
         } else {
             if (!currentDataSourceId || !data.find(d => d.id == currentDataSourceId)) {
                 // 默认选中第一个
-                currentDataSourceId = data[0].id;
+                //currentDataSourceId = data[0].id;
                 select.value = currentDataSourceId;
             }
             onDataSourceChange();
@@ -78,6 +78,7 @@ function onDataSourceChange() {
         currentDataSourceId = newId;
         if (abortController) abortController.abort();
         clearTableListAndPanels();
+        // 强制重新加载表列表
         if (window.DBModule && typeof window.DBModule.loadAllTables === 'function') {
             window.DBModule.loadAllTables();
         } else {
@@ -86,32 +87,26 @@ function onDataSourceChange() {
     }
 }
 
-// ========== 下拉菜单点击处理（修复无反应问题） ==========
 function initDropdownMenu() {
-    // 使用事件委托，确保动态添加的元素也能响应
     document.body.addEventListener('click', function(e) {
         const target = e.target.closest('.dropdown-menu a');
         if (!target) return;
-        e.preventDefault();  // 阻止 a 标签默认行为
+        e.preventDefault();
         const action = target.getAttribute('data-action');
         if (action === 'datasource') {
             const url = window.apiUrl('/demo/db/datasource-manager.html');
             window.open(url, '_blank', 'width=1200,height=800');
-            console.log('打开数据源配置页面:', url);
         } else if (action === 'driver') {
             const url = window.apiUrl('/demo/db/driver/driver-manager.html');
             window.open(url, '_blank', 'width=1200,height=800');
-            console.log('打开驱动配置页面:', url);
         }
     });
 }
 
-// ========== 绑定数据源下拉框事件 ==========
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         const select = document.getElementById('dataSourceSelect');
         if (select) select.addEventListener('change', onDataSourceChange);
-        // 初始化下拉菜单点击
         initDropdownMenu();
         loadDataSources();
     });
@@ -135,10 +130,8 @@ DB.fetchJSON = async function(url) {
     return await res.json();
 };
 
-// 暴露刷新数据源的方法供子页面调用
 window.refreshDataSourceSelect = loadDataSources;
 
-// 辅助函数：转义 HTML（避免 XSS）
 function escapeHtml(str) {
     return DB.escapeHtml(str);
 }

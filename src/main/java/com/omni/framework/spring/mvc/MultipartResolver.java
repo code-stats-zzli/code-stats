@@ -2,23 +2,28 @@ package com.omni.framework.spring.mvc;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
-/**
- * 简单的 multipart/form-data 解析器，支持文件上传和表单字段。
- * 遵循 RFC 1867。
- */
 public class MultipartResolver {
     private final byte[] boundary;
-    private final InputStream inputStream;
+    private final BufferedInputStream inputStream;
     private final Map<String, String> textFields = new HashMap<>();
-    private final Map<String, byte[]> fileFields = new HashMap<>();
+    private final Map<String, FileItem> fileFields = new HashMap<>();
 
     public MultipartResolver(String contentType, InputStream inputStream) throws IOException {
+        if (inputStream instanceof BufferedInputStream) {
+            this.inputStream = (BufferedInputStream) inputStream;
+        } else {
+            this.inputStream = new BufferedInputStream(inputStream);
+        }
         String boundaryStr = extractBoundary(contentType);
-        if (boundaryStr == null) throw new IllegalArgumentException("No boundary found");
+        if (boundaryStr == null) {
+            throw new IllegalArgumentException("No boundary found in Content-Type");
+        }
         this.boundary = ("--" + boundaryStr).getBytes(StandardCharsets.US_ASCII);
-        this.inputStream = inputStream;
+        this.inputStream.mark(1024 * 1024);
         parse();
     }
 
@@ -26,75 +31,72 @@ public class MultipartResolver {
         for (String part : contentType.split(";")) {
             part = part.trim();
             if (part.startsWith("boundary=")) {
-                return part.substring("boundary=".length()).replace("\"", "");
+                String boundary = part.substring("boundary=".length());
+                if (boundary.startsWith("\"") && boundary.endsWith("\"")) {
+                    boundary = boundary.substring(1, boundary.length() - 1);
+                }
+                return boundary;
             }
         }
         return null;
     }
 
-    private void parse() throws IOException {
-        // 跳过直到第一个 boundary
-        readUntilBoundary();
-        while (true) {
-            // 读取 part 头部
-            Map<String, String> headers = readPartHeaders();
-            if (headers.isEmpty()) break;
-            String disposition = headers.get("Content-Disposition");
-            if (disposition == null) break;
-            String name = extractName(disposition);
-            String filename = extractFilename(disposition);
-            // 读取 part 内容
-            ByteArrayOutputStream content = new ByteArrayOutputStream();
-            readPartContent(content);
-            if (filename != null) {
-                fileFields.put(name, content.toByteArray());
-            } else {
-                textFields.put(name, content.toString(StandardCharsets.UTF_8));
-            }
-            // 检查下一个 boundary
-            if (isFinalBoundary()) break;
-        }
-    }
-
-    private void readUntilBoundary() throws IOException {
-        while (true) {
-            int b = inputStream.read();
-            if (b == -1) throw new IOException("Unexpected EOF");
+    private boolean findBoundary() throws IOException {
+        this.inputStream.mark(8192);
+        int b;
+        while ((b = this.inputStream.read()) != -1) {
             if (b == boundary[0]) {
-                inputStream.mark(boundary.length);
+                this.inputStream.mark(boundary.length + 2);
                 byte[] test = new byte[boundary.length];
-                inputStream.read(test);
-                if (Arrays.equals(test, boundary)) {
-                    // 读取后面的 \r\n
-                    inputStream.read(); // \r
-                    inputStream.read(); // \n
-                    return;
+                int read = this.inputStream.read(test);
+                if (read == boundary.length && Arrays.equals(test, boundary)) {
+                    int cr = this.inputStream.read();
+                    if (cr == '\r') {
+                        int lf = this.inputStream.read();
+                        if (lf != '\n') {
+                            this.inputStream.reset();
+                        }
+                    } else if (cr == '\n') {
+                        // normal
+                    } else if (cr == '-') {
+                        this.inputStream.reset();
+                        return true;
+                    } else {
+                        this.inputStream.reset();
+                    }
+                    return true;
                 } else {
-                    inputStream.reset();
+                    this.inputStream.reset();
+                    this.inputStream.mark(8192);
                 }
             }
         }
+        return false;
     }
 
     private Map<String, String> readPartHeaders() throws IOException {
         Map<String, String> headers = new HashMap<>();
         ByteArrayOutputStream lineBuf = new ByteArrayOutputStream();
         while (true) {
-            int b = inputStream.read();
+            int b = this.inputStream.read();
             if (b == -1) break;
             if (b == '\r') {
-                inputStream.read(); // \n
-                if (lineBuf.size() == 0) {
-                    // 空行结束 headers
-                    return headers;
-                }
-                String line = lineBuf.toString(StandardCharsets.US_ASCII);
-                lineBuf.reset();
-                int colon = line.indexOf(':');
-                if (colon > 0) {
-                    String name = line.substring(0, colon).trim();
-                    String value = line.substring(colon + 1).trim();
-                    headers.put(name, value);
+                int next = this.inputStream.read();
+                if (next == '\n') {
+                    if (lineBuf.size() == 0) {
+                        return headers;
+                    }
+                    String line = lineBuf.toString(StandardCharsets.US_ASCII);
+                    lineBuf.reset();
+                    int colon = line.indexOf(':');
+                    if (colon > 0) {
+                        String name = line.substring(0, colon).trim();
+                        String value = line.substring(colon + 1).trim();
+                        headers.put(name, value);
+                    }
+                } else {
+                    lineBuf.write(b);
+                    lineBuf.write(next);
                 }
             } else {
                 lineBuf.write(b);
@@ -107,7 +109,11 @@ public class MultipartResolver {
         for (String part : disposition.split(";")) {
             part = part.trim();
             if (part.startsWith("name=")) {
-                return part.substring(5).replace("\"", "");
+                String value = part.substring(5);
+                if (value.startsWith("\"") && value.endsWith("\"")) {
+                    value = value.substring(1, value.length() - 1);
+                }
+                return value;
             }
         }
         return null;
@@ -117,80 +123,132 @@ public class MultipartResolver {
         for (String part : disposition.split(";")) {
             part = part.trim();
             if (part.startsWith("filename=")) {
-                return part.substring(9).replace("\"", "");
+                String value = part.substring(9);
+                if (value.startsWith("\"") && value.endsWith("\"")) {
+                    value = value.substring(1, value.length() - 1);
+                }
+                return value;
             }
         }
         return null;
     }
 
-    private void readPartContent(ByteArrayOutputStream out) throws IOException {
-        while (true) {
-            int b = inputStream.read();
-            if (b == -1) throw new IOException("Unexpected EOF");
-            if (b == '\r') {
-                inputStream.mark(1);
-                int next = inputStream.read();
-                if (next == '\n') {
-                    // 检查是否 boundary 开始
-                    int b2 = inputStream.read();
-                    if (b2 == boundary[0]) {
-                        inputStream.mark(boundary.length - 1);
-                        byte[] test = new byte[boundary.length - 1];
-                        inputStream.read(test);
-                        if (Arrays.equals(test, Arrays.copyOfRange(boundary, 1, boundary.length))) {
-                            // 找到 boundary，回退到 boundary 开始的位置
-                            inputStream.reset(); // 回退到读取 b2 之前
-                            // 实际应该回退到 boundary 开始，简化处理：将已读的 \r\n 保留？
-                            // 正确做法：将之前写入 out 的 \r\n 保留，但 boundary 前的 \r\n 不属于内容
-                            // 这里简单回退最后两个字节
-                            out.write('\r');
-                            out.write('\n');
-                            return;
-                        } else {
-                            inputStream.reset();
-                            out.write(b);
-                            out.write(next);
-                            out.write(b2);
-                            continue;
-                        }
-                    } else {
-                        inputStream.reset();
-                        out.write(b);
-                        out.write(next);
-                        continue;
+    private Path readPartContentToTempFile() throws IOException {
+        Path tempFile = Files.createTempFile("upload_", ".tmp");
+        try (OutputStream out = Files.newOutputStream(tempFile)) {
+            int matchIndex = 0;
+            while (true) {
+                int b = this.inputStream.read();
+                if (b == -1) break;
+                if (b == boundary[matchIndex]) {
+                    matchIndex++;
+                    if (matchIndex == boundary.length) {
+                        // 边界匹配完成，停止写入并返回临时文件
+                        return tempFile;
                     }
                 } else {
-                    inputStream.reset();
+                    if (matchIndex > 0) {
+                        for (int i = 0; i < matchIndex; i++) {
+                            out.write(boundary[i]);
+                        }
+                        matchIndex = 0;
+                    }
+                    out.write(b);
                 }
             }
-            out.write(b);
         }
+        return tempFile;
     }
 
-    private boolean isFinalBoundary() throws IOException {
-        int b = inputStream.read();
-        if (b == '-') {
-            int b2 = inputStream.read();
-            if (b2 == '-') {
-                return true;
+    private void parse() throws IOException {
+        if (!findBoundary()) throw new IOException("No starting boundary found");
+        while (true) {
+            Map<String, String> headers = readPartHeaders();
+            if (headers.isEmpty()) break;
+            String disposition = headers.get("Content-Disposition");
+            if (disposition == null) break;
+            String name = extractName(disposition);
+            String filename = extractFilename(disposition);
+
+            if (filename != null) {
+                // 文件字段：写入临时文件
+                Path temp = readPartContentToTempFile();
+                long size = Files.size(temp);
+                String contentType = headers.getOrDefault("Content-Type", "application/octet-stream");
+                FileItem item = new FileItem(name, filename, contentType, size, temp);
+                fileFields.put(name, item);
+            } else {
+                // 普通文本字段：读取内容
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                int matchIndex = 0;
+                while (true) {
+                    int b = this.inputStream.read();
+                    if (b == -1) break;
+                    if (b == boundary[matchIndex]) {
+                        matchIndex++;
+                        if (matchIndex == boundary.length) {
+                            // 边界结束，停止读取
+                            break;
+                        }
+                    } else {
+                        if (matchIndex > 0) {
+                            for (int i = 0; i < matchIndex; i++) {
+                                baos.write(boundary[i]);
+                            }
+                            matchIndex = 0;
+                        }
+                        baos.write(b);
+                    }
+                }
+                textFields.put(name, new String(baos.toByteArray(), StandardCharsets.UTF_8));
             }
+
+            // 检查是否为结束边界
+            int next1 = this.inputStream.read();
+            int next2 = this.inputStream.read();
+            if (next1 == '-' && next2 == '-') {
+                break;
+            }
+            if (!findBoundary()) break;
         }
-        return false;
     }
 
     public String getTextParameter(String name) {
         return textFields.get(name);
     }
 
-    public byte[] getFileParameter(String name) {
+    public FileItem getFileItem(String name) {
         return fileFields.get(name);
+    }
+
+    @Deprecated
+    public byte[] getFileParameter(String name) {
+        FileItem item = fileFields.get(name);
+        if (item == null) return null;
+        try {
+            return item.getBytes();
+        } catch (IOException e) {
+            throw new RuntimeException("读取临时文件失败", e);
+        }
     }
 
     public Map<String, String> getTextFields() {
         return textFields;
     }
 
-    public Map<String, byte[]> getFileFields() {
+    public Map<String, FileItem> getFileFields() {
         return fileFields;
+    }
+
+    public void cleanup() {
+        for (FileItem item : fileFields.values()) {
+            try {
+                item.close();
+            } catch (IOException e) {
+                // log error
+                e.printStackTrace();
+            }
+        }
+        fileFields.clear();
     }
 }

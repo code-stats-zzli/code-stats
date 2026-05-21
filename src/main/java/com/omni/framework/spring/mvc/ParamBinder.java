@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.omni.framework.spring.annotation.PathVariable;
 import com.omni.framework.spring.annotation.RequestBody;
 import com.omni.framework.spring.annotation.RequestParam;
+import com.omni.framework.spring.annotation.RequestPart;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
 
@@ -26,7 +27,6 @@ public class ParamBinder {
             Parameter param = parameters[i];
             Class<?> type = param.getType();
 
-            // 注入 HttpServletRequest / HttpServletResponse
             if (type == HttpServletRequest.class) {
                 args[i] = request;
                 continue;
@@ -60,7 +60,7 @@ public class ParamBinder {
                 continue;
             }
 
-            // @RequestBody (新增支持)
+            // @RequestBody
             RequestBody requestBody = param.getAnnotation(RequestBody.class);
             if (requestBody != null) {
                 String body = request.getBody();
@@ -68,9 +68,29 @@ public class ParamBinder {
                     throw new IllegalArgumentException("Missing request body");
                 }
                 if (body != null && !body.trim().isEmpty()) {
-                    args[i] = type == String.class ? body :objectMapper.readValue(body, type);
+                    args[i] = type == String.class ? body : objectMapper.readValue(body, type);
                 } else {
                     args[i] = null;
+                }
+                continue;
+            }
+
+            // @RequestPart (文件上传)
+            RequestPart requestPart = param.getAnnotation(RequestPart.class);
+            if (requestPart != null) {
+                String partName = requestPart.value().isEmpty() ? param.getName() : requestPart.value();
+                MultipartResolver resolver = request.getMultipartResolver();
+                if (resolver == null) {
+                    if (requestPart.required()) {
+                        throw new IllegalArgumentException("请求不是 multipart 类型");
+                    }
+                    args[i] = null;
+                } else {
+                    FileItem item = resolver.getFileItem(partName);
+                    if (item == null && requestPart.required()) {
+                        throw new IllegalArgumentException("缺少请求部件: " + partName);
+                    }
+                    args[i] = item;
                 }
                 continue;
             }

@@ -1,6 +1,5 @@
 package com.omni.framework.tomcat.connector;
 
-
 import com.omni.framework.spring.mvc.MultipartResolver;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.session.HttpSession;
@@ -12,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class Request implements HttpServletRequest {
-    private final InputStream input;
+    private final BufferedInputStream input;          // 改为 BufferedInputStream 以支持 mark/reset
     private String uri;
     private String method;
     private String contextPath = "";
@@ -41,15 +40,15 @@ public class Request implements HttpServletRequest {
     private List<Cookie> cookies;
     private HttpSession session;
 
-    // 构造时从 socket 中获取远程信息，由 Connector 设置
-    private java.net.Socket socket;
+    // 标记是否为 multipart 请求
+    private boolean isMultipart = false;
 
     public Request(InputStream input) {
-        this.input = input;
+        // ★ 关键修复：将原始流包装为 BufferedInputStream，使其支持 mark/reset
+        this.input = new BufferedInputStream(input);
     }
 
     public void setSocket(java.net.Socket socket) {
-        this.socket = socket;
         if (socket != null) {
             this.remoteAddr = socket.getInetAddress().getHostAddress();
             this.remoteHost = socket.getInetAddress().getHostName();
@@ -67,9 +66,11 @@ public class Request implements HttpServletRequest {
     }
 
     public void parse() throws Exception {
+        // 使用 BufferedReader 读取请求行和头部（BufferedInputStream 支持 mark，可安全使用）
         BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
         String requestLine = reader.readLine();
         if (requestLine == null) return;
+
         String[] parts = requestLine.split(" ");
         if (parts.length >= 2) {
             method = parts[0];
@@ -85,7 +86,6 @@ public class Request implements HttpServletRequest {
             if (idx > 0) {
                 contextPath = fullUri.substring(0, idx);
                 String remaining = fullUri.substring(idx);
-                // servletPath 默认为 remaining，但 DispatcherServlet 会进一步映射，这里简单处理
                 servletPath = remaining;
                 pathInfo = null;
                 uri = remaining;
@@ -109,6 +109,9 @@ public class Request implements HttpServletRequest {
                 headers.computeIfAbsent(name, k -> new ArrayList<>()).add(value);
                 if ("content-type".equals(name)) {
                     contentType = value;
+                    if (contentType != null && contentType.startsWith("multipart/form-data")) {
+                        isMultipart = true;
+                    }
                 } else if ("content-length".equals(name)) {
                     contentLength = Integer.parseInt(value);
                     contentLengthLong = Long.parseLong(value);
@@ -116,24 +119,23 @@ public class Request implements HttpServletRequest {
             }
         }
 
-        // 读取 body
-        StringBuilder bodyBuilder = new StringBuilder();
-        while (reader.ready()) {
-            bodyBuilder.append((char) reader.read());
-        }
-        body = bodyBuilder.toString();
-
-        if (body != null && !body.isEmpty() && contentType != null) {
-            if (contentType.startsWith("application/x-www-form-urlencoded")) {
-                parseQueryString(body, parameters);
-            } else if (contentType.startsWith("multipart/form-data")) {
-                InputStream multipartStream = new ByteArrayInputStream(body.getBytes(StandardCharsets.ISO_8859_1));
-                multipartResolver = new MultipartResolver(contentType, multipartStream);
-                parameters.putAll(multipartResolver.getTextFields());
+        // 处理 body
+        if (!isMultipart) {
+            StringBuilder bodyBuilder = new StringBuilder();
+            while (reader.ready()) {
+                bodyBuilder.append((char) reader.read());
             }
+            body = bodyBuilder.toString();
+            if (body != null && !body.isEmpty() && contentType != null) {
+                if (contentType.startsWith("application/x-www-form-urlencoded")) {
+                    parseQueryString(body, parameters);
+                }
+            }
+        } else {
+            // multipart 请求不读取 body 字符串，保留流位置供 MultipartResolver 使用
+            body = null;
         }
 
-        // 解析 Cookie
         parseCookies();
     }
 
@@ -171,7 +173,7 @@ public class Request implements HttpServletRequest {
         }
     }
 
-    // ==================== ServletRequest 基础方法实现 ====================
+    // ==================== 实现 HttpServletRequest 接口 ====================
     @Override public String getMethod() { return method; }
     @Override public String getUri() { return uri; }
     @Override public String getContextPath() { return contextPath; }
@@ -184,10 +186,20 @@ public class Request implements HttpServletRequest {
         return (values != null && !values.isEmpty()) ? values.get(0) : null;
     }
     @Override public String getContentType() { return contentType; }
-    @Override public InputStream getInputStream() { return new ByteArrayInputStream(body.getBytes(StandardCharsets.ISO_8859_1)); }
-    @Override public MultipartResolver getMultipartResolver() { return multipartResolver; }
+    @Override public InputStream getInputStream() { return input; }
+    @Override public MultipartResolver getMultipartResolver() {
+        if (multipartResolver == null && isMultipart && contentType != null) {
+            try {
+                // ★ 使用包装后的 BufferedInputStream，支持 mark/reset
+                multipartResolver = new MultipartResolver(contentType, input);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return multipartResolver;
+    }
 
-    // ==================== 新增方法 ====================
+    // ========== 其他标准方法（保持不变） ==========
     @Override public String getRequestURI() { return uri; }
     @Override public StringBuffer getRequestURL() {
         StringBuffer url = new StringBuffer();
@@ -210,20 +222,13 @@ public class Request implements HttpServletRequest {
     @Override public String getScheme() { return scheme; }
     @Override public String getProtocol() { return protocol; }
     @Override public boolean isSecure() { return secure; }
-
-    @Override public Enumeration<String> getHeaderNames() {
-        return Collections.enumeration(headers.keySet());
-    }
+    @Override public Enumeration<String> getHeaderNames() { return Collections.enumeration(headers.keySet()); }
     @Override public Enumeration<String> getHeaders(String name) {
         List<String> values = headers.get(name.toLowerCase(Locale.ENGLISH));
         return values != null ? Collections.enumeration(values) : Collections.emptyEnumeration();
     }
-    @Override public Enumeration<String> getParameterNames() {
-        return Collections.enumeration(parameters.keySet());
-    }
-    @Override public String[] getParameterValues(String name) {
-        return new String[]{parameters.get(name)}; // 简化，如需多值可扩展
-    }
+    @Override public Enumeration<String> getParameterNames() { return Collections.enumeration(parameters.keySet()); }
+    @Override public String[] getParameterValues(String name) { return new String[]{parameters.get(name)}; }
     @Override public Map<String, String[]> getParameterMap() {
         Map<String, String[]> map = new HashMap<>();
         for (Map.Entry<String, String> entry : parameters.entrySet()) {
@@ -231,7 +236,6 @@ public class Request implements HttpServletRequest {
         }
         return map;
     }
-
     @Override public BufferedReader getReader() throws IOException {
         return new BufferedReader(new InputStreamReader(getInputStream(), characterEncoding));
     }
@@ -239,12 +243,9 @@ public class Request implements HttpServletRequest {
     @Override public void setCharacterEncoding(String env) { this.characterEncoding = env; }
     @Override public int getContentLength() { return contentLength; }
     @Override public long getContentLengthLong() { return contentLengthLong; }
-
-    // Session 支持
     @Override public HttpSession getSession() { return getSession(true); }
     @Override public HttpSession getSession(boolean create) {
         if (session != null) return session;
-        // 从 Cookie 中查找 JSESSIONID
         String sessionId = null;
         if (cookies != null) {
             for (Cookie cookie : cookies) {
@@ -254,28 +255,16 @@ public class Request implements HttpServletRequest {
                 }
             }
         }
-        if (sessionId != null) {
-            session = SessionManager.getSession(sessionId);
-        }
-        if (session == null && create) {
-            session = SessionManager.createSession();
-        }
+        if (sessionId != null) session = SessionManager.getSession(sessionId);
+        if (session == null && create) session = SessionManager.createSession();
         return session;
     }
-
-    // Cookie
-    @Override public Cookie[] getCookies() {
-        if (cookies == null) return new Cookie[0];
-        return cookies.toArray(new Cookie[0]);
-    }
-
-    // 属性
+    @Override public Cookie[] getCookies() { return cookies == null ? new Cookie[0] : cookies.toArray(new Cookie[0]); }
     @Override public Object getAttribute(String name) { return attributes.get(name); }
     @Override public void setAttribute(String name, Object value) { attributes.put(name, value); }
     @Override public void removeAttribute(String name) { attributes.remove(name); }
     @Override public Enumeration<String> getAttributeNames() { return Collections.enumeration(attributes.keySet()); }
 
-    // 内部类 Cookie
     public static class Cookie {
         private final String name;
         private final String value;

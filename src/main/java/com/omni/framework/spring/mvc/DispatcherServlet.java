@@ -77,8 +77,8 @@ public class DispatcherServlet extends HttpServlet {
         return regex.toString();
     }
 
-   @Override
-   protected void doGet(HttpServletRequest req, HttpServletResponse res) throws Exception {
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse res) throws Exception {
         processRequest(req, res);
     }
 
@@ -87,14 +87,10 @@ public class DispatcherServlet extends HttpServlet {
         processRequest(req, res);
     }
 
-    // 文件路径: com.omni.framework.spring.mvc.DispatcherServlet.java
-// 只需修改 processRequest 方法中的片段，完整文件见下方
-// 文件路径: com.omni.framework.spring.mvc.DispatcherServlet.java
-// 只修改 processRequest 方法中的片段
-
     private void processRequest(HttpServletRequest req, HttpServletResponse res) throws Exception {
         RequestContextHolder.setRequest(req);
         ResponseContextHolder.setResponse(res);
+        MultipartResolver multipartResolver = null;
         try {
             String uri = req.getUri();
             for (HandlerMapping hm : handlerMappings) {
@@ -110,7 +106,6 @@ public class DispatcherServlet extends HttpServlet {
                     if (hm.isResponseBody) {
                         String outStr;
                         if (result instanceof String) {
-                            // ★ 关键修改：直接输出 String，不再进行任何 JSON 转换
                             outStr = (String) result;
                         } else {
                             outStr = toJson(result);
@@ -129,8 +124,12 @@ public class DispatcherServlet extends HttpServlet {
             res.write("<h1>404 - Not Found</h1>");
             res.send();
         } catch (Throwable e) {
-            log.error("processRequest error:",e);
+            log.error("processRequest error:", e);
         } finally {
+            // 清理 multipart 临时文件
+            if (multipartResolver != null) {
+                multipartResolver.cleanup();
+            }
             RequestContextHolder.clear();
             ResponseContextHolder.clear();
         }

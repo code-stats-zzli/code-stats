@@ -6,9 +6,12 @@ import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestMapping;
 import com.omni.framework.spring.annotation.ResponseBody;
+import com.omni.framework.spring.mvc.FileItem;
+import com.omni.framework.spring.mvc.MultipartResolver;
 import com.omni.framework.spring.mvc.RequestContextHolder;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.util.JsonUtil;
+
 import java.util.Map;
 
 @Controller
@@ -35,45 +38,40 @@ public class DriverController {
     @ResponseBody
     public String upload() throws Exception {
         HttpServletRequest req = RequestContextHolder.getRequest();
-        var multipart = req.getMultipartResolver();
+        MultipartResolver multipart = req.getMultipartResolver();
         if (multipart == null) return error("不支持 multipart");
 
-        byte[] fileBytes = multipart.getFileParameter("file");
+        FileItem fileItem = multipart.getFileItem("file");
+        if (fileItem == null) return error("缺少文件");
+
         String name = multipart.getTextParameter("name");
-        String fileName = multipart.getTextParameter("fileName");
+        String fileName = fileItem.getFileName();
 
         DriverJar driver = new DriverJar();
         driver.setName(name);
-        driver.setJarData(fileBytes);
+        driver.setJarData(fileItem.getBytes());
         driver.setFileName(fileName);
         boolean ok = driverService.save(driver);
         return JsonUtil.toJson(Map.of("success", ok));
     }
 
-    // 新增：更新驱动接口
     @RequestMapping("/update")
     @ResponseBody
     public String update() throws Exception {
         HttpServletRequest req = RequestContextHolder.getRequest();
-        var multipart = req.getMultipartResolver();
+        MultipartResolver multipart = req.getMultipartResolver();
         if (multipart == null) return error("不支持 multipart");
 
         String id = multipart.getTextParameter("id");
         String name = multipart.getTextParameter("name");
-        byte[] fileBytes = multipart.getFileParameter("file");
-        String fileName = multipart.getTextParameter("fileName");
-
-        if (id == null || id.trim().isEmpty()) {
-            return error("驱动ID不能为空");
-        }
+        FileItem fileItem = multipart.getFileItem("file");
 
         DriverJar driver = new DriverJar();
         driver.setId(id);
         driver.setName(name);
-        // 如果上传了新文件，则更新JAR数据；否则保持原有数据（由Service层判断）
-        if (fileBytes != null && fileBytes.length > 0) {
-            driver.setJarData(fileBytes);
-            driver.setFileName(fileName);
+        if (fileItem != null) {
+            driver.setJarData(fileItem.getBytes());
+            driver.setFileName(fileItem.getFileName());
         }
         boolean ok = driverService.update(driver);
         return JsonUtil.toJson(Map.of("success", ok));

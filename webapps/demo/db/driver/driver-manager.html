@@ -4,35 +4,175 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>驱动管理 - CodeStats</title>
-    <link rel="stylesheet" href="../global-tech.css">
-    <link rel="stylesheet" href="driver-manager.css">
-    <script src="../global.js"></script>
+    <style>
+        /* 内联样式，不依赖外部CSS */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%);
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            min-height: 100vh;
+        }
+        .container {
+            padding: 24px;
+            background: transparent;
+            height: 100vh;
+        }
+        .toolbar {
+            margin-bottom: 20px;
+        }
+        .btn-primary {
+            background: #0066ff;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: 0.2s;
+        }
+        .btn-primary:hover {
+            background: #0050cc;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background: rgba(0,102,255,0.1);
+            border: 1px solid rgba(0,102,255,0.3);
+            padding: 8px 20px;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-secondary:hover {
+            background: rgba(0,102,255,0.2);
+            transform: translateY(-1px);
+        }
+        table {
+            width: 100%;
+            background: rgba(255,255,255,0.7);
+            backdrop-filter: blur(16px);
+            border-radius: 20px;
+            overflow: hidden;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid rgba(0,102,255,0.2);
+        }
+        th {
+            background: rgba(0,102,255,0.1);
+            color: #0066ff;
+            font-weight: 600;
+        }
+        .action-btns button {
+            margin-right: 8px;
+            padding: 4px 12px;
+            background: rgba(0,102,255,0.1);
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .action-btns button:hover {
+            background: #0066ff;
+            color: white;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 24px;
+            width: 500px;
+            max-width: 90%;
+            box-shadow: 0 20px 35px rgba(0,0,0,0.2);
+        }
+        .modal-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .close {
+            font-size: 28px;
+            cursor: pointer;
+            color: #94a3b8;
+        }
+        .close:hover {
+            color: #ef4444;
+        }
+        .modal-body {
+            padding: 24px;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            font-size: 14px;
+        }
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #e2e8f0;
+            text-align: right;
+            gap: 12px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .empty-row td {
+            text-align: center;
+            padding: 40px;
+            color: #64748b;
+        }
+    </style>
 </head>
 <body>
 <div class="container">
     <div class="toolbar">
-        <button id="uploadBtn" class="btn-primary">+ 上传驱动</button>
+        <button id="addDriverBtn" class="btn-primary">➕ 新增驱动</button>
     </div>
     <table id="driverTable">
         <thead>
         <tr><th>驱动名称</th><th>文件名</th><th>上传时间</th><th>操作</th></tr>
         </thead>
-        <tbody id="driverTableBody"></tbody>
+        <tbody id="driverTableBody">
+        <tr class="empty-row"><td colspan="4">暂无驱动，请点击“新增驱动”上传 jar 文件</td></tr>
+        </tbody>
     </table>
 </div>
 
 <!-- 上传/编辑共用弹窗 -->
-<div id="modal" class="modal">
+<div id="driverModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3 id="modalTitle">上传驱动</h3>
-            <span class="close">&times;</span>
+            <h3 id="modalTitle">新增驱动</h3>
+            <span class="close" id="closeModalBtn">&times;</span>
         </div>
         <div class="modal-body">
             <input type="hidden" id="editId">
             <div class="form-group">
                 <label>驱动名称 *</label>
-                <input type="text" id="name" placeholder="例如: MySQL Connector 8.0">
+                <input type="text" id="driverName" placeholder="例如: MySQL Connector 8.0">
             </div>
             <div class="form-group" id="fileGroup">
                 <label>Jar 文件 <span id="fileOptionalHint"></span></label>
@@ -40,8 +180,8 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button id="saveBtn" class="btn-primary">保存</button>
-            <button id="cancelBtn" class="btn-secondary">取消</button>
+            <button id="saveDriverBtn" class="btn-primary">保存</button>
+            <button id="cancelDriverBtn" class="btn-secondary">取消</button>
         </div>
     </div>
 </div>

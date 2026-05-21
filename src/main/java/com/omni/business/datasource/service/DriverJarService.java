@@ -18,6 +18,23 @@ public class DriverJarService {
         return jdbcTemplate.queryForObject("SELECT * FROM driver_jar WHERE id = ?", DriverJar.class, id);
     }
 
+    // 新增：更新驱动（仅更新名称和可选的文件内容）
+    public boolean update(DriverJar driver) throws Exception {
+        if (driver.getJarData() != null && driver.getJarData().length > 0) {
+            // 同时更新名称、JAR数据、文件名
+            return jdbcTemplate.update(
+                    "UPDATE driver_jar SET name = ?, jar_data = ?, file_name = ? WHERE id = ?",
+                    driver.getName(), driver.getJarData(), driver.getFileName(), driver.getId()
+            ) > 0;
+        } else {
+            // 仅更新名称，保留原有JAR数据
+            return jdbcTemplate.update(
+                    "UPDATE driver_jar SET name = ? WHERE id = ?",
+                    driver.getName(), driver.getId()
+            ) > 0;
+        }
+    }
+
     public boolean save(DriverJar driver) throws Exception {
         driver.setId(UUID.randomUUID().toString().replace("-", ""));
         return jdbcTemplate.update(

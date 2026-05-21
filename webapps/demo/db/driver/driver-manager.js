@@ -5,17 +5,17 @@
     const tableBody = document.getElementById('driverTableBody');
     const modal = document.getElementById('modal');
     const modalTitle = document.getElementById('modalTitle');
-    const codeInput = document.getElementById('code');
+    const editIdInput = document.getElementById('editId');
     const nameInput = document.getElementById('name');
     const jarFileInput = document.getElementById('jarFile');
-    const editId = document.getElementById('editId');
     const fileGroup = document.getElementById('fileGroup');
+    const fileOptionalHint = document.getElementById('fileOptionalHint');
     const saveBtn = document.getElementById('saveBtn');
     const cancelBtn = document.getElementById('cancelBtn');
     const uploadBtn = document.getElementById('uploadBtn');
     const closeSpan = document.querySelector('.close');
 
-    let isEdit = false;
+    let isEditMode = false;
 
     async function loadDrivers() {
         const resp = await fetch(API + '/list');
@@ -26,23 +26,33 @@
     function renderTable() {
         tableBody.innerHTML = drivers.map(d => `
             <tr>
-                <td>${escapeHtml(d.code)}</td>
                 <td>${escapeHtml(d.name)}</td>
                 <td>${escapeHtml(d.fileName)}</td>
                 <td>${new Date(d.createTime).toLocaleString()}</td>
                 <td class="action-btns">
+                    <button data-action="edit" data-id="${d.id}" data-name="${escapeHtml(d.name)}">✏️ 编辑</button>
                     <button data-action="download" data-id="${d.id}">⬇️ 下载</button>
                     <button data-action="delete" data-id="${d.id}">🗑️ 删除</button>
                 </td>
             </tr>
         `).join('');
 
+        // 编辑按钮
+        document.querySelectorAll('[data-action="edit"]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const id = btn.dataset.id;
+                const name = btn.dataset.name;
+                openEditModal(id, name);
+            });
+        });
+        // 下载按钮
         document.querySelectorAll('[data-action="download"]').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const id = btn.dataset.id;
                 window.open(API + '/download?id=' + id, '_blank');
             });
         });
+        // 删除按钮
         document.querySelectorAll('[data-action="delete"]').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 if (confirm('确定删除该驱动吗？')) {
@@ -56,38 +66,58 @@
         });
     }
 
-    function openModal(edit = false, driver = null) {
-        isEdit = edit;
-        if (edit && driver) {
-            modalTitle.innerText = '编辑驱动';
-            codeInput.value = driver.code;
-            nameInput.value = driver.name;
-            editId.value = driver.id;
-            fileGroup.style.display = 'none';  // 编辑时不显示文件上传
-        } else {
-            modalTitle.innerText = '上传驱动';
-            codeInput.value = '';
-            nameInput.value = '';
-            jarFileInput.value = '';
-            editId.value = '';
-            fileGroup.style.display = 'block';
-        }
+    function openEditModal(id, name) {
+        isEditMode = true;
+        editIdInput.value = id;
+        nameInput.value = name;
+        modalTitle.innerText = '编辑驱动';
+        // 编辑时文件上传变为可选，提示文字修改
+        fileOptionalHint.textContent = '（可选，不选则保持原有JAR）';
+        jarFileInput.value = ''; // 清空文件选择
+        modal.style.display = 'flex';
+    }
+
+    function openUploadModal() {
+        isEditMode = false;
+        editIdInput.value = '';
+        nameInput.value = '';
+        jarFileInput.value = '';
+        modalTitle.innerText = '上传驱动';
+        fileOptionalHint.textContent = '（必选）';
         modal.style.display = 'flex';
     }
 
     async function saveDriver() {
-        const code = codeInput.value.trim();
         const name = nameInput.value.trim();
-        if (!code || !name) {
-            alert('请填写驱动编码和名称');
+        if (!name) {
+            alert('请填写驱动名称');
             return;
         }
 
-        if (isEdit) {
-            // 编辑暂不支持修改 Jar，可扩展
-            alert('暂不支持编辑驱动，请删除后重新上传');
-            return;
+        if (isEditMode) {
+            // 编辑模式
+            const id = editIdInput.value;
+            const file = jarFileInput.files[0];
+            const formData = new FormData();
+            formData.append('id', id);
+            formData.append('name', name);
+            if (file) {
+                formData.append('file', file);
+                formData.append('fileName', file.name);
+            }
+            const resp = await fetch(API + '/update', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+            if (data.success) {
+                loadDrivers();
+                closeModal();
+            } else {
+                alert('更新失败：' + (data.error || '未知错误'));
+            }
         } else {
+            // 新增模式
             const file = jarFileInput.files[0];
             if (!file) {
                 alert('请选择 Jar 文件');
@@ -95,7 +125,6 @@
             }
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('code', code);
             formData.append('name', name);
             formData.append('fileName', file.name);
             const resp = await fetch(API + '/upload', {
@@ -107,7 +136,7 @@
                 loadDrivers();
                 closeModal();
             } else {
-                alert('上传失败: ' + data.error);
+                alert('上传失败：' + (data.error || '未知错误'));
             }
         }
     }
@@ -116,7 +145,7 @@
         modal.style.display = 'none';
     }
 
-    uploadBtn.addEventListener('click', () => openModal(false));
+    uploadBtn.addEventListener('click', openUploadModal);
     saveBtn.addEventListener('click', saveDriver);
     cancelBtn.addEventListener('click', closeModal);
     closeSpan.addEventListener('click', closeModal);

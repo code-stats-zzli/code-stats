@@ -2,48 +2,144 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>驱动管理 - CodeStats</title>
+    <title>数据源管理</title>
     <link rel="stylesheet" href="../global-tech.css">
-    <link rel="stylesheet" href="driver-manager.css">
+    <style>
+        .ds-manager {
+            display: flex;
+            height: 100vh;
+            background: transparent;
+            padding: 20px;
+            gap: 24px;
+        }
+        .ds-list-panel {
+            width: 320px;
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .ds-list-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(0,102,255,0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .ds-list-header h3 {
+            color: var(--accent-primary);
+        }
+        .ds-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+        .ds-item {
+            background: white;
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid rgba(0,102,255,0.2);
+        }
+        .ds-item:hover {
+            border-color: var(--accent-primary);
+            transform: translateX(4px);
+        }
+        .ds-item.active {
+            background: rgba(0,102,255,0.1);
+            border-left: 4px solid var(--accent-primary);
+        }
+        .ds-name {
+            font-weight: 600;
+            color: var(--accent-primary);
+        }
+        .ds-type {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        .ds-form-panel {
+            flex: 1;
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            border-radius: 24px;
+            padding: 24px;
+            overflow-y: auto;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .full-width {
+            grid-column: span 2;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+            justify-content: flex-end;
+        }
+        .btn-test {
+            background: rgba(0,102,255,0.1);
+        }
+        .error-tip, .empty-tip {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-muted);
+        }
+    </style>
     <script src="../global.js"></script>
 </head>
 <body>
-<div class="container">
-    <div class="toolbar">
-        <button id="uploadBtn" class="btn-primary">+ 上传驱动</button>
+<div class="ds-manager">
+    <!-- 左侧列表 -->
+    <div class="ds-list-panel">
+        <div class="ds-list-header">
+            <h3>📋 数据源列表</h3>
+            <button id="newDsBtn" class="btn-secondary" style="padding: 4px 12px;">+ 新增</button>
+        </div>
+        <div id="dsListContainer" class="ds-list">
+            <div class="loading">加载中...</div>
+        </div>
     </div>
-    <table id="driverTable">
-        <thead>
-        <tr><th>驱动名称</th><th>文件名</th><th>上传时间</th><th>操作</th></tr>
-        </thead>
-        <tbody id="driverTableBody"></tbody>
-    </table>
-</div>
 
-<!-- 上传弹窗 -->
-<div id="modal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3 id="modalTitle">上传驱动</h3>
-            <span class="close">&times;</span>
-        </div>
-        <div class="modal-body">
-            <div class="form-group">
-                <label>驱动名称 *</label>
-                <input type="text" id="name" placeholder="例如: MySQL Connector 8.0">
+    <!-- 右侧表单 -->
+    <div class="ds-form-panel">
+        <h2 id="formTitle">📝 配置数据源</h2>
+        <input type="hidden" id="editId">
+        <div class="form-grid">
+            <div><label>名称 *</label><input id="name" placeholder="例：生产库"></div>
+            <div><label>数据库类型</label>
+                <select id="dbType">
+                    <option value="mysql">MySQL</option>
+                    <option value="oracle">Oracle (扩展)</option>
+                    <option value="postgresql">PostgreSQL (扩展)</option>
+                </select>
             </div>
-            <div class="form-group">
-                <label>Jar 文件 *</label>
-                <input type="file" id="jarFile" accept=".jar">
-            </div>
+            <div><label>主机 *</label><input id="host" placeholder="localhost" value="localhost"></div>
+            <div><label>端口 *</label><input id="port" placeholder="3306" value="3306"></div>
+            <div><label>数据库名 *</label><input id="databaseName" placeholder="test"></div>
+            <div><label>用户名</label><input id="username"></div>
+            <div><label>密码</label><input id="password" type="password"></div>
+            <div><label>驱动类</label><input id="driverClass" placeholder="com.mysql.cj.jdbc.Driver"></div>
+            <div><label>驱动Jar路径(可选)</label><input id="driverJar" placeholder="可选"></div>
+            <div class="full-width"><label>连接属性</label><input id="connectionProperties" placeholder="useSSL=false&amp;serverTimezone=UTC"></div>
+            <div><label>数据库版本</label><input id="version" placeholder="8.0"></div>
+            <div><label>状态</label><select id="status"><option value="1">启用</option><option value="0">禁用</option></select></div>
         </div>
-        <div class="modal-footer">
-            <button id="saveBtn" class="btn-primary">保存</button>
+        <div class="action-buttons">
+            <button id="testConnBtn" class="btn-secondary btn-test">🔌 测试连接</button>
+            <button id="saveBtn" class="btn-primary">💾 保存</button>
             <button id="cancelBtn" class="btn-secondary">取消</button>
         </div>
+        <div id="formMessage" style="margin-top: 16px;"></div>
     </div>
 </div>
-<script src="driver-manager.js"></script>
+<script src="datasource-manager.js"></script>
 </body>
 </html>

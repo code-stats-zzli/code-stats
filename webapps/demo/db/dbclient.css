@@ -466,3 +466,40 @@ body {
     padding: 20px;
     font-size: 13px;
 }
+/* 下拉菜单容器 */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+.dropdown-toggle {
+    cursor: pointer;
+}
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(0,102,255,0.3);
+    border-radius: 16px;
+    min-width: 160px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+    z-index: 1000;
+    display: none;
+    padding: 8px 0;
+}
+.dropdown:hover .dropdown-menu {
+    display: block;
+}
+.dropdown-menu a {
+    display: block;
+    padding: 8px 20px;
+    color: var(--text-dark);
+    text-decoration: none;
+    font-size: 14px;
+    transition: 0.2s;
+}
+.dropdown-menu a:hover {
+    background: rgba(0,102,255,0.1);
+    color: var(--accent-primary);
+}

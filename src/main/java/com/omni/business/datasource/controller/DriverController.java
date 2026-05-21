@@ -50,6 +50,35 @@ public class DriverController {
         return JsonUtil.toJson(Map.of("success", ok));
     }
 
+    // 新增：更新驱动接口
+    @RequestMapping("/update")
+    @ResponseBody
+    public String update() throws Exception {
+        HttpServletRequest req = RequestContextHolder.getRequest();
+        var multipart = req.getMultipartResolver();
+        if (multipart == null) return error("不支持 multipart");
+
+        String id = multipart.getTextParameter("id");
+        String name = multipart.getTextParameter("name");
+        byte[] fileBytes = multipart.getFileParameter("file");
+        String fileName = multipart.getTextParameter("fileName");
+
+        if (id == null || id.trim().isEmpty()) {
+            return error("驱动ID不能为空");
+        }
+
+        DriverJar driver = new DriverJar();
+        driver.setId(id);
+        driver.setName(name);
+        // 如果上传了新文件，则更新JAR数据；否则保持原有数据（由Service层判断）
+        if (fileBytes != null && fileBytes.length > 0) {
+            driver.setJarData(fileBytes);
+            driver.setFileName(fileName);
+        }
+        boolean ok = driverService.update(driver);
+        return JsonUtil.toJson(Map.of("success", ok));
+    }
+
     @RequestMapping("/download")
     @ResponseBody
     public void download(String id) throws Exception {

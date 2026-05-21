@@ -15,13 +15,13 @@
     </div>
     <table id="driverTable">
         <thead>
-        <tr><th>驱动编码</th><th>驱动名称</th><th>文件名</th><th>上传时间</th><th>操作</th></tr>
+        <tr><th>驱动名称</th><th>文件名</th><th>上传时间</th><th>操作</th></tr>
         </thead>
         <tbody id="driverTableBody"></tbody>
     </table>
 </div>
 
-<!-- 上传/编辑弹窗 -->
+<!-- 上传/编辑共用弹窗 -->
 <div id="modal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -29,19 +29,15 @@
             <span class="close">&times;</span>
         </div>
         <div class="modal-body">
-            <div class="form-group">
-                <label>驱动编码 *</label>
-                <input type="text" id="code" placeholder="例如: mysql-connector-8.0">
-            </div>
+            <input type="hidden" id="editId">
             <div class="form-group">
                 <label>驱动名称 *</label>
                 <input type="text" id="name" placeholder="例如: MySQL Connector 8.0">
             </div>
             <div class="form-group" id="fileGroup">
-                <label>Jar 文件 *</label>
+                <label>Jar 文件 <span id="fileOptionalHint"></span></label>
                 <input type="file" id="jarFile" accept=".jar">
             </div>
-            <input type="hidden" id="editId">
         </div>
         <div class="modal-footer">
             <button id="saveBtn" class="btn-primary">保存</button>

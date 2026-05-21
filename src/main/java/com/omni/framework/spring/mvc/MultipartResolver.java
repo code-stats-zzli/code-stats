@@ -162,7 +162,11 @@ public class MultipartResolver {
 
     private void parse() throws IOException {
         if (!findBoundary()) throw new IOException("No starting boundary found");
+        int maxLoop = 1000000;
+        int loop = 0;
         while (true) {
+            if(loop <100)System.out.println(loop);
+            if (++loop > maxLoop) throw new RuntimeException("边界匹配超时");
             Map<String, String> headers = readPartHeaders();
             if (headers.isEmpty()) break;
             String disposition = headers.get("Content-Disposition");

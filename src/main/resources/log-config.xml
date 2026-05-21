@@ -31,6 +31,7 @@
     <logger name="com.omni" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE"/>
     </logger>
+    <logger name="com.omni.framework.spring.mvc.DispatcherServlet" level="DEBUG"/>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>

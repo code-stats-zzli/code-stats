@@ -7,19 +7,18 @@ import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.spring.beans.factory.ConfigurableListableBeanFactory;
 import com.omni.framework.spring.context.AbstractApplicationContext;
 import com.omni.framework.spring.context.SpringContextHolder;
+import com.omni.framework.tomcat.servlet.CachedBodyHttpServletRequest;
 import com.omni.framework.tomcat.servlet.HttpServlet;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -88,6 +87,11 @@ public class DispatcherServlet extends HttpServlet {
     }
 
     private void processRequest(HttpServletRequest req, HttpServletResponse res) throws Exception {
+        // ★ 包装请求以支持缓存和重复读取 Body
+        //req = new CachedBodyHttpServletRequest(req);
+        // ★ 打印详细请求信息
+        logRequestDetails(req);
+
         RequestContextHolder.setRequest(req);
         ResponseContextHolder.setResponse(res);
         MultipartResolver multipartResolver = null;
@@ -126,12 +130,82 @@ public class DispatcherServlet extends HttpServlet {
         } catch (Throwable e) {
             log.error("processRequest error:", e);
         } finally {
-            // 清理 multipart 临时文件
             if (multipartResolver != null) {
                 multipartResolver.cleanup();
             }
             RequestContextHolder.clear();
             ResponseContextHolder.clear();
+        }
+    }
+
+    // ==================== 新增：请求日志打印方法 ====================
+    private void logRequestDetails(HttpServletRequest req) {
+        log.info(req.getRequestURI());
+        if (!log.isDebugEnabled()) {
+            return; // 只在 DEBUG 级别打印，避免生产环境过多日志
+        }
+        StringBuilder sb = new StringBuilder("\n========== HTTP Request ==========\n");
+
+        // 1. 请求行
+        sb.append("Method : ").append(req.getMethod()).append("\n");
+        sb.append("URI    : ").append(req.getRequestURI()).append("\n");
+        String query = req.getQueryString();
+        sb.append("Query  : ").append(query != null ? query : "").append("\n");
+
+        // 2. 请求头
+        sb.append("Headers:\n");
+        Enumeration<String> headerNames = req.getHeaderNames();
+        if (headerNames != null) {
+            while (headerNames.hasMoreElements()) {
+                String name = headerNames.nextElement();
+                Enumeration<String> values = req.getHeaders(name);
+                while (values.hasMoreElements()) {
+                    sb.append("  ").append(name).append(": ").append(values.nextElement()).append("\n");
+                }
+            }
+        }
+
+        // 3. 请求参数
+        sb.append("Parameters:\n");
+        Map<String, String[]> paramMap = req.getParameterMap();
+        if (paramMap != null && !paramMap.isEmpty()) {
+            paramMap.forEach((key, values) ->
+                    sb.append("  ").append(key).append(": ").append(Arrays.toString(values)).append("\n"));
+        } else {
+            sb.append("  (none)\n");
+        }
+
+        // 4. 请求体
+        String body = safeReadBody(req);
+        if (body != null && !body.isEmpty()) {
+            sb.append("Body:\n").append(body).append("\n");
+        }
+
+        sb.append("==================================\n");
+        log.debug(sb.toString());
+    }
+
+    private String safeReadBody(HttpServletRequest req) {
+        // 只对 POST/PUT/PATCH 允许 Body 的方法且非 multipart 时读取
+        String method = req.getMethod();
+        if (!"POST".equalsIgnoreCase(method) && !"PUT".equalsIgnoreCase(method) && !"PATCH".equalsIgnoreCase(method)) {
+            return null;
+        }
+        String contentType = req.getContentType();
+        if (contentType != null && contentType.startsWith("multipart/form-data")) {
+            return "[multipart content, not logged]";
+        }
+        try {
+            BufferedReader reader = req.getReader();
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            log.warn("Failed to read request body for logging", e);
+            return "[unreadable]";
         }
     }
 

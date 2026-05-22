@@ -44,7 +44,7 @@ public class DriverController {
         FileItem fileItem = multipart.getFileItem("file");
         if (fileItem == null) return error("缺少文件");
 
-        String name = multipart.getTextParameter("name");
+        String name = multipart.getParameter("name");
         String fileName = fileItem.getFileName();
 
         DriverJar driver = new DriverJar();
@@ -62,8 +62,8 @@ public class DriverController {
         MultipartResolver multipart = req.getMultipartResolver();
         if (multipart == null) return error("不支持 multipart");
 
-        String id = multipart.getTextParameter("id");
-        String name = multipart.getTextParameter("name");
+        String id = multipart.getParameter("id");
+        String name = multipart.getParameter("name");
         FileItem fileItem = multipart.getFileItem("file");
 
         DriverJar driver = new DriverJar();

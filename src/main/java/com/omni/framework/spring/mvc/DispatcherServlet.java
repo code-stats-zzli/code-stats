@@ -131,7 +131,7 @@ public class DispatcherServlet extends HttpServlet {
             log.error("processRequest error:", e);
         } finally {
             if (multipartResolver != null) {
-                multipartResolver.cleanup();
+                multipartResolver.close();
             }
             RequestContextHolder.clear();
             ResponseContextHolder.clear();

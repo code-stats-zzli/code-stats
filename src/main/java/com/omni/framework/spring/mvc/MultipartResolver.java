@@ -19,9 +19,9 @@ public class MultipartResolver implements AutoCloseable {
 
     public MultipartResolver(String contentType, InputStream inputStream) throws IOException {
         this.inputStream = new BufferedInputStream(inputStream, CONTENT_BUFFER * 2);
-        this.inputStream.mark(CONTENT_BUFFER * 10);
-        printMultipartStructure(contentType);
-        this.inputStream.reset();
+        //this.inputStream.mark(CONTENT_BUFFER * 10);
+        //printMultipartStructure(contentType);
+        //this.inputStream.reset();
 
         String boundaryStr = extractBoundary(contentType);
         if (boundaryStr == null || boundaryStr.isBlank()) {
@@ -214,7 +214,9 @@ public class MultipartResolver implements AutoCloseable {
     private String readLine(BoundaryFinder finder) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream(256);
         byte[] buf = new byte[CONTENT_BUFFER];
+        int c = 0;
         while (true) {
+            if(c < 100000)System.out.println("[DEBUG] 查找下一行[" + ++c +"]");
             int r = finder.readBuffer(buf);
             // ===================== 【修复 3：流结束返回 null】=====================
             if (r <= 0) {

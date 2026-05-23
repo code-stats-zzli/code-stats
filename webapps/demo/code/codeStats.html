@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>代码分析 - CodeStats</title>
     <link rel="stylesheet" href="../global-tech.css">
-    <script src="../global.js"></script>   <!-- 新增 -->
     <link rel="stylesheet" href="codeStats.css">
+    <script src="../global.js"></script>
 </head>
 <body>
 <div class="layout">
@@ -35,11 +35,48 @@
         </section>
         <section class="result-section">
             <div class="progress-bar" id="progressBar" style="display: none;"><div class="progress-fill" id="progressFill"></div><span id="progressText">分析中...</span></div>
-            <div class="result-tabs"><button class="tab active" data-tab="files">文件列表</button><button class="tab" data-tab="summary">摘要统计</button></div>
-            <div style="margin: 12px 0; display: flex; gap: 12px;" id="resultActions"><button id="exportCsvBtn" class="btn-secondary" style="background:#10b981; color:white;">📎 导出表格为CSV</button><button id="downloadMergeBtn" class="btn-secondary" style="background:#3b82f6; color:white;" disabled>📥 下载合并文件</button></div>
+            <div class="result-tabs">
+                <button class="tab active" data-tab="files">文件列表</button>
+                <button class="tab" data-tab="summary">摘要统计</button>
+                <button class="tab" data-tab="dependency">依赖关系</button>
+            </div>
+            <div style="margin: 12px 0; display: flex; gap: 12px;" id="resultActions">
+                <button id="exportCsvBtn" class="btn-secondary" style="background:#10b981; color:white;">📎 导出表格为CSV</button>
+                <button id="downloadMergeBtn" class="btn-secondary" style="background:#3b82f6; color:white;" disabled>📥 下载合并文件</button>
+            </div>
             <div class="tab-content" id="tabContent">
-                <div class="table-wrapper" id="filesTable" style="display: block;"><table><thead><tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr></thead><tbody id="fileTableBody"></tbody></table></div>
-                <div class="summary-content" id="summaryContent" style="display: none;"><div id="summaryInfo"></div><div id="languageInfo"></div></div>
+                <!-- 文件列表标签页 -->
+                <div class="table-wrapper" id="filesTable" style="display: block;">
+                    <table>
+                        <thead>
+                        <tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr>
+                        </thead>
+                        <tbody id="fileTableBody"></tbody>
+                    </table>
+                </div>
+                <!-- 摘要统计标签页 -->
+                <div class="summary-content" id="summaryContent" style="display: none;">
+                    <div id="summaryInfo"></div>
+                    <div id="languageInfo"></div>
+                </div>
+                <!-- 依赖关系标签页 -->
+                <div class="dependency-content" id="dependencyContent" style="display: none;">
+                    <div class="dependency-stats" id="depStats"></div>
+                    <div class="class-selector" style="margin: 20px 0;">
+                        <label>选择类：</label>
+                        <select id="classSelect" style="min-width: 300px;"></select>
+                    </div>
+                    <div class="dependency-details" style="display: flex; gap: 30px;">
+                        <div style="flex:1;">
+                            <h4>📤 出向依赖（该类依赖的其他类）</h4>
+                            <ul id="outgoingList" class="dependency-list"></ul>
+                        </div>
+                        <div style="flex:1;">
+                            <h4>📥 入向依赖（依赖该类的其他类）</h4>
+                            <ul id="incomingList" class="dependency-list"></ul>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
     </main>

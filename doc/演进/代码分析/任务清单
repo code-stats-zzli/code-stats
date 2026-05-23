@@ -1,0 +1,229 @@
+方向二：代码质量与可视化分析平台 —— 第一周任务清单
+目标：实现 Java 代码依赖分析 的核心能力，为后续依赖图可视化、循环检测、架构度量打下基础。
+基于现有 CodeStats 代码分析模块扩展，复用 CollectStage 收集的文件列表，为每个 Java 文件提取依赖关系。
+
+📅 Day 1：技术选型与基础模块搭建
+任务 1.1：引入 Java 源码解析库
+
+目标：选择一个轻量、稳定的 Java 解析库，用于提取类名、导入、字段类型等。推荐 JavaParser（com.github.javaparser:javaparser-core）。
+
+操作：在 pom.xml（或 build.gradle）中添加依赖，验证能够解析一个简单的 Java 文件。
+
+产出：依赖已加入，编写一个简单的解析 Demo 类 JavaParserDemo（放在 test 目录）。
+
+任务 1.2：设计依赖数据模型
+
+目标：定义存储类依赖关系的核心数据结构。
+
+操作：在 com.omni.framework.codestats.dependency 包下创建：
+
+ClassInfo：类名（全限定名）、包名、类型（class/interface/enum/annotation）。
+
+DependencyGraph：封装 Map<String, Set<String>>（key 为类名，value 为依赖的类名）。
+
+DependencyResult：包含所有类的信息 + 图结构 + 统计（总类数、平均依赖数等）。
+
+产出：三个 POJO 类，写单元测试验证基本存取。
+
+任务 1.3：实现 Java 文件依赖提取器
+
+目标：输入一个 .java 文件的 Path，输出该文件对应的 ClassInfo 及其依赖的类名集合。
+
+操作：创建 JavaDependencyExtractor 类，使用 JavaParser 解析：
+
+获取包名、类名（含内部类处理简化版）。
+
+提取所有 import 语句。
+
+提取字段声明中的类型、方法参数/返回类型、继承/实现的类型。
+
+将以上全部视为“依赖”，去重后存储。
+
+产出：extract(Path file) -> Dependencies 方法，单元测试覆盖简单示例（如 import java.util.List; 和字段 private String name;）。
+
+📅 Day 2：集成到代码分析流水线
+任务 2.1：新增依赖分析阶段（Stage）
+
+目标：将依赖分析作为 Pipeline 的一个可选阶段，复用已有的 CollectStage 输出的文件列表。
+
+操作：
+
+创建 DependencyAnalysisStage 实现 Stage<List<Path>, DependencyResult>。
+
+内部并行处理文件（使用现有线程池），调用 JavaDependencyExtractor。
+
+合并每个文件的依赖信息到一个全局 DependencyGraph。
+
+产出：可以独立运行 DependencyAnalysisStage.process(files) 得到完整的依赖图。
+
+任务 2.2：在 CodeAnalysisService 中添加依赖分析入口
+
+目标：通过 REST API 触发依赖分析，返回 JSON 结果。
+
+操作：
+
+在 CodeAnalysisService 中增加 analyzeDependencies(params) 方法。
+
+参数复用现有配置（rootDir, extensions, excludePaths 等）。
+
+调用 CollectStage 获取文件列表 → DependencyAnalysisStage → 返回 DependencyResult。
+
+产出：Service 层方法可用。
+
+任务 2.3：提供 REST API
+
+目标：前端可调用的 HTTP 接口。
+
+操作：在 CodeAnalysisController 中添加：
+
+java
+@RequestMapping("/dependencies")
+@ResponseBody
+public String getDependencies() {
+    Map<String, String> params = ParamUtils.parseQueryParams();
+    return codeAnalysisService.analyzeDependencies(params);
+}
+产出：访问 /code/api/dependencies?rootDir=...&extensions=java 返回 JSON 格式的依赖图。
+
+📅 Day 3：依赖图存储与基础查询
+任务 3.1：缓存依赖分析结果
+
+目标：避免每次请求都重新分析全部文件（尤其是大型项目）。
+
+操作：
+
+在 CodeAnalysisService 中使用 Cache（项目已有 CacheFactory）缓存 DependencyResult，key 为 rootDir + extensions + excludePaths 的哈希。
+
+设置 TTL 为 1 小时，并支持手动清除。
+
+产出：连续两次请求同一项目时，第二次直接返回缓存。
+
+任务 3.2：实现依赖查询接口
+
+目标：支持按类名查询其直接依赖和反向依赖（哪些类依赖它）。
+
+操作：
+
+在 DependencyGraph 中添加方法：
+
+getDirectDependencies(String className)
+
+getInverseDependencies(String className)
+
+在 CodeAnalysisController 中添加两个子接口：
+
+/code/api/dependencies/outgoing?className=xxx
+
+/code/api/dependencies/incoming?className=xxx
+
+产出：可以通过 API 单独查询某个类的依赖关系。
+
+任务 3.3：生成简单统计
+
+目标：提供依赖相关的度量指标。
+
+操作：在 DependencyResult 中增加：
+
+totalClasses
+
+averageOutgoingDependencies
+
+maxOutgoingDependencies（并列出对应的类）
+
+numberOfCycles（预留，Day 4 实现）
+
+产出：统计信息一并输出到 JSON 中。
+
+📅 Day 4：循环依赖检测与单元测试
+任务 4.1：实现循环依赖检测算法
+
+目标：找出项目中所有循环依赖的强连通分量（SCC）。
+
+操作：
+
+基于依赖图（有向图）使用 Tarjan 算法 或 Kosaraju。
+
+在 DependencyGraph 中添加 List<Set<String>> detectCycles()。
+
+每个 SCC 大小 > 1 即为一个循环依赖组。
+
+产出：detectCycles() 方法返回循环分组，并在 DependencyResult 中提供 cycleGroups 字段。
+
+任务 4.2：编写单元测试
+
+目标：确保依赖提取和循环检测的正确性。
+
+操作：
+
+创建一组测试用的 Java 文件（例如 A.java 依赖 B，B 依赖 A）。
+
+测试 JavaDependencyExtractor 能否正确提取依赖关系。
+
+测试 detectCycles() 能否检测出上述循环。
+
+产出：测试通过，覆盖率 >80%。
+
+任务 4.3：API 输出循环依赖信息
+
+目标：前端可获取循环依赖列表。
+
+操作：在主 /dependencies 接口的返回 JSON 中增加 "cycles": [["com.A","com.B"], ...]。
+
+产出：API 包含循环依赖信息。
+
+📅 Day 5：前端初步展示（依赖列表）
+任务 5.1：扩展代码分析前端页面
+
+目标：在 codeStats.html 中增加一个 “依赖关系” 标签页。
+
+操作：
+
+修改 codeStats.html，在结果区域增加一个新 tab 按钮 “依赖图”。
+
+在 codeStats.js 中添加 renderDependencies(data) 函数。
+
+当用户完成代码分析后，额外调用 /code/api/dependencies 并渲染结果。
+
+产出：用户可以看到依赖统计（总类数、平均依赖数、循环依赖数量）以及一个简单的列表（例如按类名显示其依赖项）。
+
+任务 5.2：实现简单的依赖表格
+
+目标：可读性优先，暂不实现图形。
+
+操作：
+
+渲染一个 <select> 下拉框，列出所有类名。
+
+选择某个类后，在下方表格展示 出向依赖 和 入向依赖。
+
+产出：用户可通过下拉选择查看任意类的依赖关系。
+
+任务 5.3：编写第一周总结文档
+
+目标：记录本周完成的功能、技术决策、遇到的问题及解决方案。
+
+操作：在项目 docs/ 目录下创建 week1-dependency-analysis.md。
+
+产出：一篇可供团队/自己回顾的技术文档。
+
+📌 依赖与注意事项
+现有代码复用：CollectStage、ParallelAnalyzeStage 的线程池机制可直接用于依赖分析。
+
+性能考虑：大型项目（如 Spring Framework）可能有上万 Java 文件，需确保并行解析不超出内存。可先限制分析深度或增加进度显示。
+
+JavaParser 版本：建议使用最新稳定版（3.26.2+），注意与 Java 21 语法的兼容性。
+
+前端样式：复用项目已有的科技感 CSS，保持统一。
+
+✅ 第一周验收标准
+可以通过 API 获取任意 Java 项目的完整依赖图（JSON 格式）。
+
+能够检测并返回循环依赖分组。
+
+前端页面可以展示依赖统计和任意类的依赖列表。
+
+缓存机制有效，重复分析速度明显提升。
+
+单元测试覆盖核心提取逻辑和循环检测算法。
+
+完成第一周任务后，你将拥有一个可用的依赖分析模块。第二周可以在此基础上实现 依赖图可视化（SVG/Canvas） 和 架构规则校验（如禁止 controller 直接依赖 repository）。

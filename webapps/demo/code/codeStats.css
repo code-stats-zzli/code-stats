@@ -21,3 +21,43 @@ th, td { padding:10px 12px; text-align:left; }
 tr:hover td { background: rgba(0,200,255,0.05); }
 .summary-content h3 { margin:12px 0 6px; color:var(--accent-primary); }
 .language-item { display:flex; gap:20px; padding:6px 0; border-bottom:1px solid rgba(0,200,255,0.2); }
+/* 依赖关系标签页样式 */
+.dependency-content {
+    padding: 8px 0;
+}
+.dependency-stats {
+    background: rgba(255,255,255,0.6);
+    border-radius: 20px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+.class-selector select {
+    background: white;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 14px;
+}
+.dependency-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 300px;
+    overflow-y: auto;
+    background: white;
+    border-radius: 16px;
+    border: 1px solid rgba(0,102,255,0.2);
+}
+.dependency-list li {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    font-family: monospace;
+    font-size: 13px;
+}
+.dependency-list li:last-child {
+    border-bottom: none;
+}
+.error-tip {
+    color: #dc2626;
+    padding: 12px;
+    text-align: center;
+}

@@ -27,12 +27,21 @@
     const tabButtons = resultTabs.querySelectorAll('.tab');
     const filesTable = document.getElementById('filesTable');
     const summaryTab = document.getElementById('summaryContent');
+    const dependencyTab = document.getElementById('dependencyContent');
+    const depStatsDiv = document.getElementById('depStats');
+    const classSelect = document.getElementById('classSelect');
+    const outgoingList = document.getElementById('outgoingList');
+    const incomingList = document.getElementById('incomingList');
 
     const exportCsvBtn = document.getElementById('exportCsvBtn');
     const downloadMergeBtn = document.getElementById('downloadMergeBtn');
 
     let currentMode = 'server';
     let currentMergeFilePath = null;
+    let dependencyData = null;          // 存储依赖分析结果
+    let classInfoMap = null;            // 存储类名映射
+
+    // ========== 原有代码统计功能 ==========
 
     async function loadDefaultConfig() {
         try {
@@ -75,6 +84,7 @@
         }
         if (downloadMergeBtn) downloadMergeBtn.disabled = true;
         currentMergeFilePath = null;
+        dependencyData = null;   // 清空旧的依赖数据
 
         const params = new URLSearchParams();
         params.append('rootDir', rootDirInput.value);
@@ -92,6 +102,7 @@
         progressText.textContent = '正在分析...';
 
         try {
+            // 1. 执行代码行数统计
             const resp = await fetch(API_BASE + '/analyze?' + params.toString());
             progressFill.style.width = '80%';
             const data = await resp.json();
@@ -108,6 +119,9 @@
                 currentMergeFilePath = null;
                 if (downloadMergeBtn) downloadMergeBtn.disabled = true;
             }
+
+            // 2. 执行依赖分析（异步，不阻塞界面）
+            await loadDependencyData(params);
 
             progressFill.style.width = '100%';
             progressText.textContent = '分析完成';
@@ -153,12 +167,179 @@
             `).join('')}
         `;
 
+        // 默认激活文件列表标签页
         tabButtons.forEach(btn => btn.classList.remove('active'));
         tabButtons[0].classList.add('active');
         filesTable.style.display = 'block';
         summaryTab.style.display = 'none';
+        if (dependencyTab) dependencyTab.style.display = 'none';
     }
 
+    // ========== 依赖分析相关功能 ==========
+
+    async function loadDependencyData(params) {
+        // 提取依赖分析所需的参数（与行数统计类似）
+        const depParams = new URLSearchParams();
+        depParams.append('rootDir', rootDirInput.value);
+        depParams.append('extensions', extensionsInput.value);
+        depParams.append('excludePaths', excludePathsInput.value);
+        depParams.append('extraPaths', extraPathsInput.value);
+        depParams.append('threadCount', threadCountInput.value);
+        // 排除注释参数对依赖分析无影响，但保留一致性
+        depParams.append('excludeComments', excludeCommentsCheck.checked);
+
+        try {
+            const resp = await fetch(API_BASE + '/dependencies?' + depParams.toString());
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            if (data.error) {
+                console.warn('依赖分析失败：', data.error);
+                if (depStatsDiv) depStatsDiv.innerHTML = `<div class="error-tip">依赖分析失败: ${data.error}</div>`;
+                return;
+            }
+            dependencyData = data;
+            classInfoMap = data.classInfoMap || {};
+            renderDependencyStats(data);
+            populateClassSelect(classInfoMap);
+            // 如果当前激活的是依赖标签页，则刷新下拉框和依赖详情
+            if (dependencyTab && dependencyTab.style.display !== 'none') {
+                bindClassSelectEvent();
+                // 如果有默认选中的类，触发一次
+                if (classSelect && classSelect.value) {
+                    loadDependenciesForClass(classSelect.value);
+                }
+            }
+        } catch (err) {
+            console.error('依赖分析请求失败', err);
+            if (depStatsDiv) depStatsDiv.innerHTML = `<div class="error-tip">依赖分析请求失败: ${err.message}</div>`;
+        }
+    }
+
+    function renderDependencyStats(data) {
+        if (!depStatsDiv) return;
+        const cycles = data.cycles || [];
+        depStatsDiv.innerHTML = `
+            <h3>📊 依赖统计</h3>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                <div><strong>总类数:</strong> ${data.totalClasses || 0}</div>
+                <div><strong>平均出向依赖数:</strong> ${(data.averageOutgoingDependencies || 0).toFixed(2)}</div>
+                <div><strong>最大出向依赖数:</strong> ${data.maxOutgoingDependencies || 0} 
+                    (类: ${(data.maxOutgoingClasses || []).join(', ') || '无'})</div>
+                <div><strong>循环依赖组数:</strong> ${cycles.length}</div>
+            </div>
+            ${cycles.length ? `
+                <details style="margin-top: 12px;">
+                    <summary>🔍 查看循环依赖组</summary>
+                    <pre style="background: #f1f5f9; padding: 10px; border-radius: 12px; overflow-x: auto;">${JSON.stringify(cycles, null, 2)}</pre>
+                </details>
+            ` : ''}
+            <hr style="margin: 16px 0; border-color: rgba(0,102,255,0.2);">
+        `;
+    }
+
+    function populateClassSelect(classMap) {
+        if (!classSelect) return;
+        const classNames = Object.keys(classMap).sort();
+        if (classNames.length === 0) {
+            classSelect.innerHTML = '<option value="">无类信息</option>';
+            return;
+        }
+        let options = '<option value="">请选择类</option>';
+        for (const fqName of classNames) {
+            const info = classMap[fqName];
+            const display = `${info.simpleName} (${info.packageName || 'default'})`;
+            options += `<option value="${escapeHtml(fqName)}">${escapeHtml(display)}</option>`;
+        }
+        classSelect.innerHTML = options;
+        // 绑定 change 事件（避免重复绑定）
+        classSelect.removeEventListener('change', classSelectChangeHandler);
+        classSelect.addEventListener('change', classSelectChangeHandler);
+    }
+
+    function classSelectChangeHandler(e) {
+        const className = e.target.value;
+        if (className) {
+            loadDependenciesForClass(className);
+        } else {
+            if (outgoingList) outgoingList.innerHTML = '<li>请选择一个类</li>';
+            if (incomingList) incomingList.innerHTML = '<li>请选择一个类</li>';
+        }
+    }
+
+    function bindClassSelectEvent() {
+        // 确保已经绑定了事件，在 populateClassSelect 中已做，此函数可留空或用于手动触发
+        if (classSelect && classSelect.value) {
+            loadDependenciesForClass(classSelect.value);
+        }
+    }
+
+    async function loadDependenciesForClass(className) {
+        if (!className) return;
+        try {
+            const [outgoingResp, incomingResp] = await Promise.all([
+                fetch(API_BASE + `/dependencies/outgoing?className=${encodeURIComponent(className)}`),
+                fetch(API_BASE + `/dependencies/incoming?className=${encodeURIComponent(className)}`)
+            ]);
+            const outgoingData = await outgoingResp.json();
+            const incomingData = await incomingResp.json();
+            renderDependencyDetails(outgoingData.outgoing || [], incomingData.incoming || []);
+        } catch (err) {
+            console.error('加载类依赖详情失败', err);
+            if (outgoingList) outgoingList.innerHTML = '<li>加载失败</li>';
+            if (incomingList) incomingList.innerHTML = '<li>加载失败</li>';
+        }
+    }
+
+    function renderDependencyDetails(outgoing, incoming) {
+        if (outgoingList) {
+            outgoingList.innerHTML = outgoing.length ? outgoing.map(dep => `<li>${escapeHtml(dep)}</li>`).join('') : '<li>无</li>';
+        }
+        if (incomingList) {
+            incomingList.innerHTML = incoming.length ? incoming.map(dep => `<li>${escapeHtml(dep)}</li>`).join('') : '<li>无</li>';
+        }
+    }
+
+    // ========== 标签页切换逻辑（增加依赖标签页） ==========
+    function switchTab(tabName) {
+        // 隐藏所有内容
+        filesTable.style.display = 'none';
+        summaryTab.style.display = 'none';
+        if (dependencyTab) dependencyTab.style.display = 'none';
+
+        if (tabName === 'files') {
+            filesTable.style.display = 'block';
+        } else if (tabName === 'summary') {
+            summaryTab.style.display = 'block';
+        } else if (tabName === 'dependency') {
+            if (dependencyTab) dependencyTab.style.display = 'block';
+            // 如果依赖数据尚未加载，但已经有分析参数，尝试加载（通常在 analyze 后已有数据）
+            if (!dependencyData && rootDirInput.value) {
+                const params = new URLSearchParams();
+                params.append('rootDir', rootDirInput.value);
+                params.append('extensions', extensionsInput.value);
+                params.append('excludePaths', excludePathsInput.value);
+                params.append('extraPaths', extraPathsInput.value);
+                params.append('threadCount', threadCountInput.value);
+                loadDependencyData(params);
+            } else if (dependencyData && classInfoMap && Object.keys(classInfoMap).length > 0 && classSelect.options.length <= 1) {
+                populateClassSelect(classInfoMap);
+            }
+        }
+        // 高亮当前 tab
+        tabButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
+    }
+
+    // 绑定标签页点击事件
+    tabButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.tab;
+            if (target) switchTab(target);
+        });
+    });
+
+    // ========== 原有辅助函数 ==========
     function truncatePath(path) {
         return path.length > 60 ? '...' + path.slice(-57) : path;
     }
@@ -256,15 +437,6 @@
     if (exportCsvBtn) exportCsvBtn.addEventListener('click', exportToCsv);
     if (downloadMergeBtn) downloadMergeBtn.addEventListener('click', downloadMergeFile);
 
-    resultTabs.addEventListener('click', (e) => {
-        const tab = e.target.closest('.tab');
-        if (!tab) return;
-        tabButtons.forEach(btn => btn.classList.remove('active'));
-        tab.classList.add('active');
-        const target = tab.dataset.tab;
-        filesTable.style.display = target === 'files' ? 'block' : 'none';
-        summaryTab.style.display = target === 'summary' ? 'block' : 'none';
-    });
-
+    // 初始化加载默认配置
     loadDefaultConfig();
 })();

@@ -9,10 +9,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.regex.Pattern;
 
 /**
- * 自研 Java 源码依赖提取器（不依赖 JavaParser）
+ * 自研 Java 源码依赖提取器
  * 通过词法扫描 + 状态机提取包名、导入、类声明、字段类型、方法返回类型/参数类型
  */
 public class JavaDependencyExtractor {

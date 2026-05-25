@@ -1,0 +1,240 @@
+一、整体目标
+这三个类共同实现了一个自研的 Java 源码依赖提取器。
+输入：一个 Java 源文件（.java）的 Path
+输出：ExtractedResult 对象，里面包含：
+
+该文件对应的类信息（ClassInfo：全限定名、包名、类名、类型）
+
+该文件声明的类型所依赖的其他类型（全限定名集合）
+
+一个全局的 DependencyResult（包含类信息映射和依赖图）
+
+核心思路是词法扫描 + 简单状态机，不依赖编译或 AST 库，适合轻量级静态分析。
+
+二、总体运行流程
+text
+1. JavaDependencyExtractor.extract(Path file)
+   ├─ 读取源码字符串
+   ├─ 用 SimpleJavaLexer 将源码拆成 Token 列表
+   ├─ 从 Token 中解析出：包名、导入列表、主类型声明（类/接口/枚举/注解）
+   ├─ 收集该类型内部引用的所有“类型名字符串”（字段类型、方法参数/返回类型、父类/接口）
+   ├─ 用 TypeNameResolver 将每个类型名解析为全限定名
+   ├─ 构建依赖图（边：当前类 → 依赖类）
+   └─ 返回 ExtractedResult
+三、各组件详解
+1. SimpleJavaLexer —— 极简词法扫描器
+设计目的：
+把 Java 源码拆成有意义的单元（Token），同时跳过注释、字符串、字符常量、数字字面量等与依赖分析无关的内容，只保留：
+
+KEYWORD：如 class、import、extends、int 等
+
+IDENTIFIER：变量名、类型名、方法名
+
+SYMBOL：单个符号如 { } ( ) ; . , 等
+
+关键设计点：
+
+手工扫描字符，不使用正则或 ANTLR，保证简单轻量。
+
+跳过：单行注释 //、多行注释 /* */、双引号字符串 "..."、单引号字符 '...'、数字字面量。
+
+识别标识符/关键字规则：以 Java 标识符首字符开头，连续取标识符字符；然后查预定义关键字表决定 TokenType。
+
+其他单个字符直接记为 SYMBOL。
+
+运行结果：
+对于源码：
+
+java
+package com.example;
+import java.util.List;
+public class Foo {
+    private String name;
+    public List<String> getList() { return null; }
+}
+产生的 Token 序列（简化）：
+
+text
+KEYWORD:package, IDENTIFIER:com, SYMBOL:., IDENTIFIER:example, SYMBOL:;
+KEYWORD:import, IDENTIFIER:java, SYMBOL:., IDENTIFIER:util, SYMBOL:., IDENTIFIER:List, SYMBOL:;
+KEYWORD:public, KEYWORD:class, IDENTIFIER:Foo, SYMBOL:{
+KEYWORD:private, IDENTIFIER:String, IDENTIFIER:name, SYMBOL:;
+KEYWORD:public, IDENTIFIER:List, SYMBOL:<, IDENTIFIER:String, SYMBOL:>, IDENTIFIER:getList, SYMBOL:(, SYMBOL:), SYMBOL:{, ... }
+2. JavaDependencyExtractor —— 依赖提取主逻辑
+2.1 解析包名（parsePackage）
+遍历 Token，找到 KEYWORD 且文本为 "package"。
+
+向后收集 IDENTIFIER 和 .，直到遇到 ;。
+
+返回包名字符串（如 "com.example"）。
+
+2.2 解析导入列表（parseImports）
+类似包名解析，找到 "import" 关键字。
+
+向后收集直到 ;，支持普通导入（如 java.util.List）和静态导入（会保留 static 前缀）。
+
+返回字符串列表。
+
+2.3 解析主类型声明（parseTypeDeclaration）
+这是最复杂的部分。设计目标：找到文件里最外层的类/接口/枚举/注解声明（通常一个文件一个 public 类型）。
+
+遍历 Token，匹配 class、interface、enum 或 @interface。
+
+记录类型名（下一个 IDENTIFIER）。
+
+继续扫描直到遇到 {，在此过程中捕获 extends 和 implements 后面的类型名（支持简单名或带点号的全限定名，如 java.util.ArrayList）。
+
+记录类型的 startTokenIndex 和 endTokenIndex（通过花括号匹配找到 } 的位置）。
+注意：这里粗略匹配花括号，不考虑嵌套类的情况——对于依赖提取，只关注最外层类型足够了。
+
+结果：TypeDeclaration 对象，包含类型种类、名字、父类/接口列表，以及后续收集依赖用的 Token 范围。
+
+2.4 收集类型引用（collectTypeReferences）
+输入：整个 Token 列表 + 主类型声明（已知道其 Body 起始和结束索引）
+
+设计思路：只在类的 { ... } 范围内扫描，避免处理其他内部类的干扰（虽然后面也会被扫描到，但依赖关系会合并到当前类）。
+
+收集以下来源的类型名：
+
+父类和接口（extendedTypes 和 implementedTypes） —— 直接加入。
+
+字段类型：
+模式 类型 字段名。启发式：遇到一个 IDENTIFIER，如果下一个 Token 也是 IDENTIFIER，则前一个可能是类型名（例如 String name）。
+缺陷：会把某些方法调用中的标识符误判，但因为是“可能类型”，后续解析器会过滤掉原始类型和无法解析的。
+
+方法返回类型：
+模式 类型 方法名 (。即检测 IDENTIFIER 后跟 IDENTIFIER 再跟 (，则前一个为返回类型。
+
+方法参数类型：
+扫描 ( 和 ) 之间的所有 IDENTIFIER，认为它们可能是参数类型。
+简单但会误收参数名，不过参数名通常小写开头，而 isPossibleTypeName 要求首字母大写或是基本类型，可以过滤部分误判。
+
+isPossibleTypeName 函数：
+
+首字母大写 → 可能是类名
+
+或者是基本类型（int, long...）或 void
+
+这样收集到的是一批原始类型名字符串（可能带泛型，如 List<String>，后续会清理）。
+
+2.5 类型名解析（TypeNameResolver）
+为什么需要：源码中出现的类型名可能是简单名（如 List）、带泛型的部分限定名（如 Map.Entry）、全限定名（如 java.util.List）。必须把它们转换成全限定名才能构建准确的依赖图。
+
+解析流程（resolve 方法）：
+
+去除数组后缀（[]）。
+
+剥离泛型部分（取 < 之前的内容）。
+
+如果已经包含点号（.），则直接当作全限定名返回（假设用户写的正确）。
+
+否则，依次尝试：
+
+在 import 列表中精确匹配 包.类 或 父包.子包.类 形式（只要以 ".类名" 结尾即可）。
+
+判断是否是 java.lang 下的常用类（硬编码列表），若是则返回 java.lang.类名。
+
+如果是同包下的类，则返回 当前包名.类名。
+
+否则无法解析，返回 null（表示外部不可解析的依赖，如未导入的第三方类）。
+
+静态导入（import static ...）会被忽略，因为它引用的是静态成员，不影响类型依赖。
+
+另外提供了 isPrimitive 方法过滤基本类型，避免依赖图上出现 int 等。
+
+2.6 构建依赖图与结果
+对每个解析出的依赖全限定名，调用 graph.addDependency(当前类全限定名, 依赖类全限定名)。
+
+创建 ClassInfo 对象和 DependencyResult。
+
+最后包装成 ExtractedResult 返回。
+
+四、实际运行示例分析
+假设我们有一个文件 com/example/UserService.java：
+
+java
+package com.example;
+
+import java.util.List;
+import com.example.dao.UserDao;
+import com.example.model.User;
+
+public class UserService {
+    private UserDao dao;
+    private List<String> names;
+
+    public User findById(int id) {
+        return null;
+    }
+}
+执行流程：
+
+读取源码 → 词法分析得到 Token 列表。
+
+解析包名 → "com.example"。
+
+解析导入 → ["java.util.List", "com.example.dao.UserDao", "com.example.model.User"]。
+
+找到主类型 class UserService，记录 extendedTypes 为空（无 extends），implementedTypes 为空。
+
+在 body 内收集类型引用：
+
+字段 private UserDao dao; → 得到 "UserDao"
+
+字段 private List<String> names; → 得到 "List"（<String> 被剥离）
+
+方法 public User findById(int id) → 返回类型 "User"，参数类型 "int"
+原始集合：{"UserDao", "List", "User", "int"}
+
+解析依赖：
+
+"UserDao" → 匹配导入 com.example.dao.UserDao → 解析为 com.example.dao.UserDao
+
+"List" → 属于 java.lang？不，但导入中有 java.util.List → 解析为 java.util.List
+
+"User" → 匹配导入 com.example.model.User → 解析为 com.example.model.User
+
+"int" → 原始类型，isPrimitive 返回 true → 跳过
+
+依赖图：com.example.UserService → com.example.dao.UserDao
+→ java.util.List
+→ com.example.model.User
+
+输出：ExtractedResult 包含 UserService 的 ClassInfo，依赖集合为 [com.example.dao.UserDao, java.util.List, com.example.model.User]，以及带有该边的 DependencyGraph。
+
+五、设计优缺点与限制
+优点
+轻量：不依赖任何第三方库或编译器 API，可嵌入到构建工具中。
+
+快速：只做词法扫描和简单模式匹配，适合扫描大型代码库。
+
+可读：手工实现的状态机清晰易改。
+
+缺点/限制
+不支持嵌套类：内部类的依赖会误归到外层类（但依赖关系仍然有效，只是粒度不精确）。
+
+对泛型和复杂表达式处理粗糙：例如 Map<String, List<Integer>> 只能提取到 Map，会丢失泛型参数中的类型（但通常依赖分析只关心外层类型，影响可控）。
+
+方法体内的局部变量类型不会被收集（例如 ArrayList<String> list = new ArrayList<>(); 中的 ArrayList 不会被提取），因为只扫描字段和方法签名。这是有意设计：方法体内的类型通常属于实现细节，不是类的公开依赖；若要全量提取，可扩展扫描整个方法体。
+
+不处理静态导入的类型（例如 import static java.lang.Math.PI; 不会引入 Math 依赖），但这类依赖极少。
+
+无法处理通配符导入（import java.util.*），因为不知道实际用了哪个类。设计中选择忽略通配符导入，后续遇到简单名无法解析会返回 null —— 导致漏掉依赖。
+
+硬编码了 java.lang 常用类列表，不完整（例如 ThreadLocal 不在列表中，会无法解析为 java.lang.ThreadLocal？实际上 ThreadLocal 在 java.lang，但列表里没有，会被当作同包下类，可能解析错误）。
+
+六、结果分析
+调用 extract 后返回的 ExtractedResult 可以用于：
+
+统计模块间的耦合度
+
+检测循环依赖
+
+绘制依赖关系图
+
+增量编译时判断哪些文件受影响
+
+例如，将整个项目的所有 Java 文件都提取后，合并得到一个 DependencyGraph，就可以进行上述分析。
+
+总结：这三段代码实现了一个实用的、可工作的轻量级 Java 依赖分析器，虽然不完美，但足以满足很多静态分析场景（如代码统计、架构规则检查）。理解其运行流程后，你可以轻松扩展它（比如支持通配符导入的启发式解析、更准确的方法体依赖收集等）。
+

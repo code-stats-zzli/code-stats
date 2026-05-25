@@ -17,5 +17,7 @@ public interface HttpServletResponse extends ServletResponse {
     void sendStatic(InputStream fis, String contentType, long length) throws IOException;
 
     OutputStream getRawOutputStream();
+
+    boolean isCommitted();
     // ... 可继续添加
 }

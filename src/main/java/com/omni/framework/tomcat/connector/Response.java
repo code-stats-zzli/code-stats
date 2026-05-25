@@ -1,7 +1,5 @@
 package com.omni.framework.tomcat.connector;
 
-
-
 import com.omni.framework.spring.mvc.MessageConverters;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
 
@@ -18,13 +16,12 @@ public class Response implements HttpServletResponse {
     private String contentType = "text/html; charset=utf-8";
     private final Map<String, String> headers = new HashMap<>();
     private boolean committed = false;
-    private PrintWriter writer;  // 懒加载
+    private PrintWriter writer;
 
     public Response(OutputStream output) {
         this.output = output;
     }
 
-    // ---------- 实现 ServletResponse / HttpServletResponse ----------
     @Override
     public void setContentType(String type) {
         this.contentType = type;
@@ -77,23 +74,20 @@ public class Response implements HttpServletResponse {
     @Override
     public void send() throws Exception {
         if (committed) return;
+
         byte[] bodyBytes;
         if (responseBody != null) {
-            // ★★★ 关键修复：如果 responseBody 已经是 JSON 字符串，直接获取字节，不再经过 MessageConverters
             if (responseBody instanceof String) {
                 String str = (String) responseBody;
                 String trimmed = str.trim();
                 if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-                    // 已经是 JSON 格式，直接输出
                     bodyBytes = str.getBytes(StandardCharsets.UTF_8);
                 } else {
-                    // 普通字符串，也许需要转换成 JSON 字符串（很少见），仍走转换器
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
                     MessageConverters.writeToResponse(responseBody, baos, contentType);
                     bodyBytes = baos.toByteArray();
                 }
             } else {
-                // 非字符串对象（Map/List/POJO），走转换器
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 MessageConverters.writeToResponse(responseBody, baos, contentType);
                 bodyBytes = baos.toByteArray();
@@ -102,19 +96,21 @@ public class Response implements HttpServletResponse {
             bodyBytes = new byte[0];
         }
 
-        // 以下发送响应头的代码保持不变（使用 PrintWriter 或直接写入）
-        try (PrintWriter pw = new PrintWriter(output, true)) {
-            pw.print("HTTP/1.1 " + statusCode + " " + statusMessage + "\r\n");
-            pw.print("Content-Type: " + contentType + "\r\n");
-            pw.print("Content-Length: " + bodyBytes.length + "\r\n");
-            for (Map.Entry<String, String> entry : headers.entrySet()) {
-                pw.print(entry.getKey() + ": " + entry.getValue() + "\r\n");
-            }
-            pw.print("\r\n");
-            pw.flush();
-            output.write(bodyBytes);
-            output.flush();
+        // 输出响应头：必须使用 PrintWriter，但绝不能关闭它（否则会关闭底层输出流）
+        PrintWriter pw = new PrintWriter(output, true);
+        pw.print("HTTP/1.1 " + statusCode + " " + statusMessage + "\r\n");
+        pw.print("Content-Type: " + contentType + "\r\n");
+        pw.print("Content-Length: " + bodyBytes.length + "\r\n");
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            pw.print(entry.getKey() + ": " + entry.getValue() + "\r\n");
         }
+        pw.print("\r\n");
+        pw.flush();          // 只刷新，不关闭
+
+        // 输出响应体
+        output.write(bodyBytes);
+        output.flush();
+
         committed = true;
     }
 
@@ -125,7 +121,6 @@ public class Response implements HttpServletResponse {
         send();
     }
 
-    // ---------- 扩展方法（非接口，供内部使用） ----------
     public OutputStream getRawOutputStream() {
         return output;
     }
@@ -135,18 +130,19 @@ public class Response implements HttpServletResponse {
         this.contentType = contentType;
         this.statusCode = 200;
         this.statusMessage = "OK";
-        try (PrintWriter pw = new PrintWriter(output, true)) {
-            pw.print("HTTP/1.1 200 OK\r\n");
-            pw.print("Content-Type: " + contentType + "\r\n");
-            pw.print("Content-Length: " + contentLength + "\r\n");
-            for (Map.Entry<String, String> entry : headers.entrySet()) {
-                pw.print(entry.getKey() + ": " + entry.getValue() + "\r\n");
-            }
-            pw.print("\r\n");
-            pw.flush();
-            inputStream.transferTo(output);
-            output.flush();
+
+        PrintWriter pw = new PrintWriter(output, true);
+        pw.print("HTTP/1.1 200 OK\r\n");
+        pw.print("Content-Type: " + contentType + "\r\n");
+        pw.print("Content-Length: " + contentLength + "\r\n");
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            pw.print(entry.getKey() + ": " + entry.getValue() + "\r\n");
         }
+        pw.print("\r\n");
+        pw.flush();
+
+        inputStream.transferTo(output);
+        output.flush();
         committed = true;
     }
 

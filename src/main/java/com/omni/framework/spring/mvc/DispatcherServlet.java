@@ -16,6 +16,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.lang.reflect.Method;
+import java.net.SocketException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
@@ -87,16 +88,15 @@ public class DispatcherServlet extends HttpServlet {
     }
 
     private void processRequest(HttpServletRequest req, HttpServletResponse res) throws Exception {
-        // ★ 包装请求以支持缓存和重复读取 Body
-        //req = new CachedBodyHttpServletRequest(req);
-        // ★ 打印详细请求信息
-        logRequestDetails(req);
+        String method = req.getMethod();
+        String uri = req.getUri();
+        String query = req.getQueryString();
+        log.info("收到请求: {} {} {}", method, uri, query != null ? "?" + query : "");
 
         RequestContextHolder.setRequest(req);
         ResponseContextHolder.setResponse(res);
         MultipartResolver multipartResolver = null;
         try {
-            String uri = req.getUri();
             for (HandlerMapping hm : handlerMappings) {
                 Pattern pattern = Pattern.compile(hm.regex);
                 Matcher matcher = pattern.matcher(uri);
@@ -128,7 +128,25 @@ public class DispatcherServlet extends HttpServlet {
             res.write("<h1>404 - Not Found</h1>");
             res.send();
         } catch (Throwable e) {
-            log.error("processRequest error:", e);
+            // 专门处理客户端过早断开连接
+            if (e instanceof SocketException) {
+                String msg = e.getMessage();
+                if (msg != null && (msg.contains("软件中止") || msg.contains("Connection reset") || msg.contains("Broken pipe"))) {
+                    log.debug("客户端已断开连接，请求详情: {} {}?{}", method, uri, query != null ? query : "");
+                    return; // 静默处理，不再向上抛出
+                }
+            }
+            log.error("处理请求失败: {} {}", method, uri, e);
+            // 如果响应尚未提交，尝试返回错误页面
+            if (!res.isCommitted()) {
+                try {
+                    res.setStatus(500, "Internal Server Error");
+                    res.write("<h1>500 Internal Server Error</h1><pre>" + e.toString() + "</pre>");
+                    res.send();
+                } catch (Exception ex) {
+                    log.error("发送错误响应失败", ex);
+                }
+            }
         } finally {
             if (multipartResolver != null) {
                 multipartResolver.close();
@@ -138,21 +156,16 @@ public class DispatcherServlet extends HttpServlet {
         }
     }
 
-    // ==================== 新增：请求日志打印方法 ====================
     private void logRequestDetails(HttpServletRequest req) {
         log.info(req.getRequestURI());
         if (!log.isDebugEnabled()) {
-            return; // 只在 DEBUG 级别打印，避免生产环境过多日志
+            return;
         }
         StringBuilder sb = new StringBuilder("\n========== HTTP Request ==========\n");
-
-        // 1. 请求行
         sb.append("Method : ").append(req.getMethod()).append("\n");
         sb.append("URI    : ").append(req.getRequestURI()).append("\n");
         String query = req.getQueryString();
         sb.append("Query  : ").append(query != null ? query : "").append("\n");
-
-        // 2. 请求头
         sb.append("Headers:\n");
         Enumeration<String> headerNames = req.getHeaderNames();
         if (headerNames != null) {
@@ -164,8 +177,6 @@ public class DispatcherServlet extends HttpServlet {
                 }
             }
         }
-
-        // 3. 请求参数
         sb.append("Parameters:\n");
         Map<String, String[]> paramMap = req.getParameterMap();
         if (paramMap != null && !paramMap.isEmpty()) {
@@ -174,19 +185,15 @@ public class DispatcherServlet extends HttpServlet {
         } else {
             sb.append("  (none)\n");
         }
-
-        // 4. 请求体
         String body = safeReadBody(req);
         if (body != null && !body.isEmpty()) {
             sb.append("Body:\n").append(body).append("\n");
         }
-
         sb.append("==================================\n");
         log.debug(sb.toString());
     }
 
     private String safeReadBody(HttpServletRequest req) {
-        // 只对 POST/PUT/PATCH 允许 Body 的方法且非 multipart 时读取
         String method = req.getMethod();
         if (!"POST".equalsIgnoreCase(method) && !"PUT".equalsIgnoreCase(method) && !"PATCH".equalsIgnoreCase(method)) {
             return null;

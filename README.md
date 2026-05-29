@@ -1,28 +1,32 @@
 CodeStats – 自研全栈 Java 平台
 完全从零构建的轻量级 Java Web 框架 + 多功能工具集
 无需任何第三方框架（Tomcat/Spring/MyBatis），展示底层原理与实战能力。
+下载即用，无需复杂配置，不依赖数据库也可运行核心功能。
 
-📖 目录
-项目简介
+🚀 最简启动（推荐）
+方式一：下载最新启动包（ZIP）
+下载 CodeStats-latest.zip（或本地打包后的 target/CodeStats-1.0.zip）
 
-架构亮点
+解压到任意目录
 
-功能模块
+双击运行 start.bat（Windows）或 ./start.sh（Linux/Mac）
 
-快速开始
+浏览器打开：http://localhost:28080/
 
-API 示例
+方式二：从源码构建
+bash
+git clone https://github.com/your-repo/CodeStats.git
+cd CodeStats
+mvn clean package
+java -jar target/CodeStats-1.0.jar
+💡 无需任何配置！
 
-技术栈
+不配置数据库，代码分析、目录管理、AI Agent、项目导航等核心功能依然完整可用
 
-项目结构
+数据库模块（表浏览）为可选功能，需要时再配置 application.properties
 
-贡献指南
-
-许可证
-
-项目简介
-CodeStats 是一个教学级的 Java Web 平台，旨在演示如何从零实现：
+📖 项目简介
+CodeStats 是一个教学级的 Java Web 平台，演示如何从零实现：
 
 🔥 嵌入式 Web 服务器（模拟 Tomcat 的 Connector、Pipeline、Container 体系）
 
@@ -30,7 +34,7 @@ CodeStats 是一个教学级的 Java Web 平台，旨在演示如何从零实现
 
 🌐 MVC 框架（@Controller、@RequestMapping、参数绑定、@ResponseBody）
 
-🗄️ 轻量 ORM（@Mapper 接口 + @Select 注解 + JDBC 代理）
+🗄️ 轻量 ORM（@Mapper 接口 + @Select 注解 + JDBC 动态代理）
 
 📊 代码分析引擎（多线程统计行数、注释、语言识别、GitIgnore 过滤）
 
@@ -46,117 +50,83 @@ CodeStats 是一个教学级的 Java Web 平台，旨在演示如何从零实现
 
 🎨 前端响应式框架（SimpleVue – 模拟 Vue 的响应式、模板编译、组件）
 
-所有功能均为完全自研，可用于学习框架设计思想，也可作为快速开发的基础平台。
-
-架构亮点
+✨ 架构亮点
 模块	核心实现
-Web 容器	自研 Connector（BIO/NIO 线程池）、Pipeline-Value 责任链、WebappClassLoader
-IoC 容器	SimpleApplicationContext 包扫描、@Autowired 注入，支持 @Controller/@Service/@Repository/@Component
+Web 容器	自研 Connector（BIO/NIO 线程池）、Pipeline-Valve 责任链、WebappClassLoader
+IoC 容器	包扫描、注解驱动、@Autowired 注入，支持 @Controller/@Service/@Repository
 MVC 核心	DispatcherServlet、HandlerMapping、ParamBinder（请求参数绑定）、@ResponseBody 自动 JSON
 ORM 映射	@Mapper + @Select 动态代理，自动执行 SQL 并映射结果，支持超时设置
 数据库连接池	阻塞队列 + 信号量（Semaphore）控制并发，支持空闲回收、连接验证
 代码分析引擎	Pipeline 模式：CollectStage → ParallelAnalyzeStage → AggregateStage → OutputStage，支持 GitIgnore、多线程、多种输出格式
-日志框架	LoggerFactory + Logger，支持 XML 配置、Appender（Console/File/RollingFile/Async）、PatternLayout、LevelRangeFilter
+日志框架	LoggerFactory + Logger，支持 XML 配置，多种 Appender（Console/File/RollingFile/Async）、PatternLayout、LevelRangeFilter
 缓存框架	Cache 接口，实现 LocalCache（ConcurrentHashMap + TTL + 定期清理）和 CaffeineCache（可选）
 SimpleVue 前端	响应式数据（Proxy + Dep + Watcher）、模板编译（{{}}、@click、v-model）、组件化、样式隔离（scoped CSS）
-功能模块
+🧩 功能模块
 1. 项目导航（首页）
-展示平台简介、模块列表、技术栈、快速链接。
+展示平台简介、模块列表、技术栈、快速链接
 
-通过顶部 Tab 切换各功能模块（数据库、代码分析、目录管理、AI Agent）。
+通过顶部 Tab 切换各功能模块
 
-2. 数据库浏览器
-连接 MySQL（通过 application.properties 配置），动态加载数据库、表、列信息。
+2. 数据库浏览器（可选）
+连接 MySQL（需配置），动态加载数据库、表、列信息
 
-树形菜单展示，点击表显示列属性（类型、可空、自增、备注等）。
+树形菜单展示，点击表显示列属性（类型、可空、自增、备注等）
 
-预留数据视图和 ER 图扩展。
+若不配置数据库，该模块自动提示，不影响其他功能
 
 3. 代码分析
-扫描指定目录，支持扩展名过滤、排除路径、.gitignore、额外文件/目录。
+扫描指定目录，支持扩展名过滤、排除路径、.gitignore、额外文件/目录
 
-多线程并行分析每个文件的总行数、代码行、注释行、空行、语言、复杂度。
+多线程并行分析总行数、代码行、注释行、空行、语言、复杂度
 
-结果可按行数、文件名、语言、复杂度排序。
+结果排序（行数/文件名/语言/复杂度）、导出 CSV、合并所有文件内容为单个文本文件
 
-支持导出 CSV、合并所有文件内容为单个文本文件。
-
-提供 Web 界面（/demo/code/codeStats.html）和 Swing GUI（CodeStatsGUI）以及命令行模式。
+提供 Web 界面、Swing GUI、命令行三种模式
 
 4. 目录管理
-浏览本地或服务器目录（可配置根目录）。
+浏览本地或服务器目录（可配置根目录）
 
-文件/目录的创建、重命名、删除，文本文件在线编辑保存。
+文件/目录的创建、重命名、删除，文本文件在线编辑保存
 
-支持文件上传（Base64 编码传输）、单个文件下载、目录打包为 ZIP 下载。
+支持文件上传（Base64）、单个文件下载、目录打包为 ZIP 下载
 
-树形导航 + 路径面包屑。
+树形导航 + 路径面包屑
 
 5. AI Agent
-对接 Ollama（本地 DeepSeek 模型）：检查服务状态、拉取模型、运行测试。
+对接 Ollama（本地 DeepSeek 模型）：检查服务状态、拉取模型、运行测试
 
-对接 DeepSeek 官方 API（需配置 deepseek.api.key）。
+对接 DeepSeek 官方 API（需配置 deepseek.api.key）
 
-支持自定义 API（任意兼容 OpenAI 格式的端点）。
+支持自定义 API（任意兼容 OpenAI 格式的端点）
 
-Web 聊天界面，支持多轮对话、模型选择、温度调节。
+Web 聊天界面，支持多轮对话、模型选择、温度调节
 
-提供 Playwright 自动化方案（可选）用于绕过前端限制。
+不配置任何 API Key 时，仍可使用“项目助手”内置知识库回答问题
 
 6. 开源工具页（额外）
-独立的 DeepSeek 对话页面，使用后端代理（/deepseek/api/chat）保持会话上下文。
+独立的 DeepSeek 对话页面，使用后端代理保持会话上下文
 
 7. 自研 SimpleVue 重构版（/face）
-完全基于自研 Component + 响应式系统重写的前端界面。
+完全基于自研 Component + 响应式系统重写的前端界面
 
-展示组件化开发、模板语法、事件绑定、样式注入。
+展示组件化开发、模板语法、事件绑定、样式注入
 
-快速开始
-环境要求
-JDK 8+（推荐 JDK 11+）
-
-Maven 3.6+（项目使用标准 Maven 结构）
-
-MySQL 数据库（可选，用于数据库模块）
-
-Ollama（可选，用于本地 AI 模型）
-
-构建与运行
-bash
-# 克隆仓库
-git clone https://github.com/your-repo/CodeStats.git
-cd CodeStats
-
-# 使用 Maven 编译
-mvn clean package
-
-# 运行主启动类（内置 Tomcat 服务器）
-java -cp target/CodeStats-1.0.jar com.omni.run.Bootstrap
-启动后访问：http://localhost:28080/codestats/ （端口和 context path 可在 application.properties 修改）
-
-配置数据库（数据库模块）
-在 src/main/resources/application.properties 中添加：
+⚙️ 可选配置（非必须）
+若需要使用数据库浏览器或 DeepSeek 官方 API，可在 src/main/resources/application.properties 中添加：
 
 properties
+# 数据库连接（可选）
 db.url=jdbc:mysql://localhost:3306/yourdb?useSSL=false
 db.username=root
 db.password=123456
 db.maxActive=10
-配置 AI 模块（可选）
-properties
-# Ollama 地址（默认 http://localhost:11434）
-ollama.api.url=http://localhost:11434/api/chat
 
-# DeepSeek API Key
+# AI 配置（可选）
 deepseek.api.key=sk-xxxxxx
+ollama.api.url=http://localhost:11434/api/chat
+不配置上述任何内容，项目依然可以正常运行，只是相应功能模块会提示“未配置”。
 
-# 自定义 API（可选）
-custom.api.url=https://api.deepseek.com/v1/chat/completions
-custom.api.key=sk-xxxxxx
-
-# 启用 Playwright（高级自动化，需安装浏览器驱动）
-playwright.enabled=false
-API 示例
+📡 API 示例
 代码分析 – 启动分析并获取结果
 bash
 GET /code/api/analyze?rootDir=D:/project&extensions=java,js&excludeComments=true
@@ -176,7 +146,7 @@ Content-Type: application/json
   "temperature": 0.7,
   "backend": "ollama"
 }
-技术栈
+🛠️ 技术栈
 领域	自研实现	可选的第三方库
 Web 服务器	Connector + Pipeline + Servlet 容器	-
 IoC 容器	注解扫描 + 反射注入 + 单例池	-
@@ -187,7 +157,7 @@ ORM	MapperProxy + JdbcTemplate + 注解 SQL	-
 代码分析	Pipeline + 多线程 + 语言识别 + GitIgnore	SnakeYAML (解析配置)
 AI 集成	HttpClient + JSON 解析	Playwright (可禁用)
 前端	SimpleVue (自研响应式+组件)	原生 JavaScript / CSS
-项目结构
+📁 项目结构（简化）
 text
 CodeStats/
 ├── src/main/java/com/codestats/
@@ -202,15 +172,14 @@ CodeStats/
 │   │   ├── pool/                      # 连接池
 │   │   ├── spring/                    # IoC + MVC
 │   │   ├── tomcat/                    # 嵌入式 Web 容器
-│   │   ├── util/                      # 工具类（JSON、参数解析）
 │   │   └── v4j/                       # SimpleVue 前后端框架
-│   └── run/                           # 演示入口（CacheDemo, LogDemo, VFJAppDemo）
+│   └── run/                           # 演示入口
 ├── webapps/                           # Web 应用静态资源
 │   ├── demo/                          # 示例页面（HTML/CSS/JS）
 │   ├── face/                          # SimpleVue 重构版前端
 │   └── vue/                           # SimpleVue 核心库
 └── pom.xml
-贡献指南
+🤝 贡献指南
 欢迎提交 issue 和 pull request。可参与的方向：
 
 完善单元测试
@@ -223,7 +192,7 @@ CodeStats/
 
 编写更详细的自研框架文档
 
-许可证
-MIT License © 2025 CodeStats Contributors
+📄 许可证
+MIT License © 2026 CodeStats Contributors
 
 CodeStats – 探索从零构建企业级 Java 平台的乐趣 🚀

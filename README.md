@@ -1,4 +1,4 @@
-#你的 Star 能让更多开发者
+#你的 Star 能让帮助更多开发者
 
 CodeStats – 从零构建的 Java 全栈平台
 不依赖 Tomcat、不依赖 Spring、不依赖 MyBatis

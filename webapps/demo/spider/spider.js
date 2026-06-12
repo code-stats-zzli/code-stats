@@ -1,8 +1,11 @@
+// ======== D:\work\git\CodeStats\webapps\demo\spider\spider.js ========
 (function() {
     let spiderTaskId = null;
     let pollInterval = null;
     let articleTableBody = null;
+    let failedTableBody = null;
     let processedUrls = new Set();
+    let latestAuthorInfo = null;  // 存储最新的作者信息，供详情弹窗使用
 
     const usernameInput = document.getElementById('username');
     const maxConcurrentInput = document.getElementById('maxConcurrent');
@@ -18,14 +21,25 @@
     const progressFill = document.getElementById('progressFill');
     const progressText = document.getElementById('progressText');
     const resultArea = document.getElementById('resultArea');
-    const authorInfoDiv = document.getElementById('authorInfo');
-    const articleWrapper = document.getElementById('articleTableWrapper');
+    const authorDetailsDiv = document.querySelector('#authorInfo .author-details');
     const downloadMergeBtn = document.getElementById('downloadMergeBtn');
-
-    // 实时显示元素
+    const showAuthorDetailBtn = document.getElementById('showAuthorDetailBtn');
+    const successCountSpan = document.getElementById('successCount');
+    const failedCountSpan = document.getElementById('failedCount');
     const currentStepSpan = document.getElementById('currentStep');
     const currentUrlSpan = document.getElementById('currentUrl');
     const summaryInfoDiv = document.getElementById('summaryInfo');
+
+    const tabSuccessBtn = document.getElementById('tabSuccessBtn');
+    const tabFailedBtn = document.getElementById('tabFailedBtn');
+    const successPanel = document.getElementById('successPanel');
+    const failedPanel = document.getElementById('failedPanel');
+
+    // 弹窗元素
+    const authorDetailModal = document.getElementById('authorDetailModal');
+    const authorDetailBody = document.getElementById('authorDetailBody');
+    const closeAuthorModalBtn = document.getElementById('closeAuthorModalBtn');
+    const closeModalFooterBtn = document.getElementById('closeModalFooterBtn');
 
     function toggleMergeFileName() {
         mergeFileNameRow.style.display = mergeEnabledCheck.checked ? 'flex' : 'none';
@@ -48,8 +62,18 @@
         resultArea.style.display = 'none';
         processedUrls.clear();
         if (articleTableBody) articleTableBody.innerHTML = '';
+        if (failedTableBody) failedTableBody.innerHTML = '';
         if (summaryInfoDiv) summaryInfoDiv.innerHTML = '';
-        authorInfoDiv.innerHTML = '';
+        if (authorDetailsDiv) authorDetailsDiv.innerHTML = '';
+        downloadMergeBtn.style.display = 'none';
+        showAuthorDetailBtn.style.display = 'none';
+        successCountSpan.innerText = '0';
+        failedCountSpan.innerText = '0';
+        tabSuccessBtn.classList.add('active');
+        tabFailedBtn.classList.remove('active');
+        successPanel.style.display = 'block';
+        failedPanel.style.display = 'none';
+        latestAuthorInfo = null;
     });
 
     startBtn.addEventListener('click', async () => {
@@ -109,40 +133,30 @@
             try {
                 const resp = await fetch(window.apiUrl(`/spider/api/status?taskId=${spiderTaskId}`));
                 const status = await resp.json();
-                // 更新进度条
                 const maxArticles = parseInt(maxArticlesInput.value) || 100;
                 const percent = status.state === 'COMPLETED' ? 100 :
                     (status.processedCount && maxArticles ? Math.min(95, (status.processedCount / maxArticles) * 100) : 10);
                 progressFill.style.width = percent + '%';
                 progressText.innerText = status.state === 'RUNNING' ?
-                    `📥 已获取 ${status.processedCount || 0} 篇文章，${status.currentStep || '处理中'}...` :
-                    (status.state === 'COMPLETED' ? `✅ 爬取完成！共 ${status.totalArticles} 篇文章` : `❌ 失败: ${status.errorMessage}`);
+                    `📥 已成功 ${status.successCount || 0} 篇，失败 ${status.failedCount || 0} 篇，${status.currentStep || '处理中'}...` :
+                    (status.state === 'COMPLETED' ? `✅ 爬取完成！成功 ${status.successCount} 篇，失败 ${status.failedCount} 篇` : `❌ 失败: ${status.errorMessage}`);
 
-                // 更新实时步骤
                 if (currentStepSpan) currentStepSpan.innerText = status.currentStep || '-';
                 if (currentUrlSpan) currentUrlSpan.innerText = status.currentUrl || '-';
 
-                // 实时更新文章列表（增量追加）
                 if (status.articles && status.articles.length) {
                     appendNewArticles(status.articles);
-                    updateSummaryInfo(status.articles, maxArticles);
                 }
+                if (status.failedArticles && status.failedArticles.length) {
+                    appendFailedArticles(status.failedArticles);
+                }
+                updateSummaryInfo(status);
 
                 if (status.state === 'COMPLETED') {
                     clearInterval(pollInterval);
                     resultArea.style.display = 'block';
-                    // 显示作者信息（无头像，纯文字）
-                    const author = status.authorInfo || {};
-                    authorInfoDiv.innerHTML = `
-                        <div class="author-details">
-                            <h3>${escapeHtml(author.nickname || author.name || usernameInput.value)}</h3>
-                            <p>${escapeHtml(author.description || 'CSDN 博主')}</p>
-                            <div class="stats-mini">
-                                <span class="stat-badge">📄 文章 ${status.totalArticles}</span>
-                                <span class="stat-badge">⭐ 影响力 ${Math.min(100, status.totalArticles * 5)}</span>
-                            </div>
-                        </div>
-                    `;
+                    latestAuthorInfo = status.authorInfo || {};
+                    renderAuthorBrief(latestAuthorInfo, status.successCount, status.failedCount);
                     if (status.mergedFilePath) {
                         downloadMergeBtn.style.display = 'inline-block';
                         downloadMergeBtn.onclick = () => {
@@ -151,10 +165,20 @@
                     } else {
                         downloadMergeBtn.style.display = 'none';
                     }
+                    // 只有当作者信息中包含详细统计数据（如 totalVisits）时才显示详情按钮
+                    if (latestAuthorInfo.totalVisits || latestAuthorInfo.originalCount || (latestAuthorInfo.columns && latestAuthorInfo.columns.length)) {
+                        showAuthorDetailBtn.style.display = 'inline-block';
+                    } else {
+                        showAuthorDetailBtn.style.display = 'none';
+                    }
+                    successCountSpan.innerText = status.successCount || 0;
+                    failedCountSpan.innerText = status.failedCount || 0;
                 } else if (status.state === 'ERROR') {
                     clearInterval(pollInterval);
                     resultArea.style.display = 'block';
-                    authorInfoDiv.innerHTML = `<div class="error">爬取失败: ${status.errorMessage}</div>`;
+                    authorDetailsDiv.innerHTML = `<div class="error">爬取失败: ${status.errorMessage}</div>`;
+                    downloadMergeBtn.style.display = 'none';
+                    showAuthorDetailBtn.style.display = 'none';
                 }
             } catch (err) {
                 console.error(err);
@@ -162,10 +186,71 @@
         }, 1500);
     }
 
-    // 增量添加新文章到表格
+    function renderAuthorBrief(author, successCount, failedCount) {
+        const nickname = author.nickname || author.name || usernameInput.value;
+        const description = author.description || 'CSDN 博主';
+        let statsHtml = `
+            <div>
+                <h3>${escapeHtml(nickname)}</h3>
+                <p>${escapeHtml(description)}</p>
+                <div class="stats-mini">
+                    <span class="stat-badge">📄 成功 ${successCount}</span>
+                    <span class="stat-badge">❌ 失败 ${failedCount}</span>
+                    <span class="stat-badge">⭐ 影响力 ${Math.min(100, successCount * 5)}</span>
+        `;
+        if (author.totalVisits) statsHtml += `<span class="stat-badge">👀 总访问 ${author.totalVisits}</span>`;
+        if (author.originalCount) statsHtml += `<span class="stat-badge">✍️ 原创 ${author.originalCount}</span>`;
+        if (author.fansCount) statsHtml += `<span class="stat-badge">👥 粉丝 ${author.fansCount}</span>`;
+        statsHtml += `</div></div>`;
+        authorDetailsDiv.innerHTML = statsHtml;
+    }
+
+    function showAuthorDetailModal() {
+        if (!latestAuthorInfo) return;
+        const author = latestAuthorInfo;
+        let html = `<div style="font-size: 14px; line-height: 1.6;">`;
+        html += `<p><strong>昵称：</strong> ${escapeHtml(author.nickname || author.name || '-')}</p>`;
+        html += `<p><strong>简介：</strong> ${escapeHtml(author.description || '-')}</p>`;
+        html += `<hr><h4>📊 统计信息</h4>`;
+        html += `<ul style="columns: 2;">`;
+        if (author.totalVisits) html += `<li>总访问量：${author.totalVisits}</li>`;
+        if (author.originalCount) html += `<li>原创文章：${author.originalCount}</li>`;
+        if (author.fansCount) html += `<li>粉丝数：${author.fansCount}</li>`;
+        if (author.followsCount) html += `<li>关注数：${author.followsCount}</li>`;
+        if (author.likesCount) html += `<li>点赞数：${author.likesCount}</li>`;
+        if (author.commentsCount) html += `<li>评论数：${author.commentsCount}</li>`;
+        if (author.collectionsCount) html += `<li>收藏数：${author.collectionsCount}</li>`;
+        if (author.rank) html += `<li>博客排名：${author.rank}</li>`;
+        html += `</ul>`;
+        if (author.columns && author.columns.length) {
+            html += `<hr><h4>📚 专栏列表</h4><ul>`;
+            author.columns.forEach(col => {
+                html += `<li>${escapeHtml(col.name)} (${col.articleCount || 0} 篇文章)</li>`;
+            });
+            html += `</ul>`;
+        } else {
+            html += `<hr><p>暂无专栏信息</p>`;
+        }
+        html += `</div>`;
+        authorDetailBody.innerHTML = html;
+        authorDetailModal.style.display = 'flex';
+    }
+
+    function closeModal() {
+        authorDetailModal.style.display = 'none';
+    }
+
+    if (showAuthorDetailBtn) showAuthorDetailBtn.addEventListener('click', showAuthorDetailModal);
+    if (closeAuthorModalBtn) closeAuthorModalBtn.addEventListener('click', closeModal);
+    if (closeModalFooterBtn) closeModalFooterBtn.addEventListener('click', closeModal);
+    window.addEventListener('click', (e) => {
+        if (e.target === authorDetailModal) closeModal();
+    });
+
     function appendNewArticles(articles) {
         if (!articleTableBody) {
-            articleWrapper.innerHTML = `<table class="data-table" id="articleTable">
+            const wrapper = document.getElementById('articleTableWrapper');
+            wrapper.innerHTML = `<table class="data-table" id="articleTable">
                 <thead><tr><th>标题</th><th>阅读数</th><th>操作</th></tr></thead>
                 <tbody id="articleTableBody"></tbody>
             </table>`;
@@ -202,30 +287,54 @@
             });
             row.insertCell(2).appendChild(btn);
         }
+        successCountSpan.innerText = articleTableBody.rows.length;
     }
 
-    // 实时计算并显示摘要信息（带进度环图表）
-    function updateSummaryInfo(articles, maxArticles) {
-        if (!summaryInfoDiv) return;
-        let totalChars = 0;
-        let totalViews = 0;
-        for (let art of articles) {
-            if (art.content) totalChars += art.content.length;
-            if (art.viewCount) totalViews += art.viewCount;
+    function appendFailedArticles(failedArticles) {
+        if (!failedTableBody) {
+            failedTableBody = document.getElementById('failedTableBody');
         }
-        const count = articles.length;
-        const avgViews = count > 0 ? (totalViews / count).toFixed(0) : 0;
-        const percent = Math.min(100, (count / maxArticles) * 100);
+        for (let fail of failedArticles) {
+            const existing = Array.from(failedTableBody.rows).some(row => row.cells[0].innerText === fail.url);
+            if (existing) continue;
+            const row = failedTableBody.insertRow();
+            row.insertCell(0).innerHTML = `<a href="${escapeAttr(fail.url)}" target="_blank">${escapeHtml(fail.url)}</a>`;
+            row.insertCell(1).innerText = fail.reason || '未知错误';
+        }
+        failedCountSpan.innerText = failedTableBody.rows.length;
+    }
+
+    function updateSummaryInfo(status) {
+        if (!summaryInfoDiv) return;
+        const success = status.successCount || 0;
+        const failed = status.failedCount || 0;
+        const total = success + failed;
+        const percent = total > 0 ? (success / total) * 100 : 0;
         const angle = (percent / 100) * 360;
         summaryInfoDiv.innerHTML = `
             <div class="summary-stats">
-                <span>📄 已获取: ${count}</span>
-                <span>📝 总字数: ${totalChars.toLocaleString()}</span>
-                <span>👀 平均阅读: ${avgViews}</span>
-                <div class="progress-ring" style="background: conic-gradient(#0066ff 0deg ${angle}deg, #e2e8f0 ${angle}deg 360deg);"></div>
+                <span>📄 总文章数: ${total}</span>
+                <span>✅ 成功: ${success}</span>
+                <span>❌ 失败: ${failed}</span>
+                <div class="progress-ring" style="background: conic-gradient(#22c55e 0deg ${angle}deg, #e2e8f0 ${angle}deg 360deg);"></div>
             </div>
         `;
     }
+
+    function switchToSuccessTab() {
+        tabSuccessBtn.classList.add('active');
+        tabFailedBtn.classList.remove('active');
+        successPanel.style.display = 'block';
+        failedPanel.style.display = 'none';
+    }
+    function switchToFailedTab() {
+        tabFailedBtn.classList.add('active');
+        tabSuccessBtn.classList.remove('active');
+        successPanel.style.display = 'none';
+        failedPanel.style.display = 'block';
+    }
+    tabSuccessBtn.addEventListener('click', switchToSuccessTab);
+    tabFailedBtn.addEventListener('click', switchToFailedTab);
 
     function escapeHtml(str) {
         if (!str) return '';

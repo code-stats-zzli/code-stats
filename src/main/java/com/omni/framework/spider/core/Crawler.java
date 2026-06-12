@@ -34,6 +34,10 @@ public class Crawler {
      */
     public interface StatusUpdater {
         void updateStatus(String step, String url, Article article);
+        // 新增：支持失败信息上报
+        default void updateStatus(String step, String url, String error) {
+            // 默认空实现，不强制子类实现
+        }
     }
 
     private final SpiderConfig config;
@@ -45,12 +49,6 @@ public class Crawler {
     private final long startTime;
     private final StatusUpdater statusUpdater;
 
-    /**
-     * 构造函数（推荐），支持状态回调
-     * @param config         爬虫配置
-     * @param statusUpdater  状态更新回调（可为null，表示不报告实时状态）
-     * @throws IOException 目录创建失败时抛出
-     */
     public Crawler(SpiderConfig config, StatusUpdater statusUpdater) throws IOException {
         this.config = config;
         this.statusUpdater = statusUpdater;
@@ -60,9 +58,6 @@ public class Crawler {
         loadDownloadedUrls();
     }
 
-    /**
-     * 兼容旧版本构造函数（无回调）
-     */
     public Crawler(SpiderConfig config) throws IOException {
         this(config, null);
     }
@@ -99,6 +94,12 @@ public class Crawler {
         }
     }
 
+    private void updateStatus(String step, String url, String error) {
+        if (statusUpdater != null) {
+            statusUpdater.updateStatus(step, url, error);
+        }
+    }
+
     public void start() {
         log.info("开始爬取 CSDN 作者: {}", config.getCsdnUsername());
         String blogIndexUrl = "https://blog.csdn.net/" + config.getCsdnUsername();
@@ -106,7 +107,7 @@ public class Crawler {
         List<Future<Article>> futures = new ArrayList<>();
         int submittedCount = 0;
 
-        updateStatus("正在获取博客文章列表", blogIndexUrl, null);
+        updateStatus("正在获取博客文章列表", blogIndexUrl, (Article) null);
 
         while (currentUrl != null && !stop) {
             log.info("抓取列表页: {}", currentUrl);
@@ -124,7 +125,6 @@ public class Crawler {
                     stop = true;
                     break;
                 }
-                // 提交下载任务，传入回调接口
                 ArticleProcessor processor = new ArticleProcessor(url, storage, config.getRequestIntervalMs(), statusUpdater);
                 futures.add(executor.submit(processor));
                 submittedCount++;
@@ -135,12 +135,12 @@ public class Crawler {
             try { Thread.sleep(config.getRequestIntervalMs()); } catch (InterruptedException e) { break; }
         }
 
-        // 等待所有已提交的任务完成
         for (Future<Article> future : futures) {
             try {
                 future.get();
             } catch (Exception e) {
                 log.error("文章下载失败", e);
+                // 注意：异常已经在 processor 中捕获并上报，此处不再重复上报
             }
         }
         executor.shutdown();
@@ -164,7 +164,7 @@ public class Crawler {
                 log.error("合并文件失败", e);
             }
         }
-        updateStatus("爬取完成", null, null);
+        updateStatus("爬取完成", null, (Article) null);
         log.info("爬取完成，共下载 {} 篇文章", futures.size());
     }
 

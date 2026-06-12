@@ -27,10 +27,6 @@ public class SpiderController {
     @Autowired
     private SpiderTaskService taskService;
 
-    /**
-     * 启动爬虫任务 - 使用 DTO 接收参数，支持校验
-     * POST /spider/api/start
-     */
     @RequestMapping("/start")
     @ResponseBody
     public String startTask(@RequestBody StartTaskRequest req) {
@@ -48,10 +44,6 @@ public class SpiderController {
         return JsonUtil.toJson(result);
     }
 
-    /**
-     * 查询任务状态（实时）
-     * GET /spider/api/status?taskId=xxx
-     */
     @RequestMapping("/status")
     @ResponseBody
     public String getTaskStatus(@RequestParam("taskId") String taskId) {
@@ -59,13 +51,10 @@ public class SpiderController {
         if (status == null) {
             return errorResponse("任务不存在");
         }
+        // 确保失败文章列表也被包含在返回中
         return JsonUtil.toJson(status);
     }
 
-    /**
-     * 获取已爬取的文章列表
-     * GET /spider/api/articles?taskId=xxx
-     */
     @RequestMapping("/articles")
     @ResponseBody
     public String getArticles(@RequestParam("taskId") String taskId) {
@@ -76,10 +65,6 @@ public class SpiderController {
         return JsonUtil.toJson(articles);
     }
 
-    /**
-     * 下载合并后的文件
-     * GET /spider/api/download?taskId=xxx
-     */
     @RequestMapping("/download")
     public void downloadMergedFile(@RequestParam("taskId") String taskId) throws Exception {
         HttpServletResponse response = ResponseContextHolder.getResponse();
@@ -96,10 +81,6 @@ public class SpiderController {
         response.sendStatic(Files.newInputStream(path), "text/plain", Files.size(path));
     }
 
-    /**
-     * 下载单篇文章
-     * GET /spider/api/article?taskId=xxx&url=xxx
-     */
     @RequestMapping("/article")
     public void downloadSingleArticle(@RequestParam("taskId") String taskId,
                                       @RequestParam("url") String url) throws Exception {

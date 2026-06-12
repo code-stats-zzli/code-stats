@@ -1,3 +1,4 @@
+<!-- ======== D:\work\git\CodeStats\webapps\demo\spider\spider.html ======== -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -12,7 +13,7 @@
 <div class="spider-container">
     <div class="spider-header">
         <h1>🌐 CSDN 博客爬虫</h1>
-        <p>输入 CSDN 用户名，一键下载所有博客文章（支持合并打包）</p>
+        <p>输入 CSDN 用户名，一键下载所有博客文章（支持合并打包，失败链接自动追加）</p>
     </div>
 
     <div class="spider-config-panel">
@@ -43,7 +44,7 @@
         <div class="config-row">
             <label>合并文件：</label>
             <input type="checkbox" id="mergeEnabled" checked>
-            <span>将所有文章合并为一个 TXT 文件</span>
+            <span>将所有文章合并为一个 TXT 文件（失败链接也会追加）</span>
         </div>
         <div class="config-row" id="mergeFileNameRow">
             <label>合并文件名：</label>
@@ -60,26 +61,57 @@
         <div id="progressText" class="progress-text">准备中...</div>
     </div>
 
-    <!-- 实时状态区域 -->
     <div class="live-status" style="margin: 16px 0; background: rgba(0,102,255,0.1); border-radius: 16px; padding: 12px;">
         <div><strong>⚡ 当前步骤：</strong> <span id="currentStep">-</span></div>
         <div><strong>🔗 正在处理：</strong> <span id="currentUrl">-</span></div>
     </div>
-
-    <!-- 摘要统计区域 -->
     <div class="summary-info" id="summaryInfo" style="margin: 16px 0; background: var(--bg-card); border-radius: 20px; padding: 12px; display: flex; gap: 24px;"></div>
 
-    <!-- 结果区域：包含作者卡片 + 下载按钮（置顶） + 文章表格 -->
     <div id="resultArea" class="result-area" style="display: none;">
-        <div id="authorInfo" class="author-card"></div>
-
-        <!-- ✅ 关键调整：下载合并文件按钮移至此位置（表格上方，无需滚动） -->
-        <div class="download-actions" style="margin: 16px 0;">
-            <button id="downloadMergeBtn" class="btn-primary" style="display: none;">📥 下载合并文件</button>
+        <!-- 作者栏（包含简要信息和查看详情按钮） -->
+        <div id="authorInfo" class="author-card" style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="author-details"></div>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <button id="showAuthorDetailBtn" class="btn-secondary" style="display: none;">📋 查看作者详细信息</button>
+                <div id="mergeDownloadWrapper">
+                    <button id="downloadMergeBtn" class="btn-primary" style="display: none;">📥 下载合并文件（含失败链接）</button>
+                </div>
+            </div>
         </div>
 
-        <div id="articleTableWrapper" class="article-wrapper"></div>
-        <!-- 原底部 .download-actions 已移除，避免重复 -->
+        <!-- 文章列表选项卡 -->
+        <div class="result-tabs" style="display: flex; gap: 8px; margin: 20px 0 12px 0;">
+            <button id="tabSuccessBtn" class="tab-btn active">✅ 成功文章 (<span id="successCount">0</span>)</button>
+            <button id="tabFailedBtn" class="tab-btn">❌ 失败文章 (<span id="failedCount">0</span>)</button>
+        </div>
+
+        <div id="successPanel" class="tab-pane active">
+            <div id="articleTableWrapper" class="article-wrapper"></div>
+        </div>
+        <div id="failedPanel" class="tab-pane" style="display: none;">
+            <div id="failedArticleWrapper" class="article-wrapper">
+                <table class="data-table">
+                    <thead><tr><th>URL</th><th>失败原因</th></tr></thead>
+                    <tbody id="failedTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 作者详情弹窗 -->
+<div id="authorDetailModal" class="modal" style="display: none;">
+    <div class="modal-content" style="width: 600px; max-width: 90%;">
+        <div class="modal-header">
+            <span>📖 作者详细信息</span>
+            <span class="close-modal" id="closeAuthorModalBtn">&times;</span>
+        </div>
+        <div class="modal-body" id="authorDetailBody">
+            <div class="loading">加载中...</div>
+        </div>
+        <div class="modal-footer">
+            <button id="closeModalFooterBtn" class="btn-secondary">关闭</button>
+        </div>
     </div>
 </div>
 

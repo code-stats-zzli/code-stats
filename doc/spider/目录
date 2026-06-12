@@ -1,0 +1,18 @@
+com.omni.business.spider
+├── config
+│   └── SpiderConfig.java
+├── core
+│   ├── Crawler.java
+│   ├── PageDownloader.java
+│   ├── PageParser.java
+│   └── ArticleProcessor.java
+├── model
+│   └── Article.java
+├── storage
+│   ├── Storage.java
+│   └── FileStorage.java
+├── util
+│   └── HttpUtil.java
+├── pipeline
+│   └── MergePipeline.java
+└── Launcher.java

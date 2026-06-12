@@ -15,10 +15,12 @@
         <ul class="mode-list" id="modeList">
             <li class="mode-item active" data-mode="server">🖥️ 服务器分析</li>
             <li class="mode-item disabled" data-mode="local">💻 本地分析（待实现）</li>
+            <li class="mode-item" data-mode="webspider">🕷️ 网页爬虫</li>   <!-- 新增爬虫模式 -->
         </ul>
     </aside>
     <main class="main">
-        <section class="config-panel" id="configPanel">
+        <!-- 原有代码分析配置（服务器模式） -->
+        <section class="config-panel" id="codeStatsConfig">
             <h2>代码统计配置</h2>
             <div class="config-form">
                 <div class="form-row"><label>根目录:</label><input type="text" id="rootDir" placeholder="例如: D:\work\space\CodeStats"></div>
@@ -33,7 +35,9 @@
             </div>
             <div class="action-bar"><button id="analyzeBtn" class="btn-primary">开始分析</button><button id="resetBtn" class="btn-secondary">重置默认</button></div>
         </section>
-        <section class="result-section">
+
+        <!-- 原有代码分析结果区域 -->
+        <section class="result-section" id="codeStatsResult">
             <div class="progress-bar" id="progressBar" style="display: none;"><div class="progress-fill" id="progressFill"></div><span id="progressText">分析中...</span></div>
             <div class="result-tabs">
                 <button class="tab active" data-tab="files">文件列表</button>
@@ -44,22 +48,14 @@
                 <button id="exportCsvBtn" class="btn-secondary" style="background:#10b981; color:white;">📎 导出表格为CSV</button>
                 <button id="downloadMergeBtn" class="btn-secondary" style="background:#3b82f6; color:white;" disabled>📥 下载合并文件</button>
             </div>
-            <div class="tab-content" id="tabContent">
-                <!-- 文件列表标签页 -->
+            <div class="tab-content" id="codeStatsContent">
                 <div class="table-wrapper" id="filesTable" style="display: block;">
-                    <table>
-                        <thead>
-                        <tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr>
-                        </thead>
-                        <tbody id="fileTableBody"></tbody>
-                    </table>
+                    <table><thead><tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr></thead><tbody id="fileTableBody"></tbody></table>
                 </div>
-                <!-- 摘要统计标签页 -->
                 <div class="summary-content" id="summaryContent" style="display: none;">
                     <div id="summaryInfo"></div>
                     <div id="languageInfo"></div>
                 </div>
-                <!-- 依赖关系标签页 -->
                 <div class="dependency-content" id="dependencyContent" style="display: none;">
                     <div class="dependency-stats" id="depStats"></div>
                     <div class="class-selector" style="margin: 20px 0;">
@@ -67,18 +63,17 @@
                         <select id="classSelect" style="min-width: 300px;"></select>
                     </div>
                     <div class="dependency-details" style="display: flex; gap: 30px;">
-                        <div style="flex:1;">
-                            <h4>📤 出向依赖（该类依赖的其他类）</h4>
-                            <ul id="outgoingList" class="dependency-list"></ul>
-                        </div>
-                        <div style="flex:1;">
-                            <h4>📥 入向依赖（依赖该类的其他类）</h4>
-                            <ul id="incomingList" class="dependency-list"></ul>
-                        </div>
+                        <div style="flex:1;"><h4>📤 出向依赖</h4><ul id="outgoingList" class="dependency-list"></ul></div>
+                        <div style="flex:1;"><h4>📥 入向依赖</h4><ul id="incomingList" class="dependency-list"></ul></div>
                     </div>
                 </div>
             </div>
         </section>
+
+        <!-- 爬虫 iframe 容器（默认隐藏） -->
+        <div id="spiderIframeContainer" style="display: none; height: 100%; width: 100%;">
+            <iframe id="spiderFrame" src="../spider/spider.html" style="width: 100%; height: 100%; border: none; background: transparent;"></iframe>
+        </div>
     </main>
 </div>
 <script src="codeStats.js"></script>

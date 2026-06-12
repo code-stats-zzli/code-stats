@@ -60,14 +60,29 @@
         <div id="progressText" class="progress-text">准备中...</div>
     </div>
 
+    <!-- 实时状态区域 -->
+    <div class="live-status" style="margin: 16px 0; background: rgba(0,102,255,0.1); border-radius: 16px; padding: 12px;">
+        <div><strong>⚡ 当前步骤：</strong> <span id="currentStep">-</span></div>
+        <div><strong>🔗 正在处理：</strong> <span id="currentUrl">-</span></div>
+    </div>
+
+    <!-- 摘要统计区域 -->
+    <div class="summary-info" id="summaryInfo" style="margin: 16px 0; background: var(--bg-card); border-radius: 20px; padding: 12px; display: flex; gap: 24px;"></div>
+
+    <!-- 结果区域：包含作者卡片 + 下载按钮（置顶） + 文章表格 -->
     <div id="resultArea" class="result-area" style="display: none;">
         <div id="authorInfo" class="author-card"></div>
-        <div id="articleTableWrapper" class="article-wrapper"></div>
-        <div class="download-actions">
+
+        <!-- ✅ 关键调整：下载合并文件按钮移至此位置（表格上方，无需滚动） -->
+        <div class="download-actions" style="margin: 16px 0;">
             <button id="downloadMergeBtn" class="btn-primary" style="display: none;">📥 下载合并文件</button>
         </div>
+
+        <div id="articleTableWrapper" class="article-wrapper"></div>
+        <!-- 原底部 .download-actions 已移除，避免重复 -->
     </div>
 </div>
+
 <script src="spider.js"></script>
 </body>
 </html>

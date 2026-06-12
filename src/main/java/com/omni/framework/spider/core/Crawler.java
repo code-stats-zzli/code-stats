@@ -17,25 +17,54 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+/**
+ * 爬虫核心引擎，支持实时状态回调（解耦设计）
+ */
 public class Crawler {
     private static final Logger log = LoggerFactory.getLogger(Crawler.class);
+
+    /**
+     * 状态更新回调接口（供外部实现，用于实时展示进度）
+     */
+    public interface StatusUpdater {
+        void updateStatus(String step, String url, Article article);
+    }
+
     private final SpiderConfig config;
     private final Storage storage;
     private final ExecutorService executor;
     private final Set<String> downloadedUrls = new HashSet<>();
     private String mergeFilePath;
-    private volatile boolean stop = false;          // 停止标志
-    private final long startTime;                   // 爬取开始时间戳
+    private volatile boolean stop = false;
+    private final long startTime;
+    private final StatusUpdater statusUpdater;
 
-    public Crawler(SpiderConfig config) throws IOException {
+    /**
+     * 构造函数（推荐），支持状态回调
+     * @param config         爬虫配置
+     * @param statusUpdater  状态更新回调（可为null，表示不报告实时状态）
+     * @throws IOException 目录创建失败时抛出
+     */
+    public Crawler(SpiderConfig config, StatusUpdater statusUpdater) throws IOException {
         this.config = config;
+        this.statusUpdater = statusUpdater;
         this.storage = new FileStorage(config.getOutputDir());
         this.executor = Executors.newFixedThreadPool(config.getMaxConcurrent());
         this.startTime = System.currentTimeMillis();
         loadDownloadedUrls();
+    }
+
+    /**
+     * 兼容旧版本构造函数（无回调）
+     */
+    public Crawler(SpiderConfig config) throws IOException {
+        this(config, null);
     }
 
     private void loadDownloadedUrls() throws IOException {
@@ -50,12 +79,10 @@ public class Crawler {
     }
 
     private boolean shouldStop(int currentArticleCount) {
-        // 检查文章数量限制
         if (config.getMaxArticles() > 0 && currentArticleCount >= config.getMaxArticles()) {
             log.info("已达到最大文章数限制: {}", config.getMaxArticles());
             return true;
         }
-        // 检查时间限制
         if (config.getMaxTimeSeconds() > 0) {
             long elapsed = (System.currentTimeMillis() - startTime) / 1000;
             if (elapsed >= config.getMaxTimeSeconds()) {
@@ -66,12 +93,20 @@ public class Crawler {
         return false;
     }
 
+    private void updateStatus(String step, String url, Article article) {
+        if (statusUpdater != null) {
+            statusUpdater.updateStatus(step, url, article);
+        }
+    }
+
     public void start() {
         log.info("开始爬取 CSDN 作者: {}", config.getCsdnUsername());
         String blogIndexUrl = "https://blog.csdn.net/" + config.getCsdnUsername();
         String currentUrl = blogIndexUrl;
         List<Future<Article>> futures = new ArrayList<>();
         int submittedCount = 0;
+
+        updateStatus("正在获取博客文章列表", blogIndexUrl, null);
 
         while (currentUrl != null && !stop) {
             log.info("抓取列表页: {}", currentUrl);
@@ -85,12 +120,12 @@ public class Crawler {
                     log.debug("已存在，跳过: {}", url);
                     continue;
                 }
-                // 检查限制
                 if (shouldStop(submittedCount)) {
                     stop = true;
                     break;
                 }
-                ArticleProcessor processor = new ArticleProcessor(url, storage, config.getRequestIntervalMs());
+                // 提交下载任务，传入回调接口
+                ArticleProcessor processor = new ArticleProcessor(url, storage, config.getRequestIntervalMs(), statusUpdater);
                 futures.add(executor.submit(processor));
                 submittedCount++;
             }
@@ -129,7 +164,8 @@ public class Crawler {
                 log.error("合并文件失败", e);
             }
         }
-        log.info("爬取完成，共下载 {} 篇文章（已达到限制条件则提前结束）", futures.size());
+        updateStatus("爬取完成", null, null);
+        log.info("爬取完成，共下载 {} 篇文章", futures.size());
     }
 
     private String extractFileNameFromUrl(String url) {

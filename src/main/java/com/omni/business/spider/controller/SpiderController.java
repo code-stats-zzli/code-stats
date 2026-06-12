@@ -1,11 +1,13 @@
 package com.omni.business.spider.controller;
 
+import com.omni.business.spider.dto.StartTaskRequest;
 import com.omni.business.spider.service.SpiderTaskService;
 import com.omni.framework.spider.model.Article;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestBody;
 import com.omni.framework.spring.annotation.RequestMapping;
+import com.omni.framework.spring.annotation.RequestParam;
 import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.spring.mvc.ResponseContextHolder;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
@@ -25,29 +27,34 @@ public class SpiderController {
     @Autowired
     private SpiderTaskService taskService;
 
+    /**
+     * 启动爬虫任务 - 使用 DTO 接收参数，支持校验
+     * POST /spider/api/start
+     */
     @RequestMapping("/start")
     @ResponseBody
-    public String startTask(@RequestBody Map<String, Object> req) {
-        String username = (String) req.get("username");
-        int maxConcurrent = req.containsKey("maxConcurrent") ? ((Number) req.get("maxConcurrent")).intValue() : 3;
-        long intervalMs = req.containsKey("intervalMs") ? ((Number) req.get("intervalMs")).longValue() : 1500;
-        boolean mergeEnabled = req.containsKey("mergeEnabled") ? (Boolean) req.get("mergeEnabled") : true;
-        String mergeFileName = (String) req.getOrDefault("mergeFileName", "merged.txt");
-        int maxArticles = req.containsKey("maxArticles") ? ((Number) req.get("maxArticles")).intValue() : 100;
-        int maxTimeSeconds = req.containsKey("maxTimeSeconds") ? ((Number) req.get("maxTimeSeconds")).intValue() : 0;
-
-        if (username == null || username.trim().isEmpty()) {
-            return errorResponse("用户名不能为空");
-        }
-        String taskId = taskService.startTask(username, maxConcurrent, intervalMs, mergeEnabled, mergeFileName, maxArticles, maxTimeSeconds);
+    public String startTask(@RequestBody StartTaskRequest req) {
+        String taskId = taskService.startTask(
+                req.getUsername(),
+                req.getMaxConcurrent(),
+                req.getIntervalMs(),
+                req.isMergeEnabled(),
+                req.getMergeFileName(),
+                req.getMaxArticles(),
+                req.getMaxTimeSeconds()
+        );
         Map<String, String> result = new HashMap<>();
         result.put("taskId", taskId);
         return JsonUtil.toJson(result);
     }
 
+    /**
+     * 查询任务状态（实时）
+     * GET /spider/api/status?taskId=xxx
+     */
     @RequestMapping("/status")
     @ResponseBody
-    public String getTaskStatus(String taskId) {
+    public String getTaskStatus(@RequestParam("taskId") String taskId) {
         Map<String, Object> status = taskService.getTaskStatus(taskId);
         if (status == null) {
             return errorResponse("任务不存在");
@@ -55,9 +62,13 @@ public class SpiderController {
         return JsonUtil.toJson(status);
     }
 
+    /**
+     * 获取已爬取的文章列表
+     * GET /spider/api/articles?taskId=xxx
+     */
     @RequestMapping("/articles")
     @ResponseBody
-    public String getArticles(String taskId) {
+    public String getArticles(@RequestParam("taskId") String taskId) {
         List<Article> articles = taskService.getArticles(taskId);
         if (articles == null) {
             return errorResponse("任务不存在或无文章");
@@ -65,8 +76,12 @@ public class SpiderController {
         return JsonUtil.toJson(articles);
     }
 
+    /**
+     * 下载合并后的文件
+     * GET /spider/api/download?taskId=xxx
+     */
     @RequestMapping("/download")
-    public void downloadMergedFile(String taskId) throws Exception {
+    public void downloadMergedFile(@RequestParam("taskId") String taskId) throws Exception {
         HttpServletResponse response = ResponseContextHolder.getResponse();
         String filePath = taskService.getMergedFilePath(taskId);
         if (filePath == null || !Files.exists(Paths.get(filePath))) {
@@ -81,8 +96,13 @@ public class SpiderController {
         response.sendStatic(Files.newInputStream(path), "text/plain", Files.size(path));
     }
 
+    /**
+     * 下载单篇文章
+     * GET /spider/api/article?taskId=xxx&url=xxx
+     */
     @RequestMapping("/article")
-    public void downloadSingleArticle(String taskId, String url) throws Exception {
+    public void downloadSingleArticle(@RequestParam("taskId") String taskId,
+                                      @RequestParam("url") String url) throws Exception {
         HttpServletResponse response = ResponseContextHolder.getResponse();
         List<Article> articles = taskService.getArticles(taskId);
         if (articles == null) {

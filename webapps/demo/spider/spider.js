@@ -6,6 +6,7 @@
     let failedTableBody = null;
     let processedUrls = new Set();
     let latestAuthorInfo = null;  // 存储最新的作者信息，供详情弹窗使用
+    let currentAuthorInfoVersion = 0;  // 用于检测作者信息更新
 
     const usernameInput = document.getElementById('username');
     const maxConcurrentInput = document.getElementById('maxConcurrent');
@@ -74,6 +75,7 @@
         successPanel.style.display = 'block';
         failedPanel.style.display = 'none';
         latestAuthorInfo = null;
+        currentAuthorInfoVersion = 0;
     });
 
     startBtn.addEventListener('click', async () => {
@@ -94,6 +96,8 @@
         progressText.innerText = '正在启动爬虫...';
         resultArea.style.display = 'none';
         processedUrls.clear();
+        latestAuthorInfo = null;
+        currentAuthorInfoVersion = 0;
 
         try {
             const resp = await fetch(window.apiUrl('/spider/api/start'), {
@@ -152,11 +156,23 @@
                 }
                 updateSummaryInfo(status);
 
+                // ★ 关键改进：实时更新作者信息（无论状态，只要 authorInfo 有内容且版本变化）
+                if (status.authorInfo && Object.keys(status.authorInfo).length > 0) {
+                    const newVersion = JSON.stringify(status.authorInfo);
+                    if (newVersion !== currentAuthorInfoVersion) {
+                        currentAuthorInfoVersion = newVersion;
+                        latestAuthorInfo = status.authorInfo;
+                        renderAuthorBrief(latestAuthorInfo, status.successCount || 0, status.failedCount || 0);
+                    }
+                }
+
                 if (status.state === 'COMPLETED') {
                     clearInterval(pollInterval);
                     resultArea.style.display = 'block';
-                    latestAuthorInfo = status.authorInfo || {};
-                    renderAuthorBrief(latestAuthorInfo, status.successCount, status.failedCount);
+                    // 确保最后一次渲染使用最新作者信息
+                    if (latestAuthorInfo) {
+                        renderAuthorBrief(latestAuthorInfo, status.successCount || 0, status.failedCount || 0);
+                    }
                     if (status.mergedFilePath) {
                         downloadMergeBtn.style.display = 'inline-block';
                         downloadMergeBtn.onclick = () => {
@@ -165,8 +181,8 @@
                     } else {
                         downloadMergeBtn.style.display = 'none';
                     }
-                    // 只有当作者信息中包含详细统计数据（如 totalVisits）时才显示详情按钮
-                    if (latestAuthorInfo.totalVisits || latestAuthorInfo.originalCount || (latestAuthorInfo.columns && latestAuthorInfo.columns.length)) {
+                    // 当作者信息中包含详细统计数据时显示详情按钮
+                    if (latestAuthorInfo && (latestAuthorInfo.totalVisits || latestAuthorInfo.originalCount || (latestAuthorInfo.columns && latestAuthorInfo.columns.length))) {
                         showAuthorDetailBtn.style.display = 'inline-block';
                     } else {
                         showAuthorDetailBtn.style.display = 'none';
@@ -186,22 +202,44 @@
         }, 1500);
     }
 
+    // ★ 增强的作者信息展示函数（包含粉丝、访问量、原创数、点赞、评论、收藏、排名、专栏等）
     function renderAuthorBrief(author, successCount, failedCount) {
+        if (!authorDetailsDiv) return;
         const nickname = author.nickname || author.name || usernameInput.value;
         const description = author.description || 'CSDN 博主';
+
         let statsHtml = `
             <div>
                 <h3>${escapeHtml(nickname)}</h3>
                 <p>${escapeHtml(description)}</p>
-                <div class="stats-mini">
+                <div class="stats-mini" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;">
                     <span class="stat-badge">📄 成功 ${successCount}</span>
                     <span class="stat-badge">❌ 失败 ${failedCount}</span>
                     <span class="stat-badge">⭐ 影响力 ${Math.min(100, successCount * 5)}</span>
         `;
+        // 显示详细的统计数据（如果存在）
         if (author.totalVisits) statsHtml += `<span class="stat-badge">👀 总访问 ${author.totalVisits}</span>`;
         if (author.originalCount) statsHtml += `<span class="stat-badge">✍️ 原创 ${author.originalCount}</span>`;
         if (author.fansCount) statsHtml += `<span class="stat-badge">👥 粉丝 ${author.fansCount}</span>`;
-        statsHtml += `</div></div>`;
+        if (author.followsCount) statsHtml += `<span class="stat-badge">➕ 关注 ${author.followsCount}</span>`;
+        if (author.likesCount) statsHtml += `<span class="stat-badge">👍 点赞 ${author.likesCount}</span>`;
+        if (author.commentsCount) statsHtml += `<span class="stat-badge">💬 评论 ${author.commentsCount}</span>`;
+        if (author.collectionsCount) statsHtml += `<span class="stat-badge">📌 收藏 ${author.collectionsCount}</span>`;
+        if (author.rank) statsHtml += `<span class="stat-badge">🏆 排名 ${author.rank}</span>`;
+
+        // 显示专栏概要（如果存在）
+        if (author.columns && author.columns.length) {
+            statsHtml += `<span class="stat-badge">📚 专栏数 ${author.columns.length}</span>`;
+        }
+
+        statsHtml += `</div>`;
+
+        // 如果有专栏，展示前3个专栏名称
+        if (author.columns && author.columns.length) {
+            statsHtml += `<div style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">📖 热门专栏：${author.columns.slice(0, 3).map(col => escapeHtml(col.name)).join('、')}</div>`;
+        }
+
+        statsHtml += `</div>`;
         authorDetailsDiv.innerHTML = statsHtml;
     }
 

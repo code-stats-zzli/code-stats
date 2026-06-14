@@ -1,4 +1,4 @@
-package com.omni.business.spider.dto;
+package com.omni.business.assistance.spider.dto;
 
 
 public class StartTaskRequest {

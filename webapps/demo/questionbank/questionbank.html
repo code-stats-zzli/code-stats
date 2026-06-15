@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>题库分析</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="questionbank.css">
+    <script src="../global.js"></script>
+</head>
+<body>
+<div class="qb-container">
+    <div class="qb-config card">
+        <h2>📚 题库分析配置</h2>
+        <div class="config-row">
+            <label>📁 根目录：</label>
+            <input type="text" id="rootDir" placeholder="例如: D:/题库" value="D:/题库">
+            <button id="browseBtn" class="btn-secondary">浏览</button>
+        </div>
+        <div class="config-row">
+            <label>🔍 文件名模糊匹配：</label>
+            <input type="text" id="keyword" placeholder="例如: 真题, 模拟卷, *excel*">
+        </div>
+        <div class="config-row">
+            <label>📄 合并输出文件：</label>
+            <input type="text" id="outputFile" placeholder="例如: D:/merged/题库合并.txt">
+            <button id="selectOutputBtn" class="btn-secondary">选择文件</button>
+        </div>
+        <div class="action-bar">
+            <button id="mergeBtn" class="btn-primary">🚀 开始合并</button>
+            <button id="resetBtn" class="btn-secondary">重置</button>
+        </div>
+        <div id="mergeProgress" class="progress-area" style="display: none;">
+            <div class="progress-bar"><div class="progress-fill"></div></div>
+            <div class="progress-text"></div>
+        </div>
+    </div>
+
+    <div class="qb-result card" style="display: none;">
+        <div class="result-header">
+            <h3>✅ 合并结果</h3>
+            <button id="downloadMergedBtn" class="btn-secondary">⬇️ 下载合并文件</button>
+        </div>
+        <div id="mergeSummary"></div>
+        <h4>📑 匹配的文件列表：</h4>
+        <ul id="fileList" class="file-list"></ul>
+    </div>
+
+    <div class="qb-search card">
+        <h3>🔎 按题目查找答案</h3>
+        <div class="search-row">
+            <input type="text" id="searchKeyword" placeholder="输入题目关键词...">
+            <button id="searchBtn" class="btn-primary">搜索</button>
+        </div>
+        <div id="searchResult" class="search-result"></div>
+    </div>
+</div>
+<script src="questionbank.js"></script>
+</body>
+</html>

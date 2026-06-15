@@ -190,3 +190,13 @@
     box-shadow: 0 0 6px rgba(0,102,255,0.3);
     transition: background 0.2s;
 }
+/* 修复 iframe 内页面高度空白 */
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+.spider-container {
+    min-height: 100%;
+    box-sizing: border-box;
+}

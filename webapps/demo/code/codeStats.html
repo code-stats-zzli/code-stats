@@ -15,7 +15,8 @@
         <ul class="mode-list" id="modeList">
             <li class="mode-item active" data-mode="server">🖥️ 服务器分析</li>
             <li class="mode-item disabled" data-mode="local">💻 本地分析（待实现）</li>
-            <li class="mode-item" data-mode="webspider">🕷️ 网页爬虫</li>   <!-- 新增爬虫模式 -->
+            <li class="mode-item" data-mode="webspider">🕷️ 网页爬虫</li>
+            <li class="mode-item" data-mode="questionbank">📚 题库分析</li>
         </ul>
     </aside>
     <main class="main">
@@ -50,7 +51,7 @@
             </div>
             <div class="tab-content" id="codeStatsContent">
                 <div class="table-wrapper" id="filesTable" style="display: block;">
-                    <table><thead><tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr></thead><tbody id="fileTableBody"></tbody></table>
+                    <table><thead><tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr></thead><tbody id="fileTableBody"></tbody>
                 </div>
                 <div class="summary-content" id="summaryContent" style="display: none;">
                     <div id="summaryInfo"></div>
@@ -70,9 +71,14 @@
             </div>
         </section>
 
-        <!-- 爬虫 iframe 容器（默认隐藏） -->
-        <div id="spiderIframeContainer" style="display: none; height: 100%; width: 100%;">
-            <iframe id="spiderFrame" src="../spider/spider.html" style="width: 100%; height: 100%; border: none; background: transparent;"></iframe>
+        <!-- 爬虫 iframe 容器（使用 flex 布局） -->
+        <div id="spiderIframeContainer" style="display: none; flex: 1; width: 100%; flex-direction: column;">
+            <iframe id="spiderFrame" src="../spider/spider.html" style="flex: 1; width: 100%; border: none;"></iframe>
+        </div>
+
+        <!-- 题库分析 iframe 容器（使用 flex 布局） -->
+        <div id="qbIframeContainer" style="display: none; flex: 1; width: 100%; flex-direction: column;">
+            <iframe src="../questionbank/questionbank.html" style="flex: 1; width: 100%; border: none;"></iframe>
         </div>
     </main>
 </div>

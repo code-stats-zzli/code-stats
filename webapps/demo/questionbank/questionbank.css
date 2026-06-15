@@ -1,0 +1,113 @@
+.qb-container {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    height: 100%;
+    overflow-y: auto;
+}
+.card {
+    background: var(--bg-card);
+    border-radius: 24px;
+    padding: 20px;
+}
+.config-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+.config-row label {
+    width: 130px;
+    font-weight: 600;
+    color: var(--accent-primary);
+}
+.config-row input {
+    flex: 1;
+    min-width: 200px;
+}
+.action-bar {
+    margin-top: 16px;
+    display: flex;
+    gap: 12px;
+}
+.progress-area {
+    margin-top: 16px;
+}
+.progress-bar {
+    background: #e2e8f0;
+    border-radius: 20px;
+    height: 8px;
+}
+.progress-fill {
+    background: linear-gradient(90deg, var(--accent-primary), #a855f7);
+    width: 0%;
+    height: 100%;
+    border-radius: 20px;
+    transition: width 0.3s;
+}
+.progress-text {
+    text-align: center;
+    margin-top: 8px;
+    font-size: 13px;
+}
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.file-list {
+    max-height: 200px;
+    overflow-y: auto;
+    background: rgba(0,0,0,0.03);
+    border-radius: 16px;
+    padding: 12px;
+    list-style: none;
+}
+.file-list li {
+    font-family: monospace;
+    font-size: 12px;
+    padding: 4px 0;
+    border-bottom: 1px dashed rgba(0,102,255,0.2);
+}
+.search-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.search-row input {
+    flex: 1;
+}
+.search-result {
+    background: #f8fafc;
+    border-radius: 16px;
+    padding: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+.match-item {
+    padding: 8px;
+    border-bottom: 1px solid #e2e8f0;
+    font-family: monospace;
+    font-size: 13px;
+}
+.match-item strong {
+    color: var(--accent-primary);
+}
+.empty-tip {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 20px;
+}
+/* 修复 iframe 内页面高度空白 */
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+.qb-container {
+    min-height: 100%;
+    box-sizing: border-box;
+}

@@ -5,6 +5,9 @@
     const codeStatsConfig = document.getElementById('codeStatsConfig');
     const codeStatsResult = document.getElementById('codeStatsResult');
     const spiderIframeContainer = document.getElementById('spiderIframeContainer');
+    const qbIframeContainer = document.getElementById('qbIframeContainer');
+    const spiderIframe = document.getElementById('spiderFrame');
+    const qbIframe = qbIframeContainer ? qbIframeContainer.querySelector('iframe') : null;
     const rootDirInput = document.getElementById('rootDir');
     const extensionsInput = document.getElementById('extensions');
     const excludePathsInput = document.getElementById('excludePaths');
@@ -35,9 +38,8 @@
     let dependencyData = null;
     let classInfoMap = null;
 
-    // ========== 辅助函数：UTF-8 字符串转 Base64（用于后端解码） ==========
+    // ========== 辅助函数：UTF-8 字符串转 Base64 ==========
     function utf8ToBase64(str) {
-        // 将字符串转为 UTF-8 字节数组
         const utf8Bytes = new TextEncoder().encode(str);
         let binary = '';
         for (let i = 0; i < utf8Bytes.length; i++) {
@@ -46,17 +48,34 @@
         return btoa(binary);
     }
 
+    // ========== 强制刷新 iframe ==========
+    function refreshIframe(iframe) {
+        if (iframe && iframe.src) {
+            iframe.src = iframe.src;
+        }
+    }
+
     // ========== 模式切换 ==========
     function switchMode(mode) {
         currentMode = mode;
+        // 先隐藏所有专用容器
+        codeStatsConfig.style.display = 'none';
+        codeStatsResult.style.display = 'none';
+        spiderIframeContainer.style.display = 'none';
+        if (qbIframeContainer) qbIframeContainer.style.display = 'none';
+
         if (mode === 'webspider') {
-            codeStatsConfig.style.display = 'none';
-            codeStatsResult.style.display = 'none';
-            spiderIframeContainer.style.display = 'block';
+            spiderIframeContainer.style.display = 'flex';
+            refreshIframe(spiderIframe);
+        } else if (mode === 'questionbank') {
+            if (qbIframeContainer) {
+                qbIframeContainer.style.display = 'flex';
+                refreshIframe(qbIframe);
+            }
         } else {
+            // server 模式
             codeStatsConfig.style.display = 'block';
             codeStatsResult.style.display = 'block';
-            spiderIframeContainer.style.display = 'none';
         }
     }
 
@@ -68,7 +87,7 @@
         switchMode(item.dataset.mode);
     });
 
-    // ========== 代码分析原有功能 ==========
+    // ========== 代码分析原有功能（保持不变） ==========
     async function loadDefaultConfig() {
         try {
             const resp = await fetch(API_BASE + '/config');
@@ -275,7 +294,6 @@
         URL.revokeObjectURL(url);
     }
 
-    // 修复下载合并文件：使用正确的 Base64 编码（UTF-8 转 Base64）
     async function downloadMergeFile() {
         if (!currentMergeFilePath) {
             alert('没有可用的合并文件，请启用“文件合并”并重新分析。');
@@ -283,7 +301,6 @@
         }
         let encodedPath;
         try {
-            // 后端要求 Base64 编码的 UTF-8 字符串
             encodedPath = utf8ToBase64(currentMergeFilePath);
         } catch (e) {
             console.error('编码失败', e);

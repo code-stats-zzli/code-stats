@@ -70,21 +70,18 @@ public class QuestionBankService {
         return sb.toString();
     }
 
-    // 内存缓存（仅用于当前实例，不依赖外部文件，主要用于在线程内快速访问）
-    // 但改用后端 Cache 后，以下字段仅作为 fallback 或临时存储
     private List<String> mergedLines = new ArrayList<>();
     private Path currentMergedFile = null;
 
     // 后端缓存实例（TTL 1天）
     private final Cache<String, PreviewCacheData> previewCache = CacheFactory.createDefaultCache();
 
-    // 预览数据包装类，用于缓存
     private static class PreviewCacheData implements Serializable {
         private static final long serialVersionUID = 1L;
         List<String> columns;
         List<Map<String, String>> rows;
-        long cacheTime;      // 可选，用于调试
-        int totalRows;       // rows.size()
+        long cacheTime;
+        int totalRows;
     }
 
     public String getDefaultRootDir() { return DEFAULT_ROOT_DIR; }
@@ -92,7 +89,7 @@ public class QuestionBankService {
     public String getDefaultKeyword() { return DEFAULT_KEYWORD; }
     public String getDefaultNamePrefixes() { return DEFAULT_NAME_PREFIXES; }
 
-    // ========== 扫描文件（支持 .xls, .xlsx, .txt） ==========
+    // ========== 扫描文件 ==========
     private List<String> scanMergeableFiles(String rootDir, String keyword, String namePrefixes) throws IOException {
         Path start = Paths.get(rootDir).normalize();
         if (!Files.exists(start)) throw new IllegalArgumentException("目录不存在: " + rootDir);
@@ -163,12 +160,11 @@ public class QuestionBankService {
             mergeResult = mergeTextFiles(files, outputFile);
         }
 
-        // 合并成功后，主动构建预览数据并缓存
+        // 合并成功后，构建预览缓存（供预览和搜索共用）
         buildPreviewCacheFromMergedLines();
         return mergeResult;
     }
 
-    // ---------- Excel 合并 ----------
     private Map<String, Object> mergeExcelFiles(List<String> excelFiles, String outputFile) throws IOException {
         Path outPath = Paths.get(outputFile).normalize();
         if (outPath.getParent() != null) Files.createDirectories(outPath.getParent());
@@ -203,7 +199,6 @@ public class QuestionBankService {
         return result;
     }
 
-    // ---------- 文本文件合并 ----------
     private List<String> readTextFileAsCsvLines(Path file) throws IOException {
         List<String> lines = new ArrayList<>();
         try (BufferedReader reader = Files.newBufferedReader(file)) {
@@ -245,39 +240,62 @@ public class QuestionBankService {
         return result;
     }
 
-    // ========== 按关键词搜索（基于 mergedLines） ==========
-    public List<Map<String, String>> searchByKeyword(String keyword) {
-        if (mergedLines == null || mergedLines.isEmpty()) {
-            return Collections.emptyList();
+    // ========== 按关键词搜索（只返回第一条匹配行） ==========
+    public Map<String, Object> searchByKeyword(String keyword) throws IOException {
+        if (currentMergedFile == null) {
+            log.warn("搜索时合并文件为空");
+            Map<String, Object> empty = new HashMap<>();
+            empty.put("columns", Collections.emptyList());
+            empty.put("row", null);
+            return empty;
         }
-        if (keyword == null || keyword.trim().isEmpty()) {
-            return Collections.emptyList();
-        }
-        String lowerKeyword = keyword.toLowerCase();
-        List<Map<String, String>> matches = new ArrayList<>();
-        int lineNo = 0;
-        for (String line : mergedLines) {
-            lineNo++;
-            if (line.toLowerCase().contains(lowerKeyword)) {
-                Map<String, String> item = new HashMap<>();
-                item.put("lineNumber", String.valueOf(lineNo));
-                item.put("content", line);
-                matches.add(item);
+        String cacheKey = currentMergedFile.toAbsolutePath().toString();
+        PreviewCacheData cached = previewCache.get(cacheKey);
+        if (cached == null) {
+            buildPreviewCacheFromMergedLines();
+            cached = previewCache.get(cacheKey);
+            if (cached == null) {
+                log.warn("预览缓存构建失败");
+                Map<String, Object> empty = new HashMap<>();
+                empty.put("columns", Collections.emptyList());
+                empty.put("row", null);
+                return empty;
             }
         }
-        return matches;
+        if (keyword == null || keyword.trim().isEmpty()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("columns", cached.columns);
+            result.put("row", cached.rows.isEmpty() ? null : cached.rows.get(0));
+            return result;
+        }
+        String lowerKeyword = keyword.trim().toLowerCase();
+        Map<String, String> matchedRow = null;
+
+        for (Map<String, String> row : cached.rows) {
+            // 检查所有列的值是否包含关键词
+            boolean match = row.values().stream().anyMatch(val -> val != null && val.toLowerCase().contains(lowerKeyword));
+            if (match) {
+                matchedRow = row;
+                break;  // 只取第一条匹配
+            }
+        }
+        log.info("搜索关键词 '{}'，找到匹配: {}", keyword, matchedRow != null);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("columns", cached.columns);
+        result.put("row", matchedRow);
+        return result;
     }
 
     public String getCurrentMergedFile() {
         return currentMergedFile == null ? null : currentMergedFile.toString();
     }
 
-    // ========== 构建预览缓存（从 mergedLines 解析） ==========
+    // ========== 构建预览缓存（供预览和搜索共用） ==========
     private void buildPreviewCacheFromMergedLines() throws IOException {
         if (currentMergedFile == null || mergedLines == null || mergedLines.isEmpty()) {
             return;
         }
-        // 解析 mergedLines 得到 columns 和 rows
         List<String> dataLines = new ArrayList<>();
         for (String line : mergedLines) {
             String trimmed = line.trim();
@@ -307,23 +325,19 @@ public class QuestionBankService {
         cacheData.totalRows = rows.size();
         cacheData.cacheTime = System.currentTimeMillis();
 
-        // 缓存 key 使用合并文件的绝对路径
         String cacheKey = currentMergedFile.toAbsolutePath().toString();
-        previewCache.put(cacheKey, cacheData, 24 * 60 * 60 * 1000L); // TTL 1天
+        previewCache.put(cacheKey, cacheData, 24 * 60 * 60 * 1000L);
         log.info("预览数据已缓存，key={}, 行数={}", cacheKey, rows.size());
     }
 
-    // ========== 获取预览数据（优先从缓存获取，否则从 mergedLines 解析并缓存） ==========
+    // ========== 获取预览数据（分页） ==========
     public Map<String, Object> getPreviewData(String keyword, int page, int pageSize) throws IOException {
         if (currentMergedFile == null) {
             throw new IOException("没有合并文件数据，请先执行合并操作");
         }
         String cacheKey = currentMergedFile.toAbsolutePath().toString();
         PreviewCacheData cached = previewCache.get(cacheKey);
-
-        // 缓存不存在或已过期，则从 mergedLines 重新构建
         if (cached == null) {
-            log.info("缓存未命中，重新构建预览数据，key={}", cacheKey);
             buildPreviewCacheFromMergedLines();
             cached = previewCache.get(cacheKey);
             if (cached == null) {
@@ -355,7 +369,6 @@ public class QuestionBankService {
 
     // ========== 导出 Excel ==========
     public void exportToExcel(String keyword, OutputStream outputStream) throws IOException {
-        // 复用 getPreviewData 的缓存逻辑，取全量数据（不分页）
         if (currentMergedFile == null) {
             throw new IOException("没有合并文件数据，请先执行合并操作");
         }
@@ -380,7 +393,6 @@ public class QuestionBankService {
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("题库数据");
 
-            // 表头
             Row headerRow = sheet.createRow(0);
             CellStyle headerStyle = workbook.createCellStyle();
             Font headerFont = workbook.createFont();
@@ -410,7 +422,7 @@ public class QuestionBankService {
         }
     }
 
-    // ========== CSV 行解析工具方法 ==========
+    // ========== CSV 行解析（支持引号、转义） ==========
     private List<String> parseCsvLine(String line) {
         List<String> result = new ArrayList<>();
         boolean inQuote = false;

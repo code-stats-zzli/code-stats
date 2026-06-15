@@ -37,7 +37,9 @@ public class QuestionBankController {
 
     @RequestMapping("/scan")
     @ResponseBody
-    public String scanFiles(String rootDir, String keyword, String namePrefixes) {
+    public String scanFiles(@RequestParam("rootDir") String rootDir,
+                            @RequestParam(value = "keyword", required = false) String keyword,
+                            @RequestParam(value = "namePrefixes", required = false) String namePrefixes) {
         Map<String, Object> result = new HashMap<>();
         try {
             List<String> files = service.scanExcelFiles(rootDir, keyword, namePrefixes);
@@ -71,12 +73,13 @@ public class QuestionBankController {
 
     @RequestMapping("/search")
     @ResponseBody
-    public String search(String keyword) {
+    public String search(@RequestParam("keyword") String keyword) {
         Map<String, Object> result = new HashMap<>();
         try {
-            List<Map<String, String>> matches = service.searchByKeyword(keyword);
+            Map<String, Object> searchResult = service.searchByKeyword(keyword);
             result.put("success", true);
-            result.put("matches", matches);
+            result.put("columns", searchResult.get("columns"));
+            result.put("row", searchResult.get("row"));      // 只返回第一条匹配行
         } catch (Exception e) {
             result.put("success", false);
             result.put("error", e.getMessage());
@@ -142,10 +145,8 @@ public class QuestionBankController {
             String encodedFileName = URLEncoder.encode(fileName, "UTF-8").replaceAll("\\+", "%20");
             response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFileName);
             service.exportToExcel(keyword, response.getOutputStream());
-            // 注意：service.exportToExcel 已经写入输出流，无需再调用 send()
         } catch (Exception e) {
             e.printStackTrace();
-            // 修正：setStatus 需要两个参数
             response.setStatus(500, "Internal Server Error");
             response.setContentType("text/plain;charset=UTF-8");
             response.write("导出失败：" + e.getMessage());

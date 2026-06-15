@@ -1,16 +1,15 @@
 // ======== webapps/demo/questionbank/questionbank.js ========
-// 仅保留后端接口调用，移除前端 localStorage 缓存
 (function() {
     try {
         document.body.style.height = '100%';
         document.documentElement.style.height = '100%';
 
         const API_BASE = window.apiUrl('/questionbank/api');
-        let currentMergedFile = null;      // 当前合并文件路径（仅用于UI显示）
-        let currentKeyword = '';            // 当前搜索关键词
-        let currentPage = 1;                // 当前页码
-        let pageSize = 20;                  // 每页条数
-        let totalRecords = 0;               // 总记录数
+        let currentMergedFile = null;
+        let currentKeyword = '';
+        let currentPage = 1;
+        let pageSize = 20;
+        let totalRecords = 0;
 
         // DOM 元素
         const rootDirInput = document.getElementById('rootDir');
@@ -40,6 +39,17 @@
         const resultPanePlaceholder = document.getElementById('resultPanePlaceholder');
         const exportExcelBtn = document.getElementById('exportExcelBtn');
 
+        // 高亮关键词函数
+        function highlightKeyword(text, keyword) {
+            if (!text || !keyword) return escapeHtml(text);
+            const regex = new RegExp(`(${escapeRegex(keyword)})`, 'gi');
+            return escapeHtml(text).replace(regex, '<mark style="background: #ffeb3b; color: #1e293b; padding: 0 2px; border-radius: 4px;">$1</mark>');
+        }
+
+        function escapeRegex(str) {
+            return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
         // ---------- Tab 切换 ----------
         function activateTab(tabId) {
             tabBtns.forEach(btn => {
@@ -52,7 +62,7 @@
                 loadPreviewData(currentKeyword, currentPage);
             } else if (tabId === 'preview' && !currentMergedFile) {
                 previewTableHead.innerHTML = '';
-                previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">暂无数据，请先执行合并</td></tr>';
+                previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">暂无数据，请先执行合并<\/td><\/tr>';
                 if (previewPagination) previewPagination.innerHTML = '';
             }
         }
@@ -61,7 +71,6 @@
             btn.addEventListener('click', () => activateTab(btn.dataset.tab));
         });
 
-        // 将合并结果卡片内容移动到结果Tab
         function showMergeResultInTab() {
             if (resultPanePlaceholder && mergeResultCard) {
                 resultPanePlaceholder.innerHTML = mergeResultCard.innerHTML;
@@ -77,7 +86,6 @@
             }
         }
 
-        // 加载默认配置
         async function loadDefaultConfig() {
             try {
                 const resp = await fetch(API_BASE + '/config');
@@ -124,7 +132,7 @@
             }
         }
 
-        // ========== 加载预览数据（调用后端接口） ==========
+        // 加载预览数据
         async function loadPreviewData(keyword, page) {
             if (!currentMergedFile) {
                 showMsg('请先执行合并操作', true);
@@ -143,7 +151,7 @@
                 } else {
                     showMsg(data.error || '加载预览数据失败', true);
                     previewTableHead.innerHTML = '';
-                    previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载失败</td></tr>';
+                    previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载失败<\/td><\/tr>';
                     if (previewPagination) previewPagination.innerHTML = '';
                 }
             } catch (err) {
@@ -155,12 +163,12 @@
         function renderPreviewTable(columns, rows) {
             if (!columns || columns.length === 0) {
                 previewTableHead.innerHTML = '';
-                previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">无数据</td></tr>';
+                previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">无数据<\/td><\/tr>';
                 return;
             }
-            previewTableHead.innerHTML = '<tr>' + columns.map(col => `<th>${escapeHtml(col)}</th>`).join('') + '</tr>';
+            previewTableHead.innerHTML = '<tr>' + columns.map(col => `<th>${escapeHtml(col)}</th>`).join('') + '<\/tr>';
             if (!rows || rows.length === 0) {
-                previewTableBody.innerHTML = '<tr><td colspan="' + columns.length + '" style="text-align:center;">暂无匹配数据</td></tr>';
+                previewTableBody.innerHTML = '<td><td colspan="' + columns.length + '" style="text-align:center;">暂无匹配数据<\/td><\/tr>';
                 return;
             }
             let bodyHtml = '';
@@ -174,9 +182,9 @@
                     if (displayText.length > 100) {
                         displayText = displayText.substring(0, 97) + '...';
                     }
-                    bodyHtml += `<td title="${fullText.replace(/"/g, '&quot;')}">${displayText}</td>`;
+                    bodyHtml += `<td title="${fullText.replace(/"/g, '&quot;')}">${displayText}<\/td>`;
                 }
-                bodyHtml += '</tr>';
+                bodyHtml += '<\/tr>';
             }
             previewTableBody.innerHTML = bodyHtml;
         }
@@ -190,19 +198,19 @@
             }
             let html = '';
             if (currentPageNum > 1) {
-                html += `<button data-page="${currentPageNum - 1}">上一页</button>`;
+                html += `<button data-page="${currentPageNum - 1}">上一页<\/button>`;
             }
             let startPage = Math.max(1, currentPageNum - 2);
             let endPage = Math.min(totalPages, currentPageNum + 2);
             for (let i = startPage; i <= endPage; i++) {
                 if (i === currentPageNum) {
-                    html += `<button class="active" disabled>${i}</button>`;
+                    html += `<button class="active" disabled>${i}<\/button>`;
                 } else {
-                    html += `<button data-page="${i}">${i}</button>`;
+                    html += `<button data-page="${i}">${i}<\/button>`;
                 }
             }
             if (currentPageNum < totalPages) {
-                html += `<button data-page="${currentPageNum + 1}">下一页</button>`;
+                html += `<button data-page="${currentPageNum + 1}">下一页<\/button>`;
             }
             previewPagination.innerHTML = html;
 
@@ -216,7 +224,7 @@
             });
         }
 
-        // ========== 合并文件逻辑 ==========
+        // 合并文件
         async function mergeFiles() {
             const rootDir = rootDirInput.value.trim();
             const keyword = keywordInput.value.trim();
@@ -248,6 +256,7 @@
                     currentKeyword = '';
                     currentPage = 1;
                     totalRecords = 0;
+                    // 切换到预览标签页
                     activateTab('preview');
                 } else {
                     setProgress(0, '合并失败');
@@ -265,7 +274,7 @@
                 <p><strong>文件数：</strong> ${data.fileCount}</p>
                 <p><strong>总行数（含头部）：</strong> ${data.totalLines}</p>
             `;
-            fileListUl.innerHTML = data.files.map(f => `<li>${escapeHtml(f)}</li>`).join('');
+            fileListUl.innerHTML = data.files.map(f => `<li>${escapeHtml(f)}<\/li>`).join('');
             downloadMergedBtn.onclick = () => {
                 if (!currentMergedFile) return;
                 const url = window.apiUrl(`/questionbank/api/download?file=${encodeURIComponent(currentMergedFile)}&t=${Date.now()}`);
@@ -273,28 +282,48 @@
             };
         }
 
-        // 按题目关键词搜索（后端 /search 接口）
+        // 搜索题目（只返回第一条匹配，卡片展示）
         async function search() {
             const keyword = searchKeyword.value.trim();
             if (!keyword) {
                 searchResultDiv.innerHTML = '<div class="empty-tip">请输入题目关键词</div>';
                 return;
             }
-            searchResultDiv.innerHTML = '<div class="empty-tip">搜索中...</div>';
+            if (!currentMergedFile) {
+                searchResultDiv.innerHTML = '<div class="empty-tip">⚠️ 请先执行合并操作，再搜索题目</div>';
+                return;
+            }
+            searchResultDiv.innerHTML = '<div class="empty-tip">🔍 搜索中...</div>';
             try {
                 const resp = await fetch(API_BASE + `/search?keyword=${encodeURIComponent(keyword)}`);
                 const data = await resp.json();
-                if (data.success && data.matches.length) {
-                    let html = '';
-                    data.matches.forEach(m => {
-                        html += `<div class="match-item"><strong>行 ${m.lineNumber}:</strong> ${escapeHtml(m.content)}</div>`;
-                    });
+                if (data.success && data.row) {
+                    const columns = data.columns || [];
+                    const row = data.row;
+                    // 构建卡片
+                    let html = '<div class="search-result-card">';
+                    html += '<div class="card-header">📌 匹配结果</div>';
+                    html += '<div class="card-body">';
+                    for (const col of columns) {
+                        let value = row[col] || '';
+                        if (value !== '') {
+                            const highlightedValue = highlightKeyword(value, keyword);
+                            html += `
+                                <div class="result-field">
+                                    <span class="field-label">${escapeHtml(col)}：</span>
+                                    <span class="field-value">${highlightedValue}</span>
+                                </div>
+                            `;
+                        }
+                    }
+                    html += '</div></div>';
                     searchResultDiv.innerHTML = html;
                 } else {
-                    searchResultDiv.innerHTML = '<div class="empty-tip">未找到匹配的题目</div>';
+                    searchResultDiv.innerHTML = '<div class="empty-tip">😞 未找到匹配的题目，请尝试其他关键词</div>';
                 }
             } catch (err) {
-                searchResultDiv.innerHTML = `<div class="empty-tip">搜索失败: ${err.message}</div>`;
+                console.error('搜索失败', err);
+                searchResultDiv.innerHTML = `<div class="empty-tip">❌ 搜索失败: ${err.message}</div>`;
             }
         }
 
@@ -356,7 +385,7 @@
             loadPreviewData('', 1);
         }
 
-        // ========== 导出 Excel（直接调用后端接口） ==========
+        // 导出 Excel
         if (exportExcelBtn) {
             exportExcelBtn.addEventListener('click', async () => {
                 const keyword = tableSearchInput ? tableSearchInput.value.trim() : '';

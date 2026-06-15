@@ -130,3 +130,62 @@ html, body {
     padding: 8px 12px;
     white-space: nowrap;
 }
+/* 搜索结果美化卡片样式 */
+.search-result-item {
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border-radius: 20px;
+    padding: 16px;
+    margin-bottom: 16px;
+    border-left: 4px solid var(--accent-primary);
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+.search-result-item:hover {
+    transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(0,102,255,0.2);
+}
+.result-question {
+    font-weight: 600;
+    color: var(--accent-primary);
+    margin-bottom: 8px;
+    font-size: 15px;
+}
+.result-answer {
+    color: var(--text-dark);
+    line-height: 1.5;
+    font-size: 14px;
+}
+/* 搜索结果表格滚动条 */
+#searchResult {
+    max-height: 500px;
+    overflow-y: auto;
+    background: #f8fafc;
+    border-radius: 16px;
+    padding: 0;
+}
+#searchResult .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 16px;
+    overflow: hidden;
+}
+#searchResult .data-table th {
+    background: rgba(0,102,255,0.1);
+    color: var(--accent-primary);
+    font-weight: 600;
+    padding: 10px 12px;
+    white-space: nowrap;
+}
+#searchResult .data-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#searchResult .data-table tr:hover td {
+    background: rgba(0,102,255,0.05);
+}

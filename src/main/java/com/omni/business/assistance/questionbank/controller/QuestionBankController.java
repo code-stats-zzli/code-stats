@@ -57,7 +57,7 @@ public class QuestionBankController {
         String outputFile = req.get("outputFile");
         Map<String, Object> result = new HashMap<>();
         try {
-            Map<String, Object> mergeResult = service.mergeExcelFiles(rootDir, keyword, namePrefixes, outputFile);
+            Map<String, Object> mergeResult = service.mergeFiles(rootDir, keyword, namePrefixes, outputFile);
             result.put("success", true);
             result.putAll(mergeResult);
         } catch (Exception e) {

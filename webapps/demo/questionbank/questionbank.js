@@ -1,3 +1,4 @@
+// ======== webapps/demo/questionbank/questionbank.js ========
 (function() {
     try {
         document.body.style.height = '100%';
@@ -146,6 +147,7 @@
             }
         }
 
+        // 渲染预览表格（支持单元格内容过长时省略，鼠标悬浮显示完整内容）
         function renderPreviewTable(columns, rows) {
             if (!columns || columns.length === 0) {
                 previewTableHead.innerHTML = '';
@@ -154,7 +156,6 @@
             }
             // 表头
             previewTableHead.innerHTML = '<tr>' + columns.map(col => `<th>${escapeHtml(col)}</th>`).join('') + '</tr>';
-            // 表体
             if (!rows || rows.length === 0) {
                 previewTableBody.innerHTML = '<tr><td colspan="' + columns.length + '" style="text-align:center;">暂无匹配数据</td></tr>';
                 return;
@@ -165,7 +166,14 @@
                 for (const col of columns) {
                     let val = row[col];
                     if (val === undefined || val === null) val = '';
-                    bodyHtml += `<td title="${escapeHtml(String(val))}">${escapeHtml(String(val).substring(0, 100))}</td>`;
+                    let fullText = escapeHtml(String(val));
+                    // 显示时截断过长的文本，保留省略号效果（CSS 也会处理，但显式截断可提高可读性）
+                    let displayText = fullText;
+                    if (displayText.length > 100) {
+                        displayText = displayText.substring(0, 97) + '...';
+                    }
+                    // title 属性使用完整内容，确保鼠标悬浮显示全部
+                    bodyHtml += `<td title="${fullText.replace(/"/g, '&quot;')}">${displayText}</td>`;
                 }
                 bodyHtml += '</tr>';
             }
@@ -180,11 +188,9 @@
                 return;
             }
             let html = '';
-            // 上一页
             if (currentPageNum > 1) {
                 html += `<button data-page="${currentPageNum - 1}">上一页</button>`;
             }
-            // 页码（简单显示前后3页）
             let startPage = Math.max(1, currentPageNum - 2);
             let endPage = Math.min(totalPages, currentPageNum + 2);
             for (let i = startPage; i <= endPage; i++) {
@@ -194,13 +200,11 @@
                     html += `<button data-page="${i}">${i}</button>`;
                 }
             }
-            // 下一页
             if (currentPageNum < totalPages) {
                 html += `<button data-page="${currentPageNum + 1}">下一页</button>`;
             }
             previewPagination.innerHTML = html;
 
-            // 绑定事件
             previewPagination.querySelectorAll('button[data-page]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const newPage = parseInt(btn.dataset.page);
@@ -225,7 +229,7 @@
                 outputFile = `./merged_${Date.now()}.txt`;
                 outputFileInput.value = outputFile;
             }
-            setProgress(10, '正在扫描 Excel 文件...');
+            setProgress(10, '正在扫描文件...');
             try {
                 const resp = await fetch(API_BASE + '/merge', {
                     method: 'POST',

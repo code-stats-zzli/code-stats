@@ -111,3 +111,22 @@ html, body {
     min-height: 100%;
     box-sizing: border-box;
 }
+/* 文件路径: webapps/demo/questionbank/questionbank.css */
+/* 在原有样式末尾追加以下内容 */
+
+/* 数据预览表格单元格固定行高、溢出省略、悬浮显示完整内容 */
+.data-table td {
+    height: 40px;
+    line-height: 40px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 300px;          /* 可根据需要调整，避免撑爆表格 */
+    padding: 0 12px;
+}
+
+/* 可选：让表格更紧凑 */
+.data-table th {
+    padding: 8px 12px;
+    white-space: nowrap;
+}

@@ -67,21 +67,14 @@ public class QuestionBankService {
     private List<String> mergedLines = new ArrayList<>();
     private Path currentMergedFile = null;
 
-    public String getDefaultRootDir() {
-        return DEFAULT_ROOT_DIR;
-    }
+    // ========== 预览缓存：解析后的结构化数据 ==========
+    private List<String> previewColumns = null;
+    private List<Map<String, String>> previewRows = null;
 
-    public String getDefaultOutputFile() {
-        return DEFAULT_OUTPUT_FILE;
-    }
-
-    public String getDefaultKeyword() {
-        return DEFAULT_KEYWORD;
-    }
-
-    public String getDefaultNamePrefixes() {
-        return DEFAULT_NAME_PREFIXES;
-    }
+    public String getDefaultRootDir() { return DEFAULT_ROOT_DIR; }
+    public String getDefaultOutputFile() { return DEFAULT_OUTPUT_FILE; }
+    public String getDefaultKeyword() { return DEFAULT_KEYWORD; }
+    public String getDefaultNamePrefixes() { return DEFAULT_NAME_PREFIXES; }
 
     public List<String> scanExcelFiles(String rootDir, String keyword, String namePrefixes) throws IOException {
         Path start = Paths.get(rootDir).normalize();
@@ -156,9 +149,12 @@ public class QuestionBankService {
         ExcelUtil.writeCsvLinesToFile(outPath, allLines);
         currentMergedFile = outPath;
         mergedLines = allLines;
+        // 清除预览缓存，下次请求时重新解析
+        previewColumns = null;
+        previewRows = null;
 
         Map<String, Object> result = new HashMap<>();
-        result.put("mergedFile", outPath.toAbsolutePath().toString());  // 绝对路径
+        result.put("mergedFile", outPath.toAbsolutePath().toString());
         result.put("totalLines", totalRows);
         result.put("fileCount", excelFiles.size());
         result.put("files", excelFiles);
@@ -189,5 +185,98 @@ public class QuestionBankService {
 
     public String getCurrentMergedFile() {
         return currentMergedFile == null ? null : currentMergedFile.toString();
+    }
+
+    // ========== 预览数据分页搜索（后端实现） ==========
+    private synchronized void ensurePreviewDataLoaded() throws IOException {
+        if (previewColumns != null && previewRows != null) {
+            return; // 已加载
+        }
+        if (mergedLines == null || mergedLines.isEmpty()) {
+            throw new IOException("没有合并文件数据，请先执行合并操作");
+        }
+
+        // 解析 CSV 格式的合并文件
+        // 跳过以 // 开头的注释行
+        List<String> dataLines = new ArrayList<>();
+        for (String line : mergedLines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty() || trimmed.startsWith("//")) continue;
+            dataLines.add(line);
+        }
+        if (dataLines.isEmpty()) {
+            throw new IOException("合并文件中无有效数据");
+        }
+
+        // 第一行为列头
+        String headerLine = dataLines.get(0);
+        List<String> columns = parseCsvLine(headerLine);
+        previewColumns = columns;
+
+        List<Map<String, String>> rows = new ArrayList<>();
+        for (int i = 1; i < dataLines.size(); i++) {
+            List<String> values = parseCsvLine(dataLines.get(i));
+            Map<String, String> row = new LinkedHashMap<>();
+            for (int j = 0; j < columns.size(); j++) {
+                String colName = columns.get(j);
+                String val = (j < values.size()) ? values.get(j) : "";
+                row.put(colName, val);
+            }
+            rows.add(row);
+        }
+        previewRows = rows;
+    }
+
+    private List<String> parseCsvLine(String line) {
+        List<String> result = new ArrayList<>();
+        boolean inQuote = false;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < line.length(); i++) {
+            char ch = line.charAt(i);
+            if (ch == '"') {
+                if (inQuote && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    sb.append('"');
+                    i++;
+                } else {
+                    inQuote = !inQuote;
+                }
+            } else if (ch == ',' && !inQuote) {
+                result.add(sb.toString());
+                sb.setLength(0);
+            } else {
+                sb.append(ch);
+            }
+        }
+        result.add(sb.toString());
+        return result;
+    }
+
+    public Map<String, Object> getPreviewData(String keyword, int page, int pageSize) throws IOException {
+        ensurePreviewDataLoaded();
+        if (previewRows == null || previewColumns == null) {
+            throw new IOException("预览数据未就绪");
+        }
+
+        // 过滤（关键词匹配任意列）
+        List<Map<String, String>> filteredRows = previewRows;
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            String lowerKw = keyword.trim().toLowerCase();
+            filteredRows = previewRows.stream()
+                    .filter(row -> row.values().stream().anyMatch(val -> val != null && val.toLowerCase().contains(lowerKw)))
+                    .collect(Collectors.toList());
+        }
+
+        int total = filteredRows.size();
+        int start = (page - 1) * pageSize;
+        int end = Math.min(start + pageSize, total);
+        List<Map<String, String>> pageRows = (start < end) ? filteredRows.subList(start, end) : Collections.emptyList();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", total);
+        result.put("page", page);
+        result.put("pageSize", pageSize);
+        result.put("columns", previewColumns);
+        result.put("rows", pageRows);
+        return result;
     }
 }

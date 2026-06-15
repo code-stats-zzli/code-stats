@@ -4,9 +4,11 @@
         document.documentElement.style.height = '100%';
 
         const API_BASE = window.apiUrl('/questionbank/api');
-        let currentMergedFile = null;
-        let fullTableData = [];
-        let tableColumns = [];
+        let currentMergedFile = null;      // 当前合并文件路径
+        let currentKeyword = '';            // 当前搜索关键词
+        let currentPage = 1;                // 当前页码
+        let pageSize = 20;                  // 每页条数
+        let totalRecords = 0;               // 总记录数
 
         // DOM 元素
         const rootDirInput = document.getElementById('rootDir');
@@ -30,11 +32,12 @@
         const resetTableBtn = document.getElementById('resetTableBtn');
         const previewTableHead = document.getElementById('previewTableHead');
         const previewTableBody = document.getElementById('previewTableBody');
+        const previewPagination = document.getElementById('previewPagination');
         const tabBtns = document.querySelectorAll('.tab-btn');
         const tabPanes = document.querySelectorAll('.tab-pane');
         const resultPanePlaceholder = document.getElementById('resultPanePlaceholder');
 
-        // Tab 切换
+        // ---------- Tab 切换 ----------
         function activateTab(tabId) {
             tabBtns.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.tab === tabId);
@@ -42,9 +45,9 @@
             tabPanes.forEach(pane => {
                 pane.classList.toggle('active', pane.id === `tab${tabId.charAt(0).toUpperCase() + tabId.slice(1)}Pane`);
             });
-            // 如果切换到预览且已有数据，刷新表格
-            if (tabId === 'preview' && fullTableData.length) {
-                renderTable(fullTableData);
+            // 切换到预览时重新加载数据（保留当前搜索关键词和页码）
+            if (tabId === 'preview' && currentMergedFile) {
+                loadPreviewData(currentKeyword, currentPage);
             }
         }
 
@@ -52,12 +55,10 @@
             btn.addEventListener('click', () => activateTab(btn.dataset.tab));
         });
 
-        // 将合并结果内容移动到结果Tab中（在显示结果时调用）
+        // 将合并结果卡片内容移动到结果Tab
         function showMergeResultInTab() {
-            // 将 mergeResultCard 的内容移动到 resultPanePlaceholder 中
             if (resultPanePlaceholder && mergeResultCard) {
                 resultPanePlaceholder.innerHTML = mergeResultCard.innerHTML;
-                // 重新绑定下载按钮
                 const newDownloadBtn = resultPanePlaceholder.querySelector('#downloadMergedBtn');
                 if (newDownloadBtn) {
                     newDownloadBtn.onclick = () => {
@@ -66,7 +67,6 @@
                         window.open(url, '_blank');
                     };
                 }
-                // 隐藏原始卡片，避免重复
                 mergeResultCard.style.display = 'none';
             }
         }
@@ -118,84 +118,100 @@
             }
         }
 
-        // 解析 CSV 行
-        function parseCSVLine(line) {
-            const result = [];
-            let inQuote = false;
-            let current = '';
-            for (let i = 0; i < line.length; i++) {
-                const ch = line[i];
-                if (ch === '"') {
-                    inQuote = !inQuote;
-                } else if (ch === ',' && !inQuote) {
-                    result.push(current);
-                    current = '';
-                } else {
-                    current += ch;
-                }
+        // ========== 加载预览数据（调用后端 /preview 接口） ==========
+        async function loadPreviewData(keyword, page) {
+            if (!currentMergedFile) {
+                showMsg('请先执行合并操作', true);
+                return;
             }
-            result.push(current);
-            return result.map(cell => cell.trim());
-        }
-
-        // 加载并解析合并文件为表格数据
-        async function loadAndDisplayTable(mergedFilePath) {
+            const url = `${API_BASE}/preview?keyword=${encodeURIComponent(keyword || '')}&page=${page}&pageSize=${pageSize}`;
             try {
-                const resp = await fetch(mergedFilePath);
-                if (!resp.ok) throw new Error('获取合并文件失败');
-                const content = await resp.text();
-                const lines = content.split(/\r?\n/);
-                const dataLines = lines.filter(line => !line.trim().startsWith('//') && line.trim().length > 0);
-                if (dataLines.length === 0) {
-                    showMsg('合并文件中无有效数据行', true);
-                    return;
+                const resp = await fetch(url);
+                const data = await resp.json();
+                if (data.success) {
+                    totalRecords = data.total;
+                    currentPage = data.page;
+                    currentKeyword = keyword || '';
+                    renderPreviewTable(data.columns, data.rows);
+                    renderPagination(data.total, data.page);
+                } else {
+                    showMsg(data.error || '加载预览数据失败', true);
+                    previewTableHead.innerHTML = '';
+                    previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载失败</td></tr>';
+                    if (previewPagination) previewPagination.innerHTML = '';
                 }
-                const headerRow = dataLines[0];
-                const columns = parseCSVLine(headerRow);
-                tableColumns = columns;
-                const rows = [];
-                for (let i = 1; i < dataLines.length; i++) {
-                    const values = parseCSVLine(dataLines[i]);
-                    if (values.length === 0) continue;
-                    const rowObj = {};
-                    columns.forEach((col, idx) => {
-                        rowObj[col] = idx < values.length ? values[idx] : '';
-                    });
-                    rows.push(rowObj);
-                }
-                fullTableData = rows;
-                renderTable(rows);
             } catch (err) {
-                console.error('解析表格失败', err);
-                showMsg('预览表格失败: ' + err.message, true);
+                console.error('预览数据加载失败', err);
+                showMsg('预览数据加载失败: ' + err.message, true);
             }
         }
 
-        function renderTable(dataRows) {
-            if (!previewTableHead || !previewTableBody) return;
-            if (!tableColumns.length) return;
-            previewTableHead.innerHTML = '<tr>' + tableColumns.map(col => `<th>${escapeHtml(col)}</th>`).join('') + '</tr>';
-            if (dataRows.length === 0) {
-                previewTableBody.innerHTML = '<tr><td colspan="' + tableColumns.length + '" style="text-align:center;">无匹配数据</td></tr>';
+        function renderPreviewTable(columns, rows) {
+            if (!columns || columns.length === 0) {
+                previewTableHead.innerHTML = '';
+                previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">无数据</td></tr>';
                 return;
             }
-            previewTableBody.innerHTML = dataRows.map(row => {
-                return '<tr>' + tableColumns.map(col => `<td>${escapeHtml(row[col] || '')}</td>`).join('') + '</tr>';
-            }).join('');
+            // 表头
+            previewTableHead.innerHTML = '<tr>' + columns.map(col => `<th>${escapeHtml(col)}</th>`).join('') + '</tr>';
+            // 表体
+            if (!rows || rows.length === 0) {
+                previewTableBody.innerHTML = '<tr><td colspan="' + columns.length + '" style="text-align:center;">暂无匹配数据</td></tr>';
+                return;
+            }
+            let bodyHtml = '';
+            for (const row of rows) {
+                bodyHtml += '<tr>';
+                for (const col of columns) {
+                    let val = row[col];
+                    if (val === undefined || val === null) val = '';
+                    bodyHtml += `<td title="${escapeHtml(String(val))}">${escapeHtml(String(val).substring(0, 100))}</td>`;
+                }
+                bodyHtml += '</tr>';
+            }
+            previewTableBody.innerHTML = bodyHtml;
         }
 
-        function filterTable() {
-            const keyword = tableSearchInput.value.trim().toLowerCase();
-            if (!keyword) {
-                renderTable(fullTableData);
+        function renderPagination(total, currentPageNum) {
+            if (!previewPagination) return;
+            const totalPages = Math.ceil(total / pageSize);
+            if (totalPages <= 1) {
+                previewPagination.innerHTML = '';
                 return;
             }
-            const filtered = fullTableData.filter(row => {
-                return Object.values(row).some(cell => String(cell).toLowerCase().includes(keyword));
+            let html = '';
+            // 上一页
+            if (currentPageNum > 1) {
+                html += `<button data-page="${currentPageNum - 1}">上一页</button>`;
+            }
+            // 页码（简单显示前后3页）
+            let startPage = Math.max(1, currentPageNum - 2);
+            let endPage = Math.min(totalPages, currentPageNum + 2);
+            for (let i = startPage; i <= endPage; i++) {
+                if (i === currentPageNum) {
+                    html += `<button class="active" disabled>${i}</button>`;
+                } else {
+                    html += `<button data-page="${i}">${i}</button>`;
+                }
+            }
+            // 下一页
+            if (currentPageNum < totalPages) {
+                html += `<button data-page="${currentPageNum + 1}">下一页</button>`;
+            }
+            previewPagination.innerHTML = html;
+
+            // 绑定事件
+            previewPagination.querySelectorAll('button[data-page]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const newPage = parseInt(btn.dataset.page);
+                    if (!isNaN(newPage) && newPage !== currentPageNum) {
+                        loadPreviewData(currentKeyword, newPage);
+                    }
+                });
             });
-            renderTable(filtered);
         }
 
+        // ========== 合并文件逻辑 ==========
         async function mergeFiles() {
             const rootDir = rootDirInput.value.trim();
             const keyword = keywordInput.value.trim();
@@ -222,15 +238,14 @@
                     showMsg(`合并成功！共 ${data.fileCount} 个文件，${data.totalLines} 行`);
                     currentMergedFile = data.mergedFile;
                     displayMergeResult(data);
-                    // 显示合并结果卡片（但实际内容会被移动到Tab中）
                     mergeResultCard.style.display = 'block';
                     showMergeResultInTab();
-                    // 加载表格数据用于预览
-                    if (currentMergedFile) {
-                        await loadAndDisplayTable(currentMergedFile);
-                    }
-                    // 切换到“合并结果”Tab
-                    activateTab('result');
+                    // 重置预览状态
+                    currentKeyword = '';
+                    currentPage = 1;
+                    totalRecords = 0;
+                    // 自动切换到预览 Tab 并加载第一页数据
+                    activateTab('preview');
                 } else {
                     setProgress(0, '合并失败');
                     showMsg(data.error, true);
@@ -248,7 +263,6 @@
                 <p><strong>总行数（含头部）：</strong> ${data.totalLines}</p>
             `;
             fileListUl.innerHTML = data.files.map(f => `<li>${escapeHtml(f)}</li>`).join('');
-            // 下载按钮事件
             downloadMergedBtn.onclick = () => {
                 if (!currentMergedFile) return;
                 const url = window.apiUrl(`/questionbank/api/download?file=${encodeURIComponent(currentMergedFile)}&t=${Date.now()}`);
@@ -256,6 +270,7 @@
             };
         }
 
+        // 按题目关键词搜索（基于后端 /search 接口）
         async function search() {
             const keyword = searchKeyword.value.trim();
             if (!keyword) {
@@ -280,6 +295,7 @@
             }
         }
 
+        // 重置所有表单
         function resetForm() {
             rootDirInput.value = 'D:/题库';
             keywordInput.value = '';
@@ -290,15 +306,17 @@
             searchResultDiv.innerHTML = '';
             searchKeyword.value = '';
             currentMergedFile = null;
-            fullTableData = [];
-            tableColumns = [];
+            currentKeyword = '';
+            currentPage = 1;
+            totalRecords = 0;
             tableSearchInput.value = '';
             previewTableHead.innerHTML = '';
             previewTableBody.innerHTML = '';
-            // 重置Tab显示
+            if (previewPagination) previewPagination.innerHTML = '';
             activateTab('result');
         }
 
+        // 浏览根目录
         function selectDirectory(callback) {
             const input = document.createElement('input');
             input.type = 'file';
@@ -327,36 +345,37 @@
             input.click();
         }
 
+        // 搜索预览（触发后端过滤）
+        function searchPreview() {
+            const kw = tableSearchInput.value.trim();
+            loadPreviewData(kw, 1);
+        }
+
+        function resetPreview() {
+            tableSearchInput.value = '';
+            loadPreviewData('', 1);
+        }
+
         // 事件绑定
         document.getElementById('browseBtn').addEventListener('click', () => {
-            selectDirectory((dir) => {
-                rootDirInput.value = dir;
-            });
+            selectDirectory((dir) => { rootDirInput.value = dir; });
         });
         document.getElementById('selectOutputBtn').addEventListener('click', selectOutputFile);
         mergeBtn.addEventListener('click', mergeFiles);
         resetBtn.addEventListener('click', resetForm);
         searchBtn.addEventListener('click', search);
-        searchKeyword.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') search();
-        });
-        searchTableBtn.addEventListener('click', filterTable);
-        resetTableBtn.addEventListener('click', () => {
-            tableSearchInput.value = '';
-            renderTable(fullTableData);
-        });
-        tableSearchInput.addEventListener('keyup', (e) => {
-            if (e.key === 'Enter') filterTable();
-        });
+        searchKeyword.addEventListener('keypress', (e) => { if (e.key === 'Enter') search(); });
+        searchTableBtn.addEventListener('click', searchPreview);
+        resetTableBtn.addEventListener('click', resetPreview);
+        tableSearchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') searchPreview(); });
 
         function escapeHtml(str) {
             if (!str) return '';
             return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
         }
 
-        // 初始化加载默认配置
+        // 初始化
         loadDefaultConfig();
-        // 默认激活合并结果Tab（但内容为空）
         activateTab('result');
     } catch(e) {
         console.error('QuestionBank page error:', e);

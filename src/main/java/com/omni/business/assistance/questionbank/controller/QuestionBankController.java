@@ -82,13 +82,29 @@ public class QuestionBankController {
         return JsonUtil.toJson(result);
     }
 
+    // ========== 新增：预览表格分页搜索接口 ==========
+    @RequestMapping("/preview")
+    @ResponseBody
+    public String previewTable(@RequestParam(value = "keyword", required = false) String keyword,
+                               @RequestParam(value = "page", defaultValue = "1") int page,
+                               @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            Map<String, Object> data = service.getPreviewData(keyword, page, pageSize);
+            result.put("success", true);
+            result.putAll(data);
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("error", e.getMessage());
+        }
+        return JsonUtil.toJson(result);
+    }
+
     @RequestMapping("/download")
     public void downloadMergedFile(@RequestParam("file") String file, HttpServletResponse response) throws Exception {
-        // 解码并规范化路径
         String decodedPath = URLDecoder.decode(file, StandardCharsets.UTF_8.name());
         Path path = Paths.get(decodedPath).normalize();
 
-        // 安全校验：禁止路径遍历
         if (path.toString().contains("..")) {
             response.setStatus(403,"Access denied");
             response.write("Access denied");
@@ -96,7 +112,6 @@ public class QuestionBankController {
             return;
         }
 
-        // 检查文件是否存在且为普通文件
         if (!Files.exists(path) || Files.isDirectory(path)) {
             response.setStatus(404,"");
             response.write("File not found: " + path);
@@ -104,7 +119,6 @@ public class QuestionBankController {
             return;
         }
 
-        // 设置响应头
         response.setHeader("Content-Disposition", "attachment; filename=\"" + path.getFileName().toString() + "\"");
         response.setContentType("text/plain");
 

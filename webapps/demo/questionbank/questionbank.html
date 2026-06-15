@@ -21,6 +21,10 @@
         .data-table th { background: rgba(0,102,255,0.1); }
         .file-list { max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.03); border-radius: 16px; padding: 12px; list-style: none; }
         .file-list li { font-family: monospace; font-size: 12px; padding: 4px 0; border-bottom: 1px dashed rgba(0,102,255,0.2); }
+        .pagination { margin-top: 16px; display: flex; justify-content: center; gap: 8px; align-items: center; }
+        .pagination button { padding: 4px 12px; background: rgba(0,102,255,0.1); border: 1px solid rgba(0,102,255,0.3); border-radius: 20px; cursor: pointer; }
+        .pagination button.active { background: var(--accent-primary); color: white; }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -75,10 +79,9 @@
         </div>
         <div class="tab-content">
             <div class="tab-pane active" id="tabResultPane">
-                <!-- 这里显示合并结果内容，实际通过 js 移动或复制 -->
                 <div id="resultPanePlaceholder">请先执行合并操作</div>
             </div>
-            <div class="tab-pane" id="tabPreviewPane" style="display: none;">
+            <div class="tab-pane" id="tabPreviewPane">
                 <div class="qb-preview card">
                     <div class="result-header">
                         <h3>📊 数据预览（支持模糊搜索）</h3>
@@ -94,6 +97,8 @@
                             <tbody id="previewTableBody"></tbody>
                         </table>
                     </div>
+                    <!-- 分页容器 -->
+                    <div id="previewPagination" class="pagination"></div>
                 </div>
             </div>
         </div>

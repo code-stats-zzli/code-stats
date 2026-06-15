@@ -20,7 +20,7 @@
         </ul>
     </aside>
     <main class="main">
-        <!-- 原有代码分析配置（服务器模式） -->
+        <!-- 服务器代码分析配置 -->
         <section class="config-panel" id="codeStatsConfig">
             <h2>代码统计配置</h2>
             <div class="config-form">
@@ -37,7 +37,7 @@
             <div class="action-bar"><button id="analyzeBtn" class="btn-primary">开始分析</button><button id="resetBtn" class="btn-secondary">重置默认</button></div>
         </section>
 
-        <!-- 原有代码分析结果区域 -->
+        <!-- 代码分析结果区域 -->
         <section class="result-section" id="codeStatsResult">
             <div class="progress-bar" id="progressBar" style="display: none;"><div class="progress-fill" id="progressFill"></div><span id="progressText">分析中...</span></div>
             <div class="result-tabs">
@@ -51,7 +51,7 @@
             </div>
             <div class="tab-content" id="codeStatsContent">
                 <div class="table-wrapper" id="filesTable" style="display: block;">
-                    <table><thead><tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr></thead><tbody id="fileTableBody"></tbody>
+                    <table><thead><tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr></thead><tbody id="fileTableBody"></tbody></table>
                 </div>
                 <div class="summary-content" id="summaryContent" style="display: none;">
                     <div id="summaryInfo"></div>
@@ -71,14 +71,16 @@
             </div>
         </section>
 
-        <!-- 爬虫 iframe 容器（使用 flex 布局） -->
-        <div id="spiderIframeContainer" style="display: none; flex: 1; width: 100%; flex-direction: column;">
-            <iframe id="spiderFrame" src="../spider/spider.html" style="flex: 1; width: 100%; border: none;"></iframe>
+        <!-- 网页爬虫 iframe 容器 -->
+        <div id="spiderIframeContainer" class="iframe-container" style="display: none;">
+            <div class="iframe-error" style="display: none; color: #dc2626; text-align: center; padding: 40px;">⚠️ 网页爬虫加载失败，请检查网络或刷新重试</div>
+            <iframe id="spiderFrame" src="../spider/spider.html" title="网页爬虫" class="iframe-content"></iframe>
         </div>
 
-        <!-- 题库分析 iframe 容器（使用 flex 布局） -->
-        <div id="qbIframeContainer" style="display: none; flex: 1; width: 100%; flex-direction: column;">
-            <iframe src="../questionbank/questionbank.html" style="flex: 1; width: 100%; border: none;"></iframe>
+        <!-- 题库分析 iframe 容器 -->
+        <div id="qbIframeContainer" class="iframe-container" style="display: none;">
+            <div class="iframe-error" style="display: none; color: #dc2626; text-align: center; padding: 40px;">⚠️ 题库分析加载失败，请检查网络或刷新重试</div>
+            <iframe id="qbFrame" src="../questionbank/questionbank.html" title="题库分析" class="iframe-content"></iframe>
         </div>
     </main>
 </div>

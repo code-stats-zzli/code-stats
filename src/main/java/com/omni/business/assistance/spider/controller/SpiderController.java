@@ -1,7 +1,7 @@
-package com.omni.business.spider.controller;
+package com.omni.business.assistance.spider.controller;
 
-import com.omni.business.spider.dto.StartTaskRequest;
-import com.omni.business.spider.service.SpiderTaskService;
+import com.omni.business.assistance.spider.dto.StartTaskRequest;
+import com.omni.business.assistance.spider.service.SpiderTaskService;
 import com.omni.framework.spider.model.Article;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;

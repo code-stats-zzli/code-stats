@@ -1,5 +1,5 @@
 // ======== D:\work\git\CodeStats\src\main\java\com\omni\business\spider\service\SpiderTaskService.java ========
-package com.omni.business.spider.service;
+package com.omni.business.assistance.spider.service;
 
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
@@ -24,7 +24,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
 
 @Service
 public class SpiderTaskService {

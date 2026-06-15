@@ -8,54 +8,6 @@
     <link rel="stylesheet" href="questionbank.css">
     <script src="../global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    <style>
-        /* 区域选择遮罩层样式 */
-        .screen-select-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 10000;
-            cursor: crosshair;
-        }
-        .selection-rect {
-            position: fixed;
-            border: 2px solid #0066ff;
-            background: rgba(0,102,255,0.2);
-            pointer-events: none;
-            z-index: 10001;
-        }
-        .selection-toolbar {
-            position: fixed;
-            background: #fff;
-            border-radius: 8px;
-            padding: 4px 8px;
-            display: flex;
-            gap: 8px;
-            z-index: 10002;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        }
-        .selection-toolbar button {
-            padding: 4px 12px;
-            font-size: 12px;
-        }
-        .loading-mask {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10003;
-            color: white;
-            font-size: 16px;
-        }
-    </style>
 </head>
 <body>
 <div class="qb-container">
@@ -83,7 +35,7 @@
         <div class="action-bar">
             <button id="mergeBtn" class="btn-primary">🚀 开始合并</button>
             <button id="resetBtn" class="btn-secondary">重置</button>
-            <button id="screenOcrBtn" class="btn-primary">📷 屏幕识别</button>
+            <!-- 原来的屏幕识别按钮已移除，改为浮窗触发 -->
         </div>
         <div id="mergeProgress" class="progress-area" style="display: none;">
             <div class="progress-bar"><div class="progress-fill"></div></div>
@@ -146,6 +98,26 @@
         <div id="searchResult" class="search-result"></div>
     </div>
 </div>
+
+<!-- ========== 屏幕识别浮窗（与智能助手风格一致） ========== -->
+<div id="screenOcrFab" class="ocr-fab">📷</div>
+<div id="screenOcrWidget" class="ocr-widget" style="display: none;">
+    <div class="ocr-header">
+        <span>📷 屏幕识别助手</span>
+        <button class="close-btn" id="closeOcrWidgetBtn">✖</button>
+    </div>
+    <div class="ocr-body">
+        <p>点击下方按钮，在屏幕上拖拽选取包含文字的区域</p>
+        <button id="startOcrSelectBtn" class="btn-primary">🎯 开始选区识别</button>
+        <div id="ocrStatus" class="ocr-status"></div>
+        <div id="ocrResult" class="ocr-result" style="display: none;">
+            <strong>识别结果：</strong>
+            <div id="ocrRecognizedText"></div>
+            <button id="ocrSearchBtn" class="btn-secondary" style="margin-top: 8px;">🔍 立即搜索</button>
+        </div>
+    </div>
+</div>
+
 <script src="questionbank.js"></script>
 </body>
 </html>

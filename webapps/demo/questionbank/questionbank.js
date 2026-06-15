@@ -18,7 +18,6 @@
         const outputFileInput = document.getElementById('outputFile');
         const mergeBtn = document.getElementById('mergeBtn');
         const resetBtn = document.getElementById('resetBtn');
-        const screenOcrBtn = document.getElementById('screenOcrBtn');
         const progressArea = document.getElementById('mergeProgress');
         const progressFill = document.querySelector('#mergeProgress .progress-fill');
         const progressText = document.querySelector('#mergeProgress .progress-text');
@@ -40,11 +39,177 @@
         const resultPanePlaceholder = document.getElementById('resultPanePlaceholder');
         const exportExcelBtn = document.getElementById('exportExcelBtn');
 
-        // ========== 屏幕识别相关变量 ==========
-        let isSelecting = false;
-        let startX, startY, currentRect = null, overlay = null, rectDiv = null, toolbar = null;
+        // ========== 浮窗相关 DOM ==========
+        const ocrFab = document.getElementById('screenOcrFab');
+        const ocrWidget = document.getElementById('screenOcrWidget');
+        const closeOcrWidgetBtn = document.getElementById('closeOcrWidgetBtn');
+        const startOcrSelectBtn = document.getElementById('startOcrSelectBtn');
+        const ocrStatus = document.getElementById('ocrStatus');
+        const ocrResultDiv = document.getElementById('ocrResult');
+        const ocrRecognizedTextSpan = document.getElementById('ocrRecognizedText');
+        const ocrSearchBtn = document.getElementById('ocrSearchBtn');
 
-        // 高亮关键词函数
+        let currentRecognizedText = '';
+
+        function showOcrWidget() { ocrWidget.style.display = 'block'; }
+        function hideOcrWidget() {
+            ocrWidget.style.display = 'none';
+            ocrStatus.innerHTML = '';
+            ocrResultDiv.style.display = 'none';
+            currentRecognizedText = '';
+        }
+        if (ocrFab) ocrFab.addEventListener('click', showOcrWidget);
+        if (closeOcrWidgetBtn) closeOcrWidgetBtn.addEventListener('click', hideOcrWidget);
+
+        // ========== 屏幕识别核心逻辑（拖拽后直接识别，无确认按钮） ==========
+        let isSelecting = false;
+        let startX, startY, overlay = null, rectDiv = null;
+
+        function cleanupSelection() {
+            if (overlay) overlay.remove();
+            if (rectDiv) rectDiv.remove();
+            document.removeEventListener('mousedown', onMouseDown);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            const handler = window.__ocrEscHandler;
+            if (handler) {
+                document.removeEventListener('keydown', handler);
+                window.__ocrEscHandler = null;
+            }
+        }
+
+        function onMouseDown(e) {
+            isSelecting = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            if (rectDiv) rectDiv.remove();
+            rectDiv = document.createElement('div');
+            rectDiv.className = 'selection-rect';
+            rectDiv.style.left = startX + 'px';
+            rectDiv.style.top = startY + 'px';
+            rectDiv.style.width = '0px';
+            rectDiv.style.height = '0px';
+            document.body.appendChild(rectDiv);
+        }
+
+        function onMouseMove(e) {
+            if (!isSelecting) return;
+            const currentX = e.clientX;
+            const currentY = e.clientY;
+            const left = Math.min(startX, currentX);
+            const top = Math.min(startY, currentY);
+            const width = Math.abs(currentX - startX);
+            const height = Math.abs(currentY - startY);
+            rectDiv.style.left = left + 'px';
+            rectDiv.style.top = top + 'px';
+            rectDiv.style.width = width + 'px';
+            rectDiv.style.height = height + 'px';
+        }
+
+        async function onMouseUp(e) {
+            if (!isSelecting) return;
+            isSelecting = false;
+            const endX = e.clientX;
+            const endY = e.clientY;
+            const left = Math.min(startX, endX);
+            const top = Math.min(startY, endY);
+            const width = Math.abs(endX - startX);
+            const height = Math.abs(endY - startY);
+
+            if (width < 5 || height < 5) {
+                cleanupSelection();
+                ocrStatus.innerHTML = '<span style="color:#ef4444;">❌ 拖拽距离过小，请按住鼠标左键并拖拽出一个矩形区域</span>';
+                return;
+            }
+
+            // 有效选区：清理遮罩和矩形框，直接识别
+            cleanupSelection();
+            await captureAndOCR(left, top, width, height);
+        }
+
+        function startSelection() {
+            if (overlay) cleanupSelection();
+            ocrStatus.innerHTML = '🔍 请拖拽鼠标选择要识别的区域（拖拽完成后自动识别）...';
+            overlay = document.createElement('div');
+            overlay.className = 'screen-select-overlay';
+            document.body.appendChild(overlay);
+
+            document.addEventListener('mousedown', onMouseDown);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+
+            const escHandler = (e) => {
+                if (e.key === 'Escape') {
+                    cleanupSelection();
+                    ocrStatus.innerHTML = '已取消选择';
+                    document.removeEventListener('keydown', escHandler);
+                    window.__ocrEscHandler = null;
+                }
+            };
+            window.__ocrEscHandler = escHandler;
+            document.addEventListener('keydown', escHandler);
+        }
+
+        async function captureAndOCR(left, top, width, height) {
+            const loadingMask = document.createElement('div');
+            loadingMask.className = 'loading-mask';
+            loadingMask.innerHTML = '<div>⏳ 正在识别文字，请稍候...</div>';
+            document.body.appendChild(loadingMask);
+            ocrStatus.innerHTML = '⏳ 正在识别...';
+
+            try {
+                const canvas = await html2canvas(document.body, {
+                    scale: 2,
+                    logging: false,
+                    useCORS: true,
+                    windowWidth: document.documentElement.scrollWidth,
+                    windowHeight: document.documentElement.scrollHeight
+                });
+                const croppedCanvas = document.createElement('canvas');
+                const ctx = croppedCanvas.getContext('2d');
+                croppedCanvas.width = width;
+                croppedCanvas.height = height;
+                ctx.drawImage(canvas, left, top, width, height, 0, 0, width, height);
+                const blob = await new Promise(resolve => croppedCanvas.toBlob(resolve, 'image/png'));
+                const formData = new FormData();
+                formData.append('image', blob, 'screenshot.png');
+                const resp = await fetch(API_BASE + '/ocr', { method: 'POST', body: formData });
+                const result = await resp.json();
+                loadingMask.remove();
+                if (result.error) {
+                    ocrStatus.innerHTML = `<span style="color:#ef4444;">❌ 识别失败: ${result.error}</span>`;
+                    return;
+                }
+                const recognizedText = result.text || '';
+                if (!recognizedText.trim()) {
+                    ocrStatus.innerHTML = '<span style="color:#ef4444;">⚠️ 未识别到任何文字，请重试</span>';
+                    return;
+                }
+                currentRecognizedText = recognizedText;
+                ocrRecognizedTextSpan.innerText = recognizedText;
+                ocrResultDiv.style.display = 'block';
+                ocrStatus.innerHTML = '✅ 识别成功！可点击“立即搜索”或修改后搜索';
+            } catch (err) {
+                loadingMask.remove();
+                ocrStatus.innerHTML = `<span style="color:#ef4444;">❌ 截图或识别失败: ${err.message}</span>`;
+                console.error(err);
+            }
+        }
+
+        function searchWithRecognizedText() {
+            if (!currentRecognizedText.trim()) {
+                alert('没有可用的识别结果');
+                return;
+            }
+            searchKeyword.value = currentRecognizedText;
+            activateTab('result');
+            searchBtn.click();
+        }
+
+        if (startOcrSelectBtn) startOcrSelectBtn.addEventListener('click', startSelection);
+        if (ocrSearchBtn) ocrSearchBtn.addEventListener('click', searchWithRecognizedText);
+
+        // ========== 原有题库逻辑 ==========
         function highlightKeyword(text, keyword) {
             if (!text || !keyword) return escapeHtml(text);
             const regex = new RegExp(`(${escapeRegex(keyword)})`, 'gi');
@@ -55,7 +220,6 @@
             return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }
 
-        // ---------- Tab 切换 ----------
         function activateTab(tabId) {
             tabBtns.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.tab === tabId);
@@ -137,7 +301,6 @@
             }
         }
 
-        // 加载预览数据
         async function loadPreviewData(keyword, page) {
             if (!currentMergedFile) {
                 showMsg('请先执行合并操作', true);
@@ -229,7 +392,6 @@
             });
         }
 
-        // 合并文件
         async function mergeFiles() {
             const rootDir = rootDirInput.value.trim();
             const keyword = keywordInput.value.trim();
@@ -286,7 +448,6 @@
             };
         }
 
-        // 搜索题目（只返回第一条匹配，卡片展示）
         async function search() {
             const keyword = searchKeyword.value.trim();
             if (!keyword) {
@@ -328,160 +489,6 @@
                 console.error('搜索失败', err);
                 searchResultDiv.innerHTML = `<div class="empty-tip">❌ 搜索失败: ${err.message}</div>`;
             }
-        }
-
-        // ========== 屏幕识别功能 ==========
-        function startScreenOCR() {
-            // 创建遮罩层
-            overlay = document.createElement('div');
-            overlay.className = 'screen-select-overlay';
-            document.body.appendChild(overlay);
-
-            let startX = 0, startY = 0, isDrawing = false;
-            let rectDiv = null;
-
-            const onMouseDown = (e) => {
-                isDrawing = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                if (rectDiv) rectDiv.remove();
-                rectDiv = document.createElement('div');
-                rectDiv.className = 'selection-rect';
-                rectDiv.style.left = startX + 'px';
-                rectDiv.style.top = startY + 'px';
-                rectDiv.style.width = '0px';
-                rectDiv.style.height = '0px';
-                document.body.appendChild(rectDiv);
-            };
-
-            const onMouseMove = (e) => {
-                if (!isDrawing) return;
-                const currentX = e.clientX;
-                const currentY = e.clientY;
-                const left = Math.min(startX, currentX);
-                const top = Math.min(startY, currentY);
-                const width = Math.abs(currentX - startX);
-                const height = Math.abs(currentY - startY);
-                rectDiv.style.left = left + 'px';
-                rectDiv.style.top = top + 'px';
-                rectDiv.style.width = width + 'px';
-                rectDiv.style.height = height + 'px';
-            };
-
-            const onMouseUp = async (e) => {
-                if (!isDrawing) return;
-                isDrawing = false;
-                const endX = e.clientX;
-                const endY = e.clientY;
-                const left = Math.min(startX, endX);
-                const top = Math.min(startY, endY);
-                const width = Math.abs(endX - startX);
-                const height = Math.abs(endY - startY);
-                if (width < 10 || height < 10) {
-                    // 区域太小，取消
-                    cleanup();
-                    showMsg('选择区域太小，请重新选择', true);
-                    return;
-                }
-                // 显示确认工具栏
-                toolbar = document.createElement('div');
-                toolbar.className = 'selection-toolbar';
-                toolbar.style.left = (left + width + 10) + 'px';
-                toolbar.style.top = (top + 10) + 'px';
-                toolbar.innerHTML = `
-                    <button id="confirmOcrBtn">确认识别</button>
-                    <button id="cancelOcrBtn">取消</button>
-                `;
-                document.body.appendChild(toolbar);
-                document.getElementById('confirmOcrBtn').onclick = async () => {
-                    cleanup();
-                    await captureAndOCR(left, top, width, height);
-                };
-                document.getElementById('cancelOcrBtn').onclick = () => {
-                    cleanup();
-                };
-            };
-
-            const cleanup = () => {
-                if (overlay) overlay.remove();
-                if (rectDiv) rectDiv.remove();
-                if (toolbar) toolbar.remove();
-                document.removeEventListener('mousedown', onMouseDown);
-                document.removeEventListener('mousemove', onMouseMove);
-                document.removeEventListener('mouseup', onMouseUp);
-            };
-
-            document.addEventListener('mousedown', onMouseDown);
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
-            // ESC 取消
-            const escHandler = (e) => {
-                if (e.key === 'Escape') {
-                    cleanup();
-                    document.removeEventListener('keydown', escHandler);
-                }
-            };
-            document.addEventListener('keydown', escHandler);
-        }
-
-        async function captureAndOCR(left, top, width, height) {
-            // 显示加载遮罩
-            const loadingMask = document.createElement('div');
-            loadingMask.className = 'loading-mask';
-            loadingMask.innerHTML = '<div>⏳ 正在识别文字，请稍候...</div>';
-            document.body.appendChild(loadingMask);
-
-            try {
-                // 使用 html2canvas 截取整个视口（或指定区域）
-                const canvas = await html2canvas(document.body, {
-                    scale: 2,
-                    logging: false,
-                    useCORS: true,
-                    windowWidth: document.documentElement.scrollWidth,
-                    windowHeight: document.documentElement.scrollHeight
-                });
-                // 裁剪选区
-                const croppedCanvas = document.createElement('canvas');
-                const ctx = croppedCanvas.getContext('2d');
-                croppedCanvas.width = width;
-                croppedCanvas.height = height;
-                ctx.drawImage(canvas, left, top, width, height, 0, 0, width, height);
-                // 转 Blob
-                const blob = await new Promise(resolve => croppedCanvas.toBlob(resolve, 'image/png'));
-                const formData = new FormData();
-                formData.append('image', blob, 'screenshot.png');
-                const resp = await fetch(API_BASE + '/ocr', {
-                    method: 'POST',
-                    body: formData
-                });
-                const result = await resp.json();
-                loadingMask.remove();
-                if (result.error) {
-                    showMsg('OCR识别失败: ' + result.error, true);
-                    return;
-                }
-                const recognizedText = result.text || '';
-                if (!recognizedText.trim()) {
-                    showMsg('未识别到文字，请重试', true);
-                    return;
-                }
-                // 填入搜索框并搜索
-                searchKeyword.value = recognizedText.trim();
-                // 自动切换到结果标签页（如果不在）
-                activateTab('result');
-                // 触发搜索
-                searchBtn.click();
-                showMsg('识别成功，已自动搜索', false);
-            } catch (err) {
-                loadingMask.remove();
-                showMsg('截图或识别失败: ' + err.message, true);
-                console.error(err);
-            }
-        }
-
-        // 绑定屏幕识别按钮
-        if (screenOcrBtn) {
-            screenOcrBtn.addEventListener('click', startScreenOCR);
         }
 
         function resetForm() {
@@ -542,7 +549,6 @@
             loadPreviewData('', 1);
         }
 
-        // 导出 Excel
         if (exportExcelBtn) {
             exportExcelBtn.addEventListener('click', async () => {
                 const keyword = tableSearchInput ? tableSearchInput.value.trim() : '';
@@ -579,7 +585,6 @@
             });
         }
 
-        // 事件绑定
         document.getElementById('browseBtn').addEventListener('click', () => {
             selectDirectory((dir) => { rootDirInput.value = dir; });
         });

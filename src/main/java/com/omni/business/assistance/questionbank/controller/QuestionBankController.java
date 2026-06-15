@@ -1,3 +1,4 @@
+// 文件路径: src/main/java/com/omni/business/assistance/questionbank/controller/QuestionBankController.java
 package com.omni.business.assistance.questionbank.controller;
 
 import com.omni.business.assistance.questionbank.service.QuestionBankService;
@@ -7,6 +8,7 @@ import com.omni.framework.util.JsonUtil;
 
 import java.io.InputStream;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -82,7 +84,6 @@ public class QuestionBankController {
         return JsonUtil.toJson(result);
     }
 
-    // ========== 新增：预览表格分页搜索接口 ==========
     @RequestMapping("/preview")
     @ResponseBody
     public String previewTable(@RequestParam(value = "keyword", required = false) String keyword,
@@ -106,14 +107,14 @@ public class QuestionBankController {
         Path path = Paths.get(decodedPath).normalize();
 
         if (path.toString().contains("..")) {
-            response.setStatus(403,"Access denied");
+            response.setStatus(403, "Access denied");
             response.write("Access denied");
             response.send();
             return;
         }
 
         if (!Files.exists(path) || Files.isDirectory(path)) {
-            response.setStatus(404,"");
+            response.setStatus(404, "Not Found");
             response.write("File not found: " + path);
             response.send();
             return;
@@ -125,8 +126,29 @@ public class QuestionBankController {
         try (InputStream in = Files.newInputStream(path)) {
             response.sendStatic(in, "text/plain", Files.size(path));
         } catch (Exception e) {
-            response.setStatus(500,"Internal error:");
+            response.setStatus(500, "Internal Server Error");
             response.write("Internal error: " + e.getMessage());
+            response.send();
+        }
+    }
+
+    // ========== 导出 Excel ==========
+    @RequestMapping("/exportExcel")
+    public void exportExcel(@RequestParam(value = "keyword", required = false) String keyword,
+                            HttpServletResponse response) throws Exception {
+        try {
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            String fileName = "题库数据_" + System.currentTimeMillis() + ".xlsx";
+            String encodedFileName = URLEncoder.encode(fileName, "UTF-8").replaceAll("\\+", "%20");
+            response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFileName);
+            service.exportToExcel(keyword, response.getOutputStream());
+            // 注意：service.exportToExcel 已经写入输出流，无需再调用 send()
+        } catch (Exception e) {
+            e.printStackTrace();
+            // 修正：setStatus 需要两个参数
+            response.setStatus(500, "Internal Server Error");
+            response.setContentType("text/plain;charset=UTF-8");
+            response.write("导出失败：" + e.getMessage());
             response.send();
         }
     }

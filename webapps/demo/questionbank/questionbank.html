@@ -25,6 +25,15 @@
         .pagination button { padding: 4px 12px; background: rgba(0,102,255,0.1); border: 1px solid rgba(0,102,255,0.3); border-radius: 20px; cursor: pointer; }
         .pagination button.active { background: var(--accent-primary); color: white; }
         .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .data-table td {
+            height: 40px;
+            line-height: 40px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 300px;
+            padding: 0 12px;
+        }
     </style>
 </head>
 <body>
@@ -85,10 +94,13 @@
                 <div class="qb-preview card">
                     <div class="result-header">
                         <h3>📊 数据预览（支持模糊搜索）</h3>
-                        <div class="search-row">
-                            <input type="text" id="tableSearchInput" placeholder="输入关键词模糊匹配任意列...">
-                            <button id="searchTableBtn" class="btn-primary">🔍 筛选</button>
-                            <button id="resetTableBtn" class="btn-secondary">重置</button>
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <button id="exportExcelBtn" class="btn-secondary" style="background: #10b981; color: white;">📎 导出 Excel</button>
+                            <div class="search-row" style="margin: 0;">
+                                <input type="text" id="tableSearchInput" placeholder="输入关键词模糊匹配任意列...">
+                                <button id="searchTableBtn" class="btn-primary">🔍 筛选</button>
+                                <button id="resetTableBtn" class="btn-secondary">重置</button>
+                            </div>
                         </div>
                     </div>
                     <div id="dataTableWrapper" style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
@@ -97,7 +109,6 @@
                             <tbody id="previewTableBody"></tbody>
                         </table>
                     </div>
-                    <!-- 分页容器 -->
                     <div id="previewPagination" class="pagination"></div>
                 </div>
             </div>

@@ -1,11 +1,12 @@
 // ======== webapps/demo/questionbank/questionbank.js ========
+// 仅保留后端接口调用，移除前端 localStorage 缓存
 (function() {
     try {
         document.body.style.height = '100%';
         document.documentElement.style.height = '100%';
 
         const API_BASE = window.apiUrl('/questionbank/api');
-        let currentMergedFile = null;      // 当前合并文件路径
+        let currentMergedFile = null;      // 当前合并文件路径（仅用于UI显示）
         let currentKeyword = '';            // 当前搜索关键词
         let currentPage = 1;                // 当前页码
         let pageSize = 20;                  // 每页条数
@@ -37,6 +38,7 @@
         const tabBtns = document.querySelectorAll('.tab-btn');
         const tabPanes = document.querySelectorAll('.tab-pane');
         const resultPanePlaceholder = document.getElementById('resultPanePlaceholder');
+        const exportExcelBtn = document.getElementById('exportExcelBtn');
 
         // ---------- Tab 切换 ----------
         function activateTab(tabId) {
@@ -46,9 +48,12 @@
             tabPanes.forEach(pane => {
                 pane.classList.toggle('active', pane.id === `tab${tabId.charAt(0).toUpperCase() + tabId.slice(1)}Pane`);
             });
-            // 切换到预览时重新加载数据（保留当前搜索关键词和页码）
             if (tabId === 'preview' && currentMergedFile) {
                 loadPreviewData(currentKeyword, currentPage);
+            } else if (tabId === 'preview' && !currentMergedFile) {
+                previewTableHead.innerHTML = '';
+                previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">暂无数据，请先执行合并</td></tr>';
+                if (previewPagination) previewPagination.innerHTML = '';
             }
         }
 
@@ -119,7 +124,7 @@
             }
         }
 
-        // ========== 加载预览数据（调用后端 /preview 接口） ==========
+        // ========== 加载预览数据（调用后端接口） ==========
         async function loadPreviewData(keyword, page) {
             if (!currentMergedFile) {
                 showMsg('请先执行合并操作', true);
@@ -147,14 +152,12 @@
             }
         }
 
-        // 渲染预览表格（支持单元格内容过长时省略，鼠标悬浮显示完整内容）
         function renderPreviewTable(columns, rows) {
             if (!columns || columns.length === 0) {
                 previewTableHead.innerHTML = '';
                 previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">无数据</td></tr>';
                 return;
             }
-            // 表头
             previewTableHead.innerHTML = '<tr>' + columns.map(col => `<th>${escapeHtml(col)}</th>`).join('') + '</tr>';
             if (!rows || rows.length === 0) {
                 previewTableBody.innerHTML = '<tr><td colspan="' + columns.length + '" style="text-align:center;">暂无匹配数据</td></tr>';
@@ -167,12 +170,10 @@
                     let val = row[col];
                     if (val === undefined || val === null) val = '';
                     let fullText = escapeHtml(String(val));
-                    // 显示时截断过长的文本，保留省略号效果（CSS 也会处理，但显式截断可提高可读性）
                     let displayText = fullText;
                     if (displayText.length > 100) {
                         displayText = displayText.substring(0, 97) + '...';
                     }
-                    // title 属性使用完整内容，确保鼠标悬浮显示全部
                     bodyHtml += `<td title="${fullText.replace(/"/g, '&quot;')}">${displayText}</td>`;
                 }
                 bodyHtml += '</tr>';
@@ -244,11 +245,9 @@
                     displayMergeResult(data);
                     mergeResultCard.style.display = 'block';
                     showMergeResultInTab();
-                    // 重置预览状态
                     currentKeyword = '';
                     currentPage = 1;
                     totalRecords = 0;
-                    // 自动切换到预览 Tab 并加载第一页数据
                     activateTab('preview');
                 } else {
                     setProgress(0, '合并失败');
@@ -274,7 +273,7 @@
             };
         }
 
-        // 按题目关键词搜索（基于后端 /search 接口）
+        // 按题目关键词搜索（后端 /search 接口）
         async function search() {
             const keyword = searchKeyword.value.trim();
             if (!keyword) {
@@ -299,7 +298,6 @@
             }
         }
 
-        // 重置所有表单
         function resetForm() {
             rootDirInput.value = 'D:/题库';
             keywordInput.value = '';
@@ -320,7 +318,6 @@
             activateTab('result');
         }
 
-        // 浏览根目录
         function selectDirectory(callback) {
             const input = document.createElement('input');
             input.type = 'file';
@@ -349,7 +346,6 @@
             input.click();
         }
 
-        // 搜索预览（触发后端过滤）
         function searchPreview() {
             const kw = tableSearchInput.value.trim();
             loadPreviewData(kw, 1);
@@ -358,6 +354,43 @@
         function resetPreview() {
             tableSearchInput.value = '';
             loadPreviewData('', 1);
+        }
+
+        // ========== 导出 Excel（直接调用后端接口） ==========
+        if (exportExcelBtn) {
+            exportExcelBtn.addEventListener('click', async () => {
+                const keyword = tableSearchInput ? tableSearchInput.value.trim() : '';
+                const url = API_BASE + '/exportExcel?keyword=' + encodeURIComponent(keyword);
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        const text = await response.text();
+                        throw new Error(text || `HTTP ${response.status}`);
+                    }
+                    const blob = await response.blob();
+                    let filename = '题库数据.xlsx';
+                    const disposition = response.headers.get('Content-Disposition');
+                    if (disposition && disposition.includes('filename=')) {
+                        const match = disposition.match(/filename\*=UTF-8''(.+)/);
+                        if (match && match[1]) {
+                            filename = decodeURIComponent(match[1]);
+                        } else {
+                            const simpleMatch = disposition.match(/filename="(.+)"/);
+                            if (simpleMatch && simpleMatch[1]) filename = simpleMatch[1];
+                        }
+                    }
+                    const downloadUrl = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(downloadUrl);
+                } catch (err) {
+                    alert('导出失败：' + err.message);
+                }
+            });
         }
 
         // 事件绑定
@@ -378,7 +411,6 @@
             return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
         }
 
-        // 初始化
         loadDefaultConfig();
         activateTab('result');
     } catch(e) {

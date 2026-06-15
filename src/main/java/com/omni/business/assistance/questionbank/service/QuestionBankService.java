@@ -1,11 +1,15 @@
 // 文件路径: src/main/java/com/omni/business/assistance/questionbank/service/QuestionBankService.java
 package com.omni.business.assistance.questionbank.service;
 
+import com.omni.common.cache.Cache;
+import com.omni.common.cache.CacheFactory;
 import com.omni.common.excel.ExcelUtil;
 import com.omni.framework.codestats.config.ConfigLoader;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Service;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -66,12 +70,22 @@ public class QuestionBankService {
         return sb.toString();
     }
 
+    // 内存缓存（仅用于当前实例，不依赖外部文件，主要用于在线程内快速访问）
+    // 但改用后端 Cache 后，以下字段仅作为 fallback 或临时存储
     private List<String> mergedLines = new ArrayList<>();
     private Path currentMergedFile = null;
 
-    // 预览缓存
-    private List<String> previewColumns = null;
-    private List<Map<String, String>> previewRows = null;
+    // 后端缓存实例（TTL 1天）
+    private final Cache<String, PreviewCacheData> previewCache = CacheFactory.createDefaultCache();
+
+    // 预览数据包装类，用于缓存
+    private static class PreviewCacheData implements Serializable {
+        private static final long serialVersionUID = 1L;
+        List<String> columns;
+        List<Map<String, String>> rows;
+        long cacheTime;      // 可选，用于调试
+        int totalRows;       // rows.size()
+    }
 
     public String getDefaultRootDir() { return DEFAULT_ROOT_DIR; }
     public String getDefaultOutputFile() { return DEFAULT_OUTPUT_FILE; }
@@ -125,13 +139,11 @@ public class QuestionBankService {
         return result;
     }
 
-    // ========== 公开的扫描接口（兼容原有 Controller 调用） ==========
     public List<String> scanExcelFiles(String rootDir, String keyword, String namePrefixes) throws IOException {
-        // 委托给统一扫描方法，返回所有支持的文件（包括 .txt）
         return scanMergeableFiles(rootDir, keyword, namePrefixes);
     }
 
-    // ========== 统一合并入口（禁止混用 Excel 和文本文件） ==========
+    // ========== 统一合并入口 ==========
     public Map<String, Object> mergeFiles(String rootDir, String keyword, String namePrefixes, String outputFile) throws IOException {
         List<String> files = scanMergeableFiles(rootDir, keyword, namePrefixes);
         if (files.isEmpty()) {
@@ -144,15 +156,20 @@ public class QuestionBankService {
             throw new RuntimeException("不能同时合并 Excel 和纯文本文件，请分开操作");
         }
 
+        Map<String, Object> mergeResult;
         if (hasExcel) {
-            return mergeExcelFiles(files, outputFile);
+            mergeResult = mergeExcelFiles(files, outputFile);
         } else {
-            return mergeTextFiles(files, outputFile);
+            mergeResult = mergeTextFiles(files, outputFile);
         }
+
+        // 合并成功后，主动构建预览数据并缓存
+        buildPreviewCacheFromMergedLines();
+        return mergeResult;
     }
 
     // ---------- Excel 合并 ----------
-    public Map<String, Object> mergeExcelFiles(List<String> excelFiles, String outputFile) throws IOException {
+    private Map<String, Object> mergeExcelFiles(List<String> excelFiles, String outputFile) throws IOException {
         Path outPath = Paths.get(outputFile).normalize();
         if (outPath.getParent() != null) Files.createDirectories(outPath.getParent());
 
@@ -177,8 +194,6 @@ public class QuestionBankService {
         Files.write(outPath, allLines, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         currentMergedFile = outPath;
         mergedLines = allLines;
-        previewColumns = null;
-        previewRows = null;
 
         Map<String, Object> result = new HashMap<>();
         result.put("mergedFile", outPath.toAbsolutePath().toString());
@@ -207,7 +222,7 @@ public class QuestionBankService {
 
         List<String> allLines = new ArrayList<>();
         allLines.add("// 文本文件合并 - 生成时间: " + new Date());
-        allLines.add("Content");   // 单列表头
+        allLines.add("Content");
 
         int totalRows = 0;
         for (String filePath : textFiles) {
@@ -221,8 +236,6 @@ public class QuestionBankService {
         Files.write(outPath, allLines, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         currentMergedFile = outPath;
         mergedLines = allLines;
-        previewColumns = null;
-        previewRows = null;
 
         Map<String, Object> result = new HashMap<>();
         result.put("mergedFile", outPath.toAbsolutePath().toString());
@@ -232,7 +245,7 @@ public class QuestionBankService {
         return result;
     }
 
-    // ========== 按关键词搜索 ==========
+    // ========== 按关键词搜索（基于 mergedLines） ==========
     public List<Map<String, String>> searchByKeyword(String keyword) {
         if (mergedLines == null || mergedLines.isEmpty()) {
             return Collections.emptyList();
@@ -259,15 +272,12 @@ public class QuestionBankService {
         return currentMergedFile == null ? null : currentMergedFile.toString();
     }
 
-    // ========== 预览数据加载 ==========
-    private synchronized void ensurePreviewDataLoaded() throws IOException {
-        if (previewColumns != null && previewRows != null) {
+    // ========== 构建预览缓存（从 mergedLines 解析） ==========
+    private void buildPreviewCacheFromMergedLines() throws IOException {
+        if (currentMergedFile == null || mergedLines == null || mergedLines.isEmpty()) {
             return;
         }
-        if (mergedLines == null || mergedLines.isEmpty()) {
-            throw new IOException("没有合并文件数据，请先执行合并操作");
-        }
-
+        // 解析 mergedLines 得到 columns 和 rows
         List<String> dataLines = new ArrayList<>();
         for (String line : mergedLines) {
             String trimmed = line.trim();
@@ -275,13 +285,10 @@ public class QuestionBankService {
             dataLines.add(line);
         }
         if (dataLines.isEmpty()) {
-            throw new IOException("合并文件中无有效数据");
+            return;
         }
-
         String headerLine = dataLines.get(0);
         List<String> columns = parseCsvLine(headerLine);
-        previewColumns = columns;
-
         List<Map<String, String>> rows = new ArrayList<>();
         for (int i = 1; i < dataLines.size(); i++) {
             List<String> values = parseCsvLine(dataLines.get(i));
@@ -293,9 +300,117 @@ public class QuestionBankService {
             }
             rows.add(row);
         }
-        previewRows = rows;
+
+        PreviewCacheData cacheData = new PreviewCacheData();
+        cacheData.columns = columns;
+        cacheData.rows = rows;
+        cacheData.totalRows = rows.size();
+        cacheData.cacheTime = System.currentTimeMillis();
+
+        // 缓存 key 使用合并文件的绝对路径
+        String cacheKey = currentMergedFile.toAbsolutePath().toString();
+        previewCache.put(cacheKey, cacheData, 24 * 60 * 60 * 1000L); // TTL 1天
+        log.info("预览数据已缓存，key={}, 行数={}", cacheKey, rows.size());
     }
 
+    // ========== 获取预览数据（优先从缓存获取，否则从 mergedLines 解析并缓存） ==========
+    public Map<String, Object> getPreviewData(String keyword, int page, int pageSize) throws IOException {
+        if (currentMergedFile == null) {
+            throw new IOException("没有合并文件数据，请先执行合并操作");
+        }
+        String cacheKey = currentMergedFile.toAbsolutePath().toString();
+        PreviewCacheData cached = previewCache.get(cacheKey);
+
+        // 缓存不存在或已过期，则从 mergedLines 重新构建
+        if (cached == null) {
+            log.info("缓存未命中，重新构建预览数据，key={}", cacheKey);
+            buildPreviewCacheFromMergedLines();
+            cached = previewCache.get(cacheKey);
+            if (cached == null) {
+                throw new IOException("预览数据构建失败");
+            }
+        }
+
+        List<Map<String, String>> filteredRows = cached.rows;
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            String lowerKw = keyword.trim().toLowerCase();
+            filteredRows = cached.rows.stream()
+                    .filter(row -> row.values().stream().anyMatch(val -> val != null && val.toLowerCase().contains(lowerKw)))
+                    .collect(Collectors.toList());
+        }
+
+        int total = filteredRows.size();
+        int start = (page - 1) * pageSize;
+        int end = Math.min(start + pageSize, total);
+        List<Map<String, String>> pageRows = (start < end) ? filteredRows.subList(start, end) : Collections.emptyList();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", total);
+        result.put("page", page);
+        result.put("pageSize", pageSize);
+        result.put("columns", cached.columns);
+        result.put("rows", pageRows);
+        return result;
+    }
+
+    // ========== 导出 Excel ==========
+    public void exportToExcel(String keyword, OutputStream outputStream) throws IOException {
+        // 复用 getPreviewData 的缓存逻辑，取全量数据（不分页）
+        if (currentMergedFile == null) {
+            throw new IOException("没有合并文件数据，请先执行合并操作");
+        }
+        String cacheKey = currentMergedFile.toAbsolutePath().toString();
+        PreviewCacheData cached = previewCache.get(cacheKey);
+        if (cached == null) {
+            buildPreviewCacheFromMergedLines();
+            cached = previewCache.get(cacheKey);
+            if (cached == null) {
+                throw new IOException("预览数据未就绪");
+            }
+        }
+
+        List<Map<String, String>> filteredRows = cached.rows;
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            String lowerKw = keyword.trim().toLowerCase();
+            filteredRows = cached.rows.stream()
+                    .filter(row -> row.values().stream().anyMatch(val -> val != null && val.toLowerCase().contains(lowerKw)))
+                    .collect(Collectors.toList());
+        }
+
+        try (Workbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("题库数据");
+
+            // 表头
+            Row headerRow = sheet.createRow(0);
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            for (int i = 0; i < cached.columns.size(); i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(cached.columns.get(i));
+                cell.setCellStyle(headerStyle);
+            }
+
+            int rowNum = 1;
+            for (Map<String, String> rowData : filteredRows) {
+                Row row = sheet.createRow(rowNum++);
+                for (int i = 0; i < cached.columns.size(); i++) {
+                    String colName = cached.columns.get(i);
+                    String value = rowData.getOrDefault(colName, "");
+                    row.createCell(i).setCellValue(value);
+                }
+            }
+
+            for (int i = 0; i < cached.columns.size(); i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            workbook.write(outputStream);
+        }
+    }
+
+    // ========== CSV 行解析工具方法 ==========
     private List<String> parseCsvLine(String line) {
         List<String> result = new ArrayList<>();
         boolean inQuote = false;
@@ -317,35 +432,6 @@ public class QuestionBankService {
             }
         }
         result.add(sb.toString());
-        return result;
-    }
-
-    // ========== 获取预览数据（分页 + 过滤） ==========
-    public Map<String, Object> getPreviewData(String keyword, int page, int pageSize) throws IOException {
-        ensurePreviewDataLoaded();
-        if (previewRows == null || previewColumns == null) {
-            throw new IOException("预览数据未就绪");
-        }
-
-        List<Map<String, String>> filteredRows = previewRows;
-        if (keyword != null && !keyword.trim().isEmpty()) {
-            String lowerKw = keyword.trim().toLowerCase();
-            filteredRows = previewRows.stream()
-                    .filter(row -> row.values().stream().anyMatch(val -> val != null && val.toLowerCase().contains(lowerKw)))
-                    .collect(Collectors.toList());
-        }
-
-        int total = filteredRows.size();
-        int start = (page - 1) * pageSize;
-        int end = Math.min(start + pageSize, total);
-        List<Map<String, String>> pageRows = (start < end) ? filteredRows.subList(start, end) : Collections.emptyList();
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("total", total);
-        result.put("page", page);
-        result.put("pageSize", pageSize);
-        result.put("columns", previewColumns);
-        result.put("rows", pageRows);
         return result;
     }
 }

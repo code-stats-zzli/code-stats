@@ -14,12 +14,17 @@
         <h2>📚 题库分析配置</h2>
         <div class="config-row">
             <label>📁 根目录：</label>
-            <input type="text" id="rootDir" placeholder="例如: D:/题库" value="D:/题库">
+            <input type="text" id="rootDir" placeholder="例如: D:/题库">
             <button id="browseBtn" class="btn-secondary">浏览</button>
         </div>
         <div class="config-row">
             <label>🔍 文件名模糊匹配：</label>
-            <input type="text" id="keyword" placeholder="例如: 真题, 模拟卷, *excel*">
+            <input type="text" id="keyword" placeholder="例如: 真题">
+        </div>
+        <div class="config-row">
+            <label>📌 文件名前缀匹配（逗号分隔）：</label>
+            <input type="text" id="namePrefixes" placeholder="例如: 真题,模拟卷,测试">
+            <span class="hint">多个前缀以英文逗号分隔，匹配文件名开头（优先级高于模糊匹配）</span>
         </div>
         <div class="config-row">
             <label>📄 合并输出文件：</label>
@@ -44,6 +49,24 @@
         <div id="mergeSummary"></div>
         <h4>📑 匹配的文件列表：</h4>
         <ul id="fileList" class="file-list"></ul>
+    </div>
+
+    <!-- 新增：表格预览区域 -->
+    <div class="qb-preview card" id="previewCard" style="display: none;">
+        <div class="result-header">
+            <h3>📊 数据预览（支持模糊搜索）</h3>
+            <div class="search-row" style="margin-bottom: 12px;">
+                <input type="text" id="tableSearchInput" placeholder="输入关键词模糊匹配任意列...">
+                <button id="searchTableBtn" class="btn-primary">🔍 筛选</button>
+                <button id="resetTableBtn" class="btn-secondary">重置</button>
+            </div>
+        </div>
+        <div id="dataTableWrapper" style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
+            <table class="data-table" id="previewTable">
+                <thead id="previewTableHead"></thead>
+                <tbody id="previewTableBody"></tbody>
+            </table>
+        </div>
     </div>
 
     <div class="qb-search card">

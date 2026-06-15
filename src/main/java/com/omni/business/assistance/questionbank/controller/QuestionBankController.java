@@ -24,16 +24,23 @@ public class QuestionBankController {
     @Autowired
     private QuestionBankService service;
 
-    /**
-     * 扫描匹配的 Excel 文件
-     * GET /questionbank/api/scan?rootDir=...&keyword=...
-     */
+    @RequestMapping("/config")
+    @ResponseBody
+    public String getDefaultConfig() {
+        Map<String, String> config = new HashMap<>();
+        config.put("rootDir", service.getDefaultRootDir());
+        config.put("outputFile", service.getDefaultOutputFile());
+        config.put("keyword", service.getDefaultKeyword());
+        config.put("namePrefixes", service.getDefaultNamePrefixes());
+        return JsonUtil.toJson(config);
+    }
+
     @RequestMapping("/scan")
     @ResponseBody
-    public String scanFiles(String rootDir, String keyword) {
+    public String scanFiles(String rootDir, String keyword, String namePrefixes) {
         Map<String, Object> result = new HashMap<>();
         try {
-            List<String> files = service.scanExcelFiles(rootDir, keyword);
+            List<String> files = service.scanExcelFiles(rootDir, keyword, namePrefixes);
             result.put("success", true);
             result.put("files", files);
         } catch (Exception e) {
@@ -43,20 +50,16 @@ public class QuestionBankController {
         return JsonUtil.toJson(result);
     }
 
-    /**
-     * 合并 Excel 文件
-     * POST /questionbank/api/merge
-     * Body: { "rootDir": "...", "keyword": "...", "outputFile": "..." }
-     */
     @RequestMapping("/merge")
     @ResponseBody
     public String mergeFiles(@RequestBody Map<String, String> req) {
         String rootDir = req.get("rootDir");
         String keyword = req.get("keyword");
+        String namePrefixes = req.get("namePrefixes");
         String outputFile = req.get("outputFile");
         Map<String, Object> result = new HashMap<>();
         try {
-            Map<String, Object> mergeResult = service.mergeExcelFiles(rootDir, keyword, outputFile);
+            Map<String, Object> mergeResult = service.mergeExcelFiles(rootDir, keyword, namePrefixes, outputFile);
             result.put("success", true);
             result.putAll(mergeResult);
         } catch (Exception e) {
@@ -66,10 +69,6 @@ public class QuestionBankController {
         return JsonUtil.toJson(result);
     }
 
-    /**
-     * 按题目关键词搜索
-     * GET /questionbank/api/search?keyword=xxx
-     */
     @RequestMapping("/search")
     @ResponseBody
     public String search(String keyword) {
@@ -89,7 +88,7 @@ public class QuestionBankController {
     public void downloadMergedFile(String file, HttpServletResponse response) throws Exception {
         Path path = Paths.get(file).normalize();
         if (!Files.exists(path) || Files.isDirectory(path)) {
-            response.setStatus(404,"文件不存在");
+            response.setStatus(404, "文件不存在");
             response.write("文件不存在");
             response.send();
             return;

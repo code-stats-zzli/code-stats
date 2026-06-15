@@ -11,15 +11,33 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class ConfigLoader {
     private static final Logger log = LoggerFactory.getLogger(ConfigLoader.class);
 
+    private static Map<String, Object> yamlRootMap;
+
+    static {
+        try {
+            yamlRootMap = new HashMap<>();
+            loadYamlFromClasspathOrFile("config.yaml", null);
+            log.info("成功加载配置文件 config.yaml");
+        } catch (Exception e) {
+            log.error("加载 config.yaml 失败，使用空配置", e);
+            yamlRootMap = new HashMap<>();
+        }
+    }
+
     public static Config load(String[] args) {
         Config.Builder builder = new Config.Builder();
-        loadYamlFromClasspathOrFile("config.yaml", builder);
+        if (yamlRootMap == null || yamlRootMap.isEmpty()) {
+            loadYamlFromClasspathOrFile("config.yaml", builder);
+        } else {
+            applyYamlToBuilder(builder);
+        }
         loadEnv(builder);
         parseArgs(args, builder);
         if (builder.getRootDir() == null) {
@@ -47,11 +65,31 @@ public class ConfigLoader {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private static void parseYaml(InputStream inputStream, Config.Builder builder) {
         Yaml yaml = new Yaml();
         Map<String, Object> map = yaml.load(inputStream);
+        if (map == null) return;
+
+        if (yamlRootMap == null) {
+            yamlRootMap = new HashMap<>(map);
+        } else {
+            yamlRootMap.putAll(map);
+        }
+
+        if (builder != null) {
+            applyYamlToBuilder(builder, map);
+        }
+    }
+
+    private static void applyYamlToBuilder(Config.Builder builder) {
+        applyYamlToBuilder(builder, yamlRootMap);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void applyYamlToBuilder(Config.Builder builder, Map<String, Object> map) {
         if (map.containsKey("rootDir")) {
-            String dir = map.get("rootDir").toString().replace("\\", "/");
+            String dir = normalizePath(map.get("rootDir").toString());
             builder.rootDir(Paths.get(dir));
         }
         if (map.containsKey("extensions")) builder.extensions((List<String>) map.get("extensions"));
@@ -61,16 +99,16 @@ public class ConfigLoader {
         if (map.containsKey("sortBy")) builder.sortBy((String) map.get("sortBy"));
         if (map.containsKey("outputFormat")) builder.outputFormat((String) map.get("outputFormat"));
         if (map.containsKey("outputFile")) {
-            String f = map.get("outputFile").toString().replace("\\", "/");
+            String f = normalizePath(map.get("outputFile").toString());
             builder.outputFile(Paths.get(f));
         }
         if (map.containsKey("useGitIgnore")) builder.useGitIgnore((Boolean) map.get("useGitIgnore"));
         if (map.containsKey("defaultInputPath")) {
-            String d = map.get("defaultInputPath").toString().replace("\\", "/");
+            String d = normalizePath(map.get("defaultInputPath").toString());
             builder.defaultInputPath(Paths.get(d));
         }
         if (map.containsKey("defaultOutputPath")) {
-            String d = map.get("defaultOutputPath").toString().replace("\\", "/");
+            String d = normalizePath(map.get("defaultOutputPath").toString());
             builder.defaultOutputPath(Paths.get(d));
         }
         if (map.containsKey("extraPaths")) {
@@ -78,9 +116,26 @@ public class ConfigLoader {
         }
     }
 
+    // 路径规范化：将反斜杠统一转为正斜杠，兼容 Windows 写法
+    private static String normalizePath(String path) {
+        if (path == null) return null;
+        return path.replace('\\', '/');
+    }
+
+    public static Map<String, Object> getModuleConfig(String module) {
+        if (yamlRootMap == null) {
+            return new HashMap<>();
+        }
+        Object moduleObj = yamlRootMap.get(module);
+        if (moduleObj instanceof Map) {
+            return (Map<String, Object>) moduleObj;
+        }
+        return new HashMap<>();
+    }
+
     private static void loadEnv(Config.Builder builder) {
         String root = System.getenv("CODE_STATS_ROOT_DIR");
-        if (root != null) builder.rootDir(Paths.get(root));
+        if (root != null) builder.rootDir(Paths.get(normalizePath(root)));
         String exts = System.getenv("CODE_STATS_EXTENSIONS");
         if (exts != null) builder.extensions(Arrays.asList(exts.split(",")));
         String threads = System.getenv("CODE_STATS_THREADS");
@@ -88,9 +143,9 @@ public class ConfigLoader {
         String sort = System.getenv("CODE_STATS_SORT_BY");
         if (sort != null) builder.sortBy(sort);
         String defaultInput = System.getenv("CODE_STATS_DEFAULT_INPUT");
-        if (defaultInput != null) builder.defaultInputPath(Paths.get(defaultInput));
+        if (defaultInput != null) builder.defaultInputPath(Paths.get(normalizePath(defaultInput)));
         String defaultOutput = System.getenv("CODE_STATS_DEFAULT_OUTPUT");
-        if (defaultOutput != null) builder.defaultOutputPath(Paths.get(defaultOutput));
+        if (defaultOutput != null) builder.defaultOutputPath(Paths.get(normalizePath(defaultOutput)));
         String extra = System.getenv("CODE_STATS_EXTRA_PATHS");
         if (extra != null) builder.extraPaths(Arrays.asList(extra.split(",")));
     }
@@ -98,18 +153,18 @@ public class ConfigLoader {
     private static void parseArgs(String[] args, Config.Builder builder) {
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
-                case "-d": builder.rootDir(Paths.get(args[++i].replace("\\", "/"))); break;
+                case "-d": builder.rootDir(Paths.get(normalizePath(args[++i]))); break;
                 case "-e": builder.extensions(Arrays.asList(args[++i].split(","))); break;
                 case "-x": builder.excludePaths(Arrays.asList(args[++i].split(","))); break;
                 case "-c": builder.excludeComments(Boolean.parseBoolean(args[++i])); break;
                 case "-t": builder.threadCount(Integer.parseInt(args[++i])); break;
                 case "-s": builder.sortBy(args[++i]); break;
                 case "-o": builder.outputFormat(args[++i]); break;
-                case "-f": builder.outputFile(Paths.get(args[++i].replace("\\", "/"))); break;
+                case "-f": builder.outputFile(Paths.get(normalizePath(args[++i]))); break;
                 case "--gui": break;
                 case "--no-gitignore": builder.useGitIgnore(false); break;
-                case "--default-input": builder.defaultInputPath(Paths.get(args[++i].replace("\\", "/"))); break;
-                case "--default-output": builder.defaultOutputPath(Paths.get(args[++i].replace("\\", "/"))); break;
+                case "--default-input": builder.defaultInputPath(Paths.get(normalizePath(args[++i]))); break;
+                case "--default-output": builder.defaultOutputPath(Paths.get(normalizePath(args[++i]))); break;
                 case "--extra-paths": builder.extraPaths(Arrays.asList(args[++i].split(","))); break;
                 default: log.warn("Unknown option: {}", args[i]); break;
             }

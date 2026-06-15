@@ -1,15 +1,13 @@
 package com.omni.business.assistance.questionbank.controller;
 
 import com.omni.business.assistance.questionbank.service.QuestionBankService;
-import com.omni.framework.spring.annotation.Autowired;
-import com.omni.framework.spring.annotation.Controller;
-import com.omni.framework.spring.annotation.RequestBody;
-import com.omni.framework.spring.annotation.RequestMapping;
-import com.omni.framework.spring.annotation.ResponseBody;
+import com.omni.framework.spring.annotation.*;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
 import com.omni.framework.util.JsonUtil;
 
 import java.io.InputStream;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -85,18 +83,37 @@ public class QuestionBankController {
     }
 
     @RequestMapping("/download")
-    public void downloadMergedFile(String file, HttpServletResponse response) throws Exception {
-        Path path = Paths.get(file).normalize();
-        if (!Files.exists(path) || Files.isDirectory(path)) {
-            response.setStatus(404, "文件不存在");
-            response.write("文件不存在");
+    public void downloadMergedFile(@RequestParam("file") String file, HttpServletResponse response) throws Exception {
+        // 解码并规范化路径
+        String decodedPath = URLDecoder.decode(file, StandardCharsets.UTF_8.name());
+        Path path = Paths.get(decodedPath).normalize();
+
+        // 安全校验：禁止路径遍历
+        if (path.toString().contains("..")) {
+            response.setStatus(403,"Access denied");
+            response.write("Access denied");
             response.send();
             return;
         }
+
+        // 检查文件是否存在且为普通文件
+        if (!Files.exists(path) || Files.isDirectory(path)) {
+            response.setStatus(404,"");
+            response.write("File not found: " + path);
+            response.send();
+            return;
+        }
+
+        // 设置响应头
         response.setHeader("Content-Disposition", "attachment; filename=\"" + path.getFileName().toString() + "\"");
         response.setContentType("text/plain");
+
         try (InputStream in = Files.newInputStream(path)) {
             response.sendStatic(in, "text/plain", Files.size(path));
+        } catch (Exception e) {
+            response.setStatus(500,"Internal error:");
+            response.write("Internal error: " + e.getMessage());
+            response.send();
         }
     }
 }

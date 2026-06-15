@@ -158,7 +158,7 @@ public class QuestionBankService {
         mergedLines = allLines;
 
         Map<String, Object> result = new HashMap<>();
-        result.put("mergedFile", outPath.toString());
+        result.put("mergedFile", outPath.toAbsolutePath().toString());  // 绝对路径
         result.put("totalLines", totalRows);
         result.put("fileCount", excelFiles.size());
         result.put("files", excelFiles);

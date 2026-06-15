@@ -5,8 +5,8 @@
 
         const API_BASE = window.apiUrl('/questionbank/api');
         let currentMergedFile = null;
-        let fullTableData = [];      // 存储解析后的全部数据行（对象数组）
-        let tableColumns = [];       // 列名数组
+        let fullTableData = [];
+        let tableColumns = [];
 
         // DOM 元素
         const rootDirInput = document.getElementById('rootDir');
@@ -18,8 +18,7 @@
         const progressArea = document.getElementById('mergeProgress');
         const progressFill = document.querySelector('#mergeProgress .progress-fill');
         const progressText = document.querySelector('#mergeProgress .progress-text');
-        const resultCard = document.querySelector('.qb-result');
-        const previewCard = document.getElementById('previewCard');
+        const mergeResultCard = document.getElementById('mergeResultCard');
         const mergeSummary = document.getElementById('mergeSummary');
         const fileListUl = document.getElementById('fileList');
         const downloadMergedBtn = document.getElementById('downloadMergedBtn');
@@ -31,6 +30,46 @@
         const resetTableBtn = document.getElementById('resetTableBtn');
         const previewTableHead = document.getElementById('previewTableHead');
         const previewTableBody = document.getElementById('previewTableBody');
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabPanes = document.querySelectorAll('.tab-pane');
+        const resultPanePlaceholder = document.getElementById('resultPanePlaceholder');
+
+        // Tab 切换
+        function activateTab(tabId) {
+            tabBtns.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tabId);
+            });
+            tabPanes.forEach(pane => {
+                pane.classList.toggle('active', pane.id === `tab${tabId.charAt(0).toUpperCase() + tabId.slice(1)}Pane`);
+            });
+            // 如果切换到预览且已有数据，刷新表格
+            if (tabId === 'preview' && fullTableData.length) {
+                renderTable(fullTableData);
+            }
+        }
+
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+        });
+
+        // 将合并结果内容移动到结果Tab中（在显示结果时调用）
+        function showMergeResultInTab() {
+            // 将 mergeResultCard 的内容移动到 resultPanePlaceholder 中
+            if (resultPanePlaceholder && mergeResultCard) {
+                resultPanePlaceholder.innerHTML = mergeResultCard.innerHTML;
+                // 重新绑定下载按钮
+                const newDownloadBtn = resultPanePlaceholder.querySelector('#downloadMergedBtn');
+                if (newDownloadBtn) {
+                    newDownloadBtn.onclick = () => {
+                        if (!currentMergedFile) return;
+                        const url = window.apiUrl(`/questionbank/api/download?file=${encodeURIComponent(currentMergedFile)}&t=${Date.now()}`);
+                        window.open(url, '_blank');
+                    };
+                }
+                // 隐藏原始卡片，避免重复
+                mergeResultCard.style.display = 'none';
+            }
+        }
 
         // 加载默认配置
         async function loadDefaultConfig() {
@@ -43,7 +82,6 @@
                     if (config.keyword !== undefined) keywordInput.value = config.keyword;
                     if (config.namePrefixes !== undefined) namePrefixesInput.value = config.namePrefixes;
                 } else {
-                    // 降级默认值
                     rootDirInput.value = 'D:/题库';
                     outputFileInput.value = './merged_' + Date.now() + '.txt';
                 }
@@ -80,7 +118,7 @@
             }
         }
 
-        // 解析 CSV 行（支持引号包裹）
+        // 解析 CSV 行
         function parseCSVLine(line) {
             const result = [];
             let inQuote = false;
@@ -100,24 +138,21 @@
             return result.map(cell => cell.trim());
         }
 
-        // 从合并文件内容解析表格数据
+        // 加载并解析合并文件为表格数据
         async function loadAndDisplayTable(mergedFilePath) {
             try {
                 const resp = await fetch(mergedFilePath);
                 if (!resp.ok) throw new Error('获取合并文件失败');
                 const content = await resp.text();
                 const lines = content.split(/\r?\n/);
-                // 过滤掉以 // 开头的注释行
                 const dataLines = lines.filter(line => !line.trim().startsWith('//') && line.trim().length > 0);
                 if (dataLines.length === 0) {
                     showMsg('合并文件中无有效数据行', true);
                     return;
                 }
-                // 第一行作为表头
                 const headerRow = dataLines[0];
                 const columns = parseCSVLine(headerRow);
                 tableColumns = columns;
-                // 解析数据行
                 const rows = [];
                 for (let i = 1; i < dataLines.length; i++) {
                     const values = parseCSVLine(dataLines[i]);
@@ -130,23 +165,16 @@
                 }
                 fullTableData = rows;
                 renderTable(rows);
-                previewCard.style.display = 'block';
             } catch (err) {
                 console.error('解析表格失败', err);
                 showMsg('预览表格失败: ' + err.message, true);
             }
         }
 
-        // 渲染表格
         function renderTable(dataRows) {
             if (!previewTableHead || !previewTableBody) return;
-            if (!tableColumns.length) {
-                previewCard.style.display = 'none';
-                return;
-            }
-            // 渲染表头
+            if (!tableColumns.length) return;
             previewTableHead.innerHTML = '<tr>' + tableColumns.map(col => `<th>${escapeHtml(col)}</th>`).join('') + '</tr>';
-            // 渲染数据行
             if (dataRows.length === 0) {
                 previewTableBody.innerHTML = '<tr><td colspan="' + tableColumns.length + '" style="text-align:center;">无匹配数据</td></tr>';
                 return;
@@ -156,7 +184,6 @@
             }).join('');
         }
 
-        // 模糊搜索表格（在所有列中匹配）
         function filterTable() {
             const keyword = tableSearchInput.value.trim().toLowerCase();
             if (!keyword) {
@@ -195,11 +222,15 @@
                     showMsg(`合并成功！共 ${data.fileCount} 个文件，${data.totalLines} 行`);
                     currentMergedFile = data.mergedFile;
                     displayMergeResult(data);
-                    resultCard.style.display = 'block';
-                    // 加载并展示表格
+                    // 显示合并结果卡片（但实际内容会被移动到Tab中）
+                    mergeResultCard.style.display = 'block';
+                    showMergeResultInTab();
+                    // 加载表格数据用于预览
                     if (currentMergedFile) {
                         await loadAndDisplayTable(currentMergedFile);
                     }
+                    // 切换到“合并结果”Tab
+                    activateTab('result');
                 } else {
                     setProgress(0, '合并失败');
                     showMsg(data.error, true);
@@ -217,8 +248,11 @@
                 <p><strong>总行数（含头部）：</strong> ${data.totalLines}</p>
             `;
             fileListUl.innerHTML = data.files.map(f => `<li>${escapeHtml(f)}</li>`).join('');
+            // 下载按钮事件
             downloadMergedBtn.onclick = () => {
-                window.open(window.apiUrl(`/questionbank/api/download?file=${encodeURIComponent(currentMergedFile)}`), '_blank');
+                if (!currentMergedFile) return;
+                const url = window.apiUrl(`/questionbank/api/download?file=${encodeURIComponent(currentMergedFile)}&t=${Date.now()}`);
+                window.open(url, '_blank');
             };
         }
 
@@ -251,14 +285,18 @@
             keywordInput.value = '';
             namePrefixesInput.value = '';
             outputFileInput.value = '';
-            resultCard.style.display = 'none';
-            previewCard.style.display = 'none';
+            mergeResultCard.style.display = 'none';
+            if (resultPanePlaceholder) resultPanePlaceholder.innerHTML = '请先执行合并操作';
             searchResultDiv.innerHTML = '';
             searchKeyword.value = '';
             currentMergedFile = null;
             fullTableData = [];
             tableColumns = [];
             tableSearchInput.value = '';
+            previewTableHead.innerHTML = '';
+            previewTableBody.innerHTML = '';
+            // 重置Tab显示
+            activateTab('result');
         }
 
         function selectDirectory(callback) {
@@ -318,6 +356,8 @@
 
         // 初始化加载默认配置
         loadDefaultConfig();
+        // 默认激活合并结果Tab（但内容为空）
+        activateTab('result');
     } catch(e) {
         console.error('QuestionBank page error:', e);
         document.body.innerHTML = '<div style="color:red;padding:20px;">页面加载失败，请查看控制台</div>';

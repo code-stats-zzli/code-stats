@@ -15,8 +15,10 @@ import net.sourceforge.tess4j.TesseractException;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,7 +26,6 @@ import java.util.Map;
 @RequestMapping("/questionbank/api")
 public class OcrController {
 
-    // 训练数据路径，根据实际部署修改
     private static String TESSDATA_PATH = ConfigLoader.getProperty("ocr.tessdata.path",
             System.getProperty("user.dir") + "/src/main/resources/tessdata");
 
@@ -50,28 +51,41 @@ public class OcrController {
             return JsonUtil.toJson(result);
         }
 
-        try (InputStream is = fileItem.getInputStream()) {
-            BufferedImage image = ImageIO.read(is);
+        Path tempFile = null;
+        try {
+            tempFile = Files.createTempFile("ocr_", ".png");
+            // 使用 transferTo 直接移动临时文件（比 copy 更高效且避免覆盖问题）
+            fileItem.transferTo(tempFile);
+            System.out.println("[OCR] 临时图片已保存: " + tempFile + ", 大小: " + Files.size(tempFile) + " 字节");
+
+            BufferedImage image = ImageIO.read(tempFile.toFile());
             if (image == null) {
-                result.put("error", "无法解析图片");
+                result.put("error", "无法解析图片，ImageIO.read 返回 null，文件可能已损坏或不是 PNG 格式");
                 return JsonUtil.toJson(result);
             }
+            System.out.println("[OCR] 图片读取成功，尺寸: " + image.getWidth() + "x" + image.getHeight());
 
             ITesseract tesseract = new Tesseract();
             tesseract.setDatapath(TESSDATA_PATH);
-            tesseract.setLanguage("chi_sim+eng");  // 中文简体 + 英文
-            // 可选的图像预处理：二值化、缩放等（可根据需要扩展）
+            tesseract.setLanguage("chi_sim+eng");
             String text = tesseract.doOCR(image);
-            // 清理多余空白和换行
             text = text.replaceAll("\\s+", " ").trim();
             result.put("text", text);
             return JsonUtil.toJson(result);
+
         } catch (TesseractException e) {
             result.put("error", "OCR识别失败: " + e.getMessage());
             return JsonUtil.toJson(result);
         } catch (Exception e) {
+            e.printStackTrace();
             result.put("error", "处理图片失败: " + e.getMessage());
             return JsonUtil.toJson(result);
+        } finally {
+            if (tempFile != null) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (Exception ignored) {}
+            }
         }
     }
 }

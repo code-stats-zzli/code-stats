@@ -18,6 +18,7 @@
         const outputFileInput = document.getElementById('outputFile');
         const mergeBtn = document.getElementById('mergeBtn');
         const resetBtn = document.getElementById('resetBtn');
+        const screenOcrBtn = document.getElementById('screenOcrBtn');
         const progressArea = document.getElementById('mergeProgress');
         const progressFill = document.querySelector('#mergeProgress .progress-fill');
         const progressText = document.querySelector('#mergeProgress .progress-text');
@@ -38,6 +39,10 @@
         const tabPanes = document.querySelectorAll('.tab-pane');
         const resultPanePlaceholder = document.getElementById('resultPanePlaceholder');
         const exportExcelBtn = document.getElementById('exportExcelBtn');
+
+        // ========== 屏幕识别相关变量 ==========
+        let isSelecting = false;
+        let startX, startY, currentRect = null, overlay = null, rectDiv = null, toolbar = null;
 
         // 高亮关键词函数
         function highlightKeyword(text, keyword) {
@@ -62,7 +67,7 @@
                 loadPreviewData(currentKeyword, currentPage);
             } else if (tabId === 'preview' && !currentMergedFile) {
                 previewTableHead.innerHTML = '';
-                previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">暂无数据，请先执行合并<\/td><\/tr>';
+                previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">暂无数据，请先执行合并</td></tr>';
                 if (previewPagination) previewPagination.innerHTML = '';
             }
         }
@@ -151,7 +156,7 @@
                 } else {
                     showMsg(data.error || '加载预览数据失败', true);
                     previewTableHead.innerHTML = '';
-                    previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载失败<\/td><\/tr>';
+                    previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载失败</td></tr>';
                     if (previewPagination) previewPagination.innerHTML = '';
                 }
             } catch (err) {
@@ -163,12 +168,12 @@
         function renderPreviewTable(columns, rows) {
             if (!columns || columns.length === 0) {
                 previewTableHead.innerHTML = '';
-                previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">无数据<\/td><\/tr>';
+                previewTableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">无数据</td></tr>';
                 return;
             }
-            previewTableHead.innerHTML = '<tr>' + columns.map(col => `<th>${escapeHtml(col)}</th>`).join('') + '<\/tr>';
+            previewTableHead.innerHTML = '<tr>' + columns.map(col => `<th>${escapeHtml(col)}</th>`).join('') + '</tr>';
             if (!rows || rows.length === 0) {
-                previewTableBody.innerHTML = '<td><td colspan="' + columns.length + '" style="text-align:center;">暂无匹配数据<\/td><\/tr>';
+                previewTableBody.innerHTML = '<tr><td colspan="' + columns.length + '" style="text-align:center;">暂无匹配数据</td></tr>';
                 return;
             }
             let bodyHtml = '';
@@ -182,9 +187,9 @@
                     if (displayText.length > 100) {
                         displayText = displayText.substring(0, 97) + '...';
                     }
-                    bodyHtml += `<td title="${fullText.replace(/"/g, '&quot;')}">${displayText}<\/td>`;
+                    bodyHtml += `<td title="${fullText.replace(/"/g, '&quot;')}">${displayText}</td>`;
                 }
-                bodyHtml += '<\/tr>';
+                bodyHtml += '</tr>';
             }
             previewTableBody.innerHTML = bodyHtml;
         }
@@ -198,19 +203,19 @@
             }
             let html = '';
             if (currentPageNum > 1) {
-                html += `<button data-page="${currentPageNum - 1}">上一页<\/button>`;
+                html += `<button data-page="${currentPageNum - 1}">上一页</button>`;
             }
             let startPage = Math.max(1, currentPageNum - 2);
             let endPage = Math.min(totalPages, currentPageNum + 2);
             for (let i = startPage; i <= endPage; i++) {
                 if (i === currentPageNum) {
-                    html += `<button class="active" disabled>${i}<\/button>`;
+                    html += `<button class="active" disabled>${i}</button>`;
                 } else {
-                    html += `<button data-page="${i}">${i}<\/button>`;
+                    html += `<button data-page="${i}">${i}</button>`;
                 }
             }
             if (currentPageNum < totalPages) {
-                html += `<button data-page="${currentPageNum + 1}">下一页<\/button>`;
+                html += `<button data-page="${currentPageNum + 1}">下一页</button>`;
             }
             previewPagination.innerHTML = html;
 
@@ -256,7 +261,6 @@
                     currentKeyword = '';
                     currentPage = 1;
                     totalRecords = 0;
-                    // 切换到预览标签页
                     activateTab('preview');
                 } else {
                     setProgress(0, '合并失败');
@@ -274,7 +278,7 @@
                 <p><strong>文件数：</strong> ${data.fileCount}</p>
                 <p><strong>总行数（含头部）：</strong> ${data.totalLines}</p>
             `;
-            fileListUl.innerHTML = data.files.map(f => `<li>${escapeHtml(f)}<\/li>`).join('');
+            fileListUl.innerHTML = data.files.map(f => `<li>${escapeHtml(f)}</li>`).join('');
             downloadMergedBtn.onclick = () => {
                 if (!currentMergedFile) return;
                 const url = window.apiUrl(`/questionbank/api/download?file=${encodeURIComponent(currentMergedFile)}&t=${Date.now()}`);
@@ -300,7 +304,6 @@
                 if (data.success && data.row) {
                     const columns = data.columns || [];
                     const row = data.row;
-                    // 构建卡片
                     let html = '<div class="search-result-card">';
                     html += '<div class="card-header">📌 匹配结果</div>';
                     html += '<div class="card-body">';
@@ -325,6 +328,160 @@
                 console.error('搜索失败', err);
                 searchResultDiv.innerHTML = `<div class="empty-tip">❌ 搜索失败: ${err.message}</div>`;
             }
+        }
+
+        // ========== 屏幕识别功能 ==========
+        function startScreenOCR() {
+            // 创建遮罩层
+            overlay = document.createElement('div');
+            overlay.className = 'screen-select-overlay';
+            document.body.appendChild(overlay);
+
+            let startX = 0, startY = 0, isDrawing = false;
+            let rectDiv = null;
+
+            const onMouseDown = (e) => {
+                isDrawing = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                if (rectDiv) rectDiv.remove();
+                rectDiv = document.createElement('div');
+                rectDiv.className = 'selection-rect';
+                rectDiv.style.left = startX + 'px';
+                rectDiv.style.top = startY + 'px';
+                rectDiv.style.width = '0px';
+                rectDiv.style.height = '0px';
+                document.body.appendChild(rectDiv);
+            };
+
+            const onMouseMove = (e) => {
+                if (!isDrawing) return;
+                const currentX = e.clientX;
+                const currentY = e.clientY;
+                const left = Math.min(startX, currentX);
+                const top = Math.min(startY, currentY);
+                const width = Math.abs(currentX - startX);
+                const height = Math.abs(currentY - startY);
+                rectDiv.style.left = left + 'px';
+                rectDiv.style.top = top + 'px';
+                rectDiv.style.width = width + 'px';
+                rectDiv.style.height = height + 'px';
+            };
+
+            const onMouseUp = async (e) => {
+                if (!isDrawing) return;
+                isDrawing = false;
+                const endX = e.clientX;
+                const endY = e.clientY;
+                const left = Math.min(startX, endX);
+                const top = Math.min(startY, endY);
+                const width = Math.abs(endX - startX);
+                const height = Math.abs(endY - startY);
+                if (width < 10 || height < 10) {
+                    // 区域太小，取消
+                    cleanup();
+                    showMsg('选择区域太小，请重新选择', true);
+                    return;
+                }
+                // 显示确认工具栏
+                toolbar = document.createElement('div');
+                toolbar.className = 'selection-toolbar';
+                toolbar.style.left = (left + width + 10) + 'px';
+                toolbar.style.top = (top + 10) + 'px';
+                toolbar.innerHTML = `
+                    <button id="confirmOcrBtn">确认识别</button>
+                    <button id="cancelOcrBtn">取消</button>
+                `;
+                document.body.appendChild(toolbar);
+                document.getElementById('confirmOcrBtn').onclick = async () => {
+                    cleanup();
+                    await captureAndOCR(left, top, width, height);
+                };
+                document.getElementById('cancelOcrBtn').onclick = () => {
+                    cleanup();
+                };
+            };
+
+            const cleanup = () => {
+                if (overlay) overlay.remove();
+                if (rectDiv) rectDiv.remove();
+                if (toolbar) toolbar.remove();
+                document.removeEventListener('mousedown', onMouseDown);
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+
+            document.addEventListener('mousedown', onMouseDown);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+            // ESC 取消
+            const escHandler = (e) => {
+                if (e.key === 'Escape') {
+                    cleanup();
+                    document.removeEventListener('keydown', escHandler);
+                }
+            };
+            document.addEventListener('keydown', escHandler);
+        }
+
+        async function captureAndOCR(left, top, width, height) {
+            // 显示加载遮罩
+            const loadingMask = document.createElement('div');
+            loadingMask.className = 'loading-mask';
+            loadingMask.innerHTML = '<div>⏳ 正在识别文字，请稍候...</div>';
+            document.body.appendChild(loadingMask);
+
+            try {
+                // 使用 html2canvas 截取整个视口（或指定区域）
+                const canvas = await html2canvas(document.body, {
+                    scale: 2,
+                    logging: false,
+                    useCORS: true,
+                    windowWidth: document.documentElement.scrollWidth,
+                    windowHeight: document.documentElement.scrollHeight
+                });
+                // 裁剪选区
+                const croppedCanvas = document.createElement('canvas');
+                const ctx = croppedCanvas.getContext('2d');
+                croppedCanvas.width = width;
+                croppedCanvas.height = height;
+                ctx.drawImage(canvas, left, top, width, height, 0, 0, width, height);
+                // 转 Blob
+                const blob = await new Promise(resolve => croppedCanvas.toBlob(resolve, 'image/png'));
+                const formData = new FormData();
+                formData.append('image', blob, 'screenshot.png');
+                const resp = await fetch(API_BASE + '/ocr', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await resp.json();
+                loadingMask.remove();
+                if (result.error) {
+                    showMsg('OCR识别失败: ' + result.error, true);
+                    return;
+                }
+                const recognizedText = result.text || '';
+                if (!recognizedText.trim()) {
+                    showMsg('未识别到文字，请重试', true);
+                    return;
+                }
+                // 填入搜索框并搜索
+                searchKeyword.value = recognizedText.trim();
+                // 自动切换到结果标签页（如果不在）
+                activateTab('result');
+                // 触发搜索
+                searchBtn.click();
+                showMsg('识别成功，已自动搜索', false);
+            } catch (err) {
+                loadingMask.remove();
+                showMsg('截图或识别失败: ' + err.message, true);
+                console.error(err);
+            }
+        }
+
+        // 绑定屏幕识别按钮
+        if (screenOcrBtn) {
+            screenOcrBtn.addEventListener('click', startScreenOCR);
         }
 
         function resetForm() {

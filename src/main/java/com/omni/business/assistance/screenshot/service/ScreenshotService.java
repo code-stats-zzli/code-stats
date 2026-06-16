@@ -4,8 +4,8 @@ import com.omni.business.assistance.questionbank.service.QuestionBankService;
 import com.omni.business.assistance.screenshot.model.ScreenshotResult;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
-import com.omni.framework.spring.context.SpringContextHolder;
 import com.omni.framework.spring.config.ConfigLoader;
+import com.omni.framework.spring.context.SpringContextHolder;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -17,13 +17,9 @@ import java.util.List;
 import java.util.Map;
 
 public class ScreenshotService {
-
     private static final Logger log = LoggerFactory.getLogger(ScreenshotService.class);
-
     private final OcrService ocrService;
     private QuestionBankService questionBankService;
-
-    // 截图保存目录（懒加载）
     private volatile File saveDirectory;
 
     public ScreenshotService() {
@@ -43,6 +39,7 @@ public class ScreenshotService {
      * 优先级：1. 系统属性/配置文件 screenshot.save.dir
      *         2. 题库根目录（questionbank.default.rootDir）下的 screenshots 子目录
      *         3. 用户主目录下的 screenshots
+     *         4. 当前工作目录下的 screenshots
      */
     public File getSaveDirectory() {
         if (saveDirectory != null && saveDirectory.exists()) {
@@ -95,7 +92,7 @@ public class ScreenshotService {
                 log.warn("无法创建回退目录", e);
             }
 
-            // 最终保险：当前工作目录
+            // 4. 最终保险：当前工作目录
             saveDirectory = new File("screenshots");
             if (!saveDirectory.exists()) {
                 saveDirectory.mkdirs();
@@ -105,20 +102,17 @@ public class ScreenshotService {
         }
     }
 
-    public ScreenshotResult captureAndSearch(Rectangle rect) {
-        log.info("开始截图，区域: x={}, y={}, width={}, height={}",
-                rect.x, rect.y, rect.width, rect.height);
+    /**
+     * 直接对给定的图像进行 OCR 识别和题库搜索（供浮窗/选区使用）
+     * @param image 要识别的图像
+     * @return 包含识别文本和匹配结果的 ScreenshotResult
+     */
+    public ScreenshotResult captureAndSearchWithImage(BufferedImage image) {
         ScreenshotResult result = new ScreenshotResult();
+        result.setImage(image);
         try {
-            Robot robot = new Robot();
-            BufferedImage image = robot.createScreenCapture(rect);
-            result.setImage(image);
-            log.debug("截图完成，图片尺寸: {}x{}", image.getWidth(), image.getHeight());
-
             String text = ocrService.recognize(image);
             result.setRecognizedText(text);
-            log.info("OCR 识别文本: '{}'", text);
-
             if (text != null && !text.trim().isEmpty()) {
                 Map<String, Object> preview = questionBankService.getPreviewData(text, 1, 10);
                 if (preview != null && preview.containsKey("rows")) {
@@ -134,14 +128,36 @@ public class ScreenshotService {
                     }
                 } else {
                     result.setFound(false);
-                    log.info("题库查询返回空数据或格式异常");
+                    log.info("题库查询返回空数据");
                 }
             } else {
-                log.info("OCR 识别结果为空，跳过查询");
+                result.setFound(false);
+                log.info("OCR 识别结果为空");
             }
         } catch (Exception e) {
-            log.error("截图或识别过程发生异常", e);
+            log.error("识别异常", e);
+            result.setFound(false);
+            result.setRecognizedText("识别异常: " + e.getMessage());
         }
         return result;
+    }
+
+    /**
+     * 截取指定屏幕区域并进行 OCR 识别和搜索（选区模式使用）
+     * @param rect 屏幕矩形区域
+     * @return 识别结果
+     */
+    public ScreenshotResult captureAndSearch(Rectangle rect) {
+        ScreenshotResult result = new ScreenshotResult();
+        try {
+            Robot robot = new Robot();
+            BufferedImage image = robot.createScreenCapture(rect);
+            return captureAndSearchWithImage(image);
+        } catch (Exception e) {
+            log.error("截图或识别异常", e);
+            result.setFound(false);
+            result.setRecognizedText("异常: " + e.getMessage());
+            return result;
+        }
     }
 }

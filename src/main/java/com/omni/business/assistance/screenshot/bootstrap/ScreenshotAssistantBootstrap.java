@@ -2,6 +2,7 @@ package com.omni.business.assistance.screenshot.bootstrap;
 
 import com.omni.business.assistance.screenshot.service.ScreenshotService;
 import com.omni.business.assistance.screenshot.ui.FloatingCaptureWindow;
+import com.omni.framework.spring.config.ConfigLoader;
 
 import javax.swing.*;
 import java.awt.*;
@@ -28,8 +29,9 @@ public class ScreenshotAssistantBootstrap {
 
             // 创建浮窗（默认在右下角）
             captureWindow = new FloatingCaptureWindow(screenshotService);
-            // 设置默认可见
-            captureWindow.setVisible(true);
+            // ★ 新增：读取配置，控制是否默认显示面板，默认 false（关闭）
+            boolean autoShow = Boolean.parseBoolean(ConfigLoader.getProperty("screenshot.assistant.autoShow", "false"));
+            captureWindow.setVisible(autoShow);
             // 定位到右下角
             Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
             int w = captureWindow.getWidth();

@@ -1,20 +1,22 @@
 package com.omni.business.assistance.screenshot.bootstrap;
 
-import com.omni.business.assistance.screenshot.model.ScreenshotResult;
 import com.omni.business.assistance.screenshot.service.ScreenshotService;
-import com.omni.business.assistance.screenshot.ui.ResultPopupWindow;
-import com.omni.business.assistance.screenshot.ui.ScreenSelectorWindow;
+import com.omni.business.assistance.screenshot.ui.FloatingCaptureWindow;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 
+/**
+ * 截图助手启动类（系统托盘 + 浮窗管理）
+ * 支持最小化到托盘，点击托盘图标显示/隐藏浮窗
+ */
 public class ScreenshotAssistantBootstrap {
 
+    private static FloatingCaptureWindow captureWindow;
     private static ScreenshotService screenshotService;
-    private static ScreenSelectorWindow selectorWindow;
-    private static ResultPopupWindow resultWindow;
+    private static TrayIcon trayIcon;
 
     public static void start() {
         SwingUtilities.invokeLater(() -> {
@@ -23,26 +25,45 @@ public class ScreenshotAssistantBootstrap {
             } catch (Exception ignored) {}
 
             screenshotService = new ScreenshotService();
-            resultWindow = new ResultPopupWindow();
+
+            // 创建浮窗（默认在右下角）
+            captureWindow = new FloatingCaptureWindow(screenshotService);
+            // 设置默认可见
+            captureWindow.setVisible(true);
+            // 定位到右下角
+            Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+            int w = captureWindow.getWidth();
+            int h = captureWindow.getHeight();
+            captureWindow.setLocation(screen.width - w - 30, screen.height - h - 50);
 
             // 系统托盘
             if (SystemTray.isSupported()) {
                 SystemTray tray = SystemTray.getSystemTray();
                 PopupMenu popup = new PopupMenu();
-                MenuItem captureItem = new MenuItem("📷 开始截图 (Ctrl+Shift+S)");
+                MenuItem showItem = new MenuItem("📷 显示截图助手");
+                MenuItem hideItem = new MenuItem("🙈 隐藏截图助手");
                 MenuItem exitItem = new MenuItem("退出");
 
-                captureItem.addActionListener(e -> startCapture());
+                showItem.addActionListener(e -> showWindow());
+                hideItem.addActionListener(e -> hideWindow());
                 exitItem.addActionListener(e -> System.exit(0));
 
-                popup.add(captureItem);
+                popup.add(showItem);
+                popup.add(hideItem);
                 popup.addSeparator();
                 popup.add(exitItem);
 
-                // 内存生成图标，无需外部文件
                 Image icon = createTrayIconImage();
-                TrayIcon trayIcon = new TrayIcon(icon, "截图助手", popup);
+                trayIcon = new TrayIcon(icon, "截图助手", popup);
                 trayIcon.setImageAutoSize(true);
+                trayIcon.addActionListener(e -> {
+                    // 双击托盘图标切换显示
+                    if (captureWindow.isVisible()) {
+                        hideWindow();
+                    } else {
+                        showWindow();
+                    }
+                });
                 try {
                     tray.add(trayIcon);
                 } catch (AWTException e) {
@@ -50,16 +71,44 @@ public class ScreenshotAssistantBootstrap {
                 }
             }
 
-            // 全局热键 Ctrl+Shift+S
+            // 全局热键 Ctrl+Shift+S 显示/隐藏浮窗（保留）
             KeyboardFocusManager.getCurrentKeyboardFocusManager()
                     .addKeyEventDispatcher(e -> {
                         if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_S) {
-                            startCapture();
+                            if (captureWindow.isVisible()) {
+                                hideWindow();
+                            } else {
+                                showWindow();
+                            }
                             return true;
                         }
                         return false;
                     });
+
+            // 应用退出时清理资源
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                if (trayIcon != null) {
+                    SystemTray.getSystemTray().remove(trayIcon);
+                }
+                if (captureWindow != null) {
+                    captureWindow.dispose();
+                }
+            }));
         });
+    }
+
+    private static void showWindow() {
+        if (captureWindow != null) {
+            captureWindow.setVisible(true);
+            captureWindow.toFront();
+            captureWindow.requestFocus();
+        }
+    }
+
+    private static void hideWindow() {
+        if (captureWindow != null) {
+            captureWindow.setVisible(false);
+        }
     }
 
     private static Image createTrayIconImage() {
@@ -74,25 +123,6 @@ public class ScreenshotAssistantBootstrap {
         g2d.fillOval(6, 6, 4, 4);
         g2d.dispose();
         return img;
-    }
-
-    private static void startCapture() {
-        if (selectorWindow != null) selectorWindow.dispose();
-        selectorWindow = new ScreenSelectorWindow(() -> {
-            Rectangle rect = selectorWindow.getSelectionRect();
-            if (rect != null && rect.width > 10 && rect.height > 10) {
-                new Thread(() -> {
-                    ScreenshotResult result = screenshotService.captureAndSearch(rect);
-                    SwingUtilities.invokeLater(() -> {
-                        resultWindow.showResult(result, new Point(rect.x + rect.width, rect.y));
-                        selectorWindow.dispose();
-                    });
-                }).start();
-            } else {
-                selectorWindow.dispose();
-            }
-        });
-        selectorWindow.showSelector();
     }
 
     // 独立入口测试

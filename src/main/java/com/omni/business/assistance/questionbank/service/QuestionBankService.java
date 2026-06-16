@@ -28,27 +28,36 @@ public class QuestionBankService {
     private static final String DEFAULT_NAME_PREFIXES;
 
     static {
-        String rootDir = "D:/题库";
-        String outputFile = System.getProperty("java.io.tmpdir") + "/merged_questionbank.txt";
-        String keyword = "";
-        String namePrefixes = "";
+        String rootDir = null;
+        String outputFile = null;
+        String keyword = null;
+        String namePrefixes = null;
 
         try {
             Map<String, Object> qbConfig = ConfigLoader.getModuleConfig("questionbank");
             Map<String, Object> defaults = (Map<String, Object>) qbConfig.getOrDefault("default", new HashMap<>());
 
-            rootDir = (String) defaults.getOrDefault("rootDir", rootDir);
-            outputFile = (String) defaults.getOrDefault("outputFile", outputFile);
-            keyword = (String) defaults.getOrDefault("keyword", keyword);
-            namePrefixes = (String) defaults.getOrDefault("namePrefixes", namePrefixes);
+            rootDir = (String) defaults.get("rootDir");
+            outputFile = (String) defaults.get("outputFile");
+            keyword = (String) defaults.get("keyword");
+            namePrefixes = (String) defaults.get("namePrefixes");
+
+            // 强制配置检查
+            if (rootDir == null || rootDir.trim().isEmpty()) {
+                throw new RuntimeException("questionbank.default.rootDir 未配置，请在 config.yaml 中设置");
+            }
+            if (outputFile == null || outputFile.trim().isEmpty()) {
+                throw new RuntimeException("questionbank.default.outputFile 未配置，请在 config.yaml 中设置");
+            }
         } catch (Exception e) {
-            log.error("加载题库配置失败，使用默认值", e);
+            log.error("加载题库配置失败", e);
+            throw new RuntimeException("题库配置加载失败，请检查 config.yaml 中的 questionbank 配置", e);
         }
 
         DEFAULT_ROOT_DIR = rootDir;
         DEFAULT_OUTPUT_FILE = replaceSystemProperties(outputFile);
-        DEFAULT_KEYWORD = keyword;
-        DEFAULT_NAME_PREFIXES = namePrefixes;
+        DEFAULT_KEYWORD = keyword != null ? keyword : "";
+        DEFAULT_NAME_PREFIXES = namePrefixes != null ? namePrefixes : "";
 
         log.info("题库服务初始化完成，默认根目录: {}, 输出文件: {}, 关键字: {}, 前缀: {}",
                 DEFAULT_ROOT_DIR, DEFAULT_OUTPUT_FILE, DEFAULT_KEYWORD, DEFAULT_NAME_PREFIXES);
@@ -72,8 +81,8 @@ public class QuestionBankService {
 
     private List<String> mergedLines = new ArrayList<>();
     private Path currentMergedFile = null;
+    private final Object mergeLock = new Object();
 
-    // 后端缓存实例（TTL 1天）
     private final Cache<String, PreviewCacheData> previewCache = CacheFactory.createDefaultCache();
 
     private static class PreviewCacheData implements Serializable {
@@ -89,7 +98,32 @@ public class QuestionBankService {
     public String getDefaultKeyword() { return DEFAULT_KEYWORD; }
     public String getDefaultNamePrefixes() { return DEFAULT_NAME_PREFIXES; }
 
-    // ========== 扫描文件 ==========
+    // ==================== 自动合并保障 ====================
+
+    private void ensureMergedFile() {
+        if (currentMergedFile != null && Files.exists(currentMergedFile)) {
+            return;
+        }
+        synchronized (mergeLock) {
+            if (currentMergedFile != null && Files.exists(currentMergedFile)) {
+                return;
+            }
+            log.info("未检测到合并文件，自动执行合并...");
+            try {
+                Map<String, Object> mergeResult = mergeFiles(
+                        DEFAULT_ROOT_DIR,
+                        DEFAULT_KEYWORD,
+                        DEFAULT_NAME_PREFIXES,
+                        DEFAULT_OUTPUT_FILE
+                );
+                log.info("自动合并完成，合并文件: {}", mergeResult.get("mergedFile"));
+            } catch (Exception e) {
+                throw new RuntimeException("自动合并失败，请检查配置或手动合并。原因: " + e.getMessage(), e);
+            }
+        }
+    }
+
+    // ==================== 扫描文件 ====================
     private List<String> scanMergeableFiles(String rootDir, String keyword, String namePrefixes) throws IOException {
         Path start = Paths.get(rootDir).normalize();
         if (!Files.exists(start)) throw new IllegalArgumentException("目录不存在: " + rootDir);
@@ -140,7 +174,7 @@ public class QuestionBankService {
         return scanMergeableFiles(rootDir, keyword, namePrefixes);
     }
 
-    // ========== 统一合并入口 ==========
+    // ==================== 统一合并入口 ====================
     public Map<String, Object> mergeFiles(String rootDir, String keyword, String namePrefixes, String outputFile) throws IOException {
         List<String> files = scanMergeableFiles(rootDir, keyword, namePrefixes);
         if (files.isEmpty()) {
@@ -160,7 +194,6 @@ public class QuestionBankService {
             mergeResult = mergeTextFiles(files, outputFile);
         }
 
-        // 合并成功后，构建预览缓存（供预览和搜索共用）
         buildPreviewCacheFromMergedLines();
         return mergeResult;
     }
@@ -240,8 +273,10 @@ public class QuestionBankService {
         return result;
     }
 
-    // ========== 按关键词搜索（只返回第一条匹配行） ==========
+    // ==================== 按关键词搜索（只返回第一条匹配行） ====================
     public Map<String, Object> searchByKeyword(String keyword) throws IOException {
+        ensureMergedFile();
+
         if (currentMergedFile == null) {
             log.warn("搜索时合并文件为空");
             Map<String, Object> empty = new HashMap<>();
@@ -272,11 +307,10 @@ public class QuestionBankService {
         Map<String, String> matchedRow = null;
 
         for (Map<String, String> row : cached.rows) {
-            // 检查所有列的值是否包含关键词
             boolean match = row.values().stream().anyMatch(val -> val != null && val.toLowerCase().contains(lowerKeyword));
             if (match) {
                 matchedRow = row;
-                break;  // 只取第一条匹配
+                break;
             }
         }
         log.info("搜索关键词 '{}'，找到匹配: {}", keyword, matchedRow != null);
@@ -291,7 +325,7 @@ public class QuestionBankService {
         return currentMergedFile == null ? null : currentMergedFile.toString();
     }
 
-    // ========== 构建预览缓存（供预览和搜索共用） ==========
+    // ==================== 构建预览缓存（供预览和搜索共用） ====================
     private void buildPreviewCacheFromMergedLines() throws IOException {
         if (currentMergedFile == null || mergedLines == null || mergedLines.isEmpty()) {
             return;
@@ -330,8 +364,10 @@ public class QuestionBankService {
         log.info("预览数据已缓存，key={}, 行数={}", cacheKey, rows.size());
     }
 
-    // ========== 获取预览数据（分页） ==========
+    // ==================== 获取预览数据（分页） ====================
     public Map<String, Object> getPreviewData(String keyword, int page, int pageSize) throws IOException {
+        ensureMergedFile();
+
         if (currentMergedFile == null) {
             throw new IOException("没有合并文件数据，请先执行合并操作");
         }
@@ -367,7 +403,7 @@ public class QuestionBankService {
         return result;
     }
 
-    // ========== 导出 Excel ==========
+    // ==================== 导出 Excel ====================
     public void exportToExcel(String keyword, OutputStream outputStream) throws IOException {
         if (currentMergedFile == null) {
             throw new IOException("没有合并文件数据，请先执行合并操作");
@@ -422,7 +458,7 @@ public class QuestionBankService {
         }
     }
 
-    // ========== CSV 行解析（支持引号、转义） ==========
+    // ==================== CSV 行解析（支持引号、转义） ====================
     private List<String> parseCsvLine(String line) {
         List<String> result = new ArrayList<>();
         boolean inQuote = false;

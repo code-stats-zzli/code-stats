@@ -20,9 +20,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 截图助手浮窗（重构版）
  * 支持两种模式：
- * 1. 拖拽浮窗 → 识别浮窗内“识别文字区域”的内容（即对已显示的文字区域进行OCR，用于二次验证或提取）
- * 2. 点击“选区识别” → 全屏拖拽矩形 → 识别选定区域（精确截图）
- * 支持窗口缩放（按比例），初始尺寸 600x550。
+ * 1. 拖拽浮窗 → 识别浮窗内“识别文字区域”的内容（内缩 5px 去除边框干扰）
+ * 2. 点击“选区识别” → 全屏拖拽矩形 → 识别选定区域
+ * 支持窗口缩放（按比例），每次识别前清空旧文本，修复背景不一致问题。
  */
 public class FloatingCaptureWindow extends JWindow {
     private static final Logger log = LoggerFactory.getLogger(FloatingCaptureWindow.class);
@@ -35,7 +35,7 @@ public class FloatingCaptureWindow extends JWindow {
     private JLabel statusLabel;
     private JPanel titleBar;
     private JButton closeButton, copyTextButton, saveScreenshotButton, selectAreaButton, recaptureButton;
-    private JButton zoomInButton, zoomOutButton;   // 新增缩放按钮
+    private JButton zoomInButton, zoomOutButton;
 
     // 状态控制
     private final AtomicBoolean isCapturing = new AtomicBoolean(false);
@@ -77,7 +77,7 @@ public class FloatingCaptureWindow extends JWindow {
             }
         });
 
-        log.info("截图助手浮窗初始化完成（浮窗模式截图目标为识别文字区域，支持缩放）");
+        log.info("截图助手浮窗初始化完成（支持缩放，每次识别前清空文本，截图内缩5px）");
     }
 
     // ==================== UI 初始化 ====================
@@ -119,7 +119,6 @@ public class FloatingCaptureWindow extends JWindow {
                 new Font("Inter", Font.PLAIN, 12), Color.WHITE
         ));
         recognizedTextArea.setOpaque(true);
-        // 初始首选大小根据当前尺寸计算
         updateTextAreaPreferredSize();
         mainPanel.add(recognizedTextArea, BorderLayout.NORTH);
 
@@ -156,7 +155,7 @@ public class FloatingCaptureWindow extends JWindow {
         scrollPane.getViewport().setOpaque(false);
         mainPanel.add(scrollPane, BorderLayout.CENTER);
 
-        // ---- 底部面板（状态 + 按钮） ----
+        // ---- 底部面板 ----
         JPanel bottomPanel = new JPanel(new BorderLayout(4, 4));
         bottomPanel.setOpaque(false);
         bottomPanel.setBorder(BorderFactory.createEmptyBorder(4, 8, 8, 8));
@@ -261,14 +260,9 @@ public class FloatingCaptureWindow extends JWindow {
 
     // ==================== 窗口缩放功能 ====================
 
-    /**
-     * 按比例缩放窗口，并调整内部组件大小
-     * @param factor 缩放因子（>1 放大，<1 缩小）
-     */
     private void zoomWindow(double factor) {
         int newWidth = (int) Math.round(currentWidth * factor);
         int newHeight = (int) Math.round(currentHeight * factor);
-        // 限制最小尺寸（避免太小无法操作）
         if (newWidth < 300 || newHeight < 280) {
             statusLabel.setText("已到最小尺寸");
             return;
@@ -284,13 +278,8 @@ public class FloatingCaptureWindow extends JWindow {
         revalidate();
         repaint();
         statusLabel.setText("缩放至 " + currentWidth + "×" + currentHeight);
-        // 缩放后自动重新识别（可选）
-        // doFloatingCapture();
     }
 
-    /**
-     * 根据当前窗口宽度更新识别文字区域的首选高度（按比例：高度约为宽度的 12%）
-     */
     private void updateTextAreaPreferredSize() {
         int textAreaHeight = Math.max(60, (int) (currentHeight * 0.12));
         recognizedTextArea.setPreferredSize(new Dimension(currentWidth - 20, textAreaHeight));
@@ -358,17 +347,29 @@ public class FloatingCaptureWindow extends JWindow {
         }
     }
 
+    /**
+     * 浮窗模式：截取浮窗内“识别文字区域”的内容（内缩 5px 去除边框干扰）
+     */
     private void doFloatingCapture() {
         if (isCapturing.compareAndSet(false, true)) {
+            // 清空旧文本，统一背景
+            SwingUtilities.invokeLater(() -> {
+                recognizedTextArea.setText("");
+                recognizedTextArea.setBackground(new Color(0, 0, 0, 80));
+                recognizedTextArea.repaint();
+            });
+
             statusLabel.setText("⏳ 截取文字区域...");
-            log.debug("浮窗模式：截取识别文字区域");
+            log.debug("浮窗模式：截取识别文字区域（内缩5px）");
 
             Point locationOnScreen = recognizedTextArea.getLocationOnScreen();
+            // 内缩 5 像素，去除边框和阴影
+            int inset = 5;
             Rectangle rect = new Rectangle(
-                    locationOnScreen.x,
-                    locationOnScreen.y,
-                    recognizedTextArea.getWidth(),
-                    recognizedTextArea.getHeight()
+                    locationOnScreen.x + inset,
+                    locationOnScreen.y + inset,
+                    recognizedTextArea.getWidth() - inset * 2,
+                    recognizedTextArea.getHeight() - inset * 2
             );
 
             BufferedImage capturedImage = null;
@@ -473,6 +474,12 @@ public class FloatingCaptureWindow extends JWindow {
 
     private void doAreaCapture(Rectangle rect) {
         if (isCapturing.compareAndSet(false, true)) {
+            SwingUtilities.invokeLater(() -> {
+                recognizedTextArea.setText("");
+                recognizedTextArea.setBackground(new Color(0, 0, 0, 80));
+                recognizedTextArea.repaint();
+            });
+
             statusLabel.setText("⏳ 截取选区...");
             log.debug("选区模式截图: {}", rect);
 
@@ -502,7 +509,6 @@ public class FloatingCaptureWindow extends JWindow {
             @Override
             protected ScreenshotResult doInBackground() throws Exception {
                 ScreenshotResult result = screenshotService.captureAndSearchWithImage(image);
-                // 输出识别文字用于调试（可能乱码，但可查看原始内容）
                 log.debug("识别原始文本: {}", result.getRecognizedText());
                 return result;
             }
@@ -601,7 +607,7 @@ public class FloatingCaptureWindow extends JWindow {
     // ==================== 其他 ====================
 
     private void setupResizeListener() {
-        // 不使用自动调整，由缩放按钮控制
+        // 由缩放按钮控制，不自动调整
     }
 
     @Override

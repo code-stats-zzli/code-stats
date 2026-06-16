@@ -1,5 +1,5 @@
 # 分析根目录
-rootDir: D:\work\git\CodeStats\src\main\java
+rootDir: D:\space\git\CodeStats\src\main\java
 # 包含的扩展名
 extensions:
   - java
@@ -25,17 +25,17 @@ useGitIgnore: true
 
 # 新增的默认路径
 
-defaultInputPath: 'D:\work\code\merge.txt'
-defaultOutputPath: 'D:\work\code\merge.txt'
+defaultInputPath: 'D:\space\code\merge.txt'
+defaultOutputPath: 'D:\space\code\merge.txt'
 
 # ★ 额外要追加的其他代码文件路径（逗号分隔的目录或文件）
 extraPaths:
-  - D:/work/git/CodeStats/webapps
+  - D:/space/git/CodeStats/webapps
 
 questionbank:
   default:
-    rootDir: 'D:\work\tiku'
-    outputFile: 'D:\work\tiku\merged_questionbank.txt'
+    rootDir: D:/work/tk
+    outputFile: D:/work/tk/merged_questionbank.txt
     keyword: ""
     namePrefixes: "1-,5-,8-,15-,18-,19-,21-,22-,23-,24-,59-1-"
 

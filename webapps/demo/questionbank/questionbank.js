@@ -50,7 +50,7 @@
         const ocrSearchBtn = document.getElementById('ocrSearchBtn');
 
         let currentRecognizedText = '';
-        let lastCroppedCanvas = null;  // ★ 新增：保存最近一次裁剪的 Canvas
+        let lastCroppedCanvas = null;
 
         function showOcrWidget() { ocrWidget.style.display = 'block'; }
         function hideOcrWidget() {
@@ -63,7 +63,7 @@
         if (ocrFab) ocrFab.addEventListener('click', showOcrWidget);
         if (closeOcrWidgetBtn) closeOcrWidgetBtn.addEventListener('click', hideOcrWidget);
 
-        // ========== 屏幕识别核心逻辑（拖拽后直接识别，无确认按钮） ==========
+        // ========== 屏幕识别核心逻辑 ==========
         let isSelecting = false;
         let startX, startY, overlay = null, rectDiv = null;
 
@@ -151,6 +151,7 @@
             document.addEventListener('keydown', escHandler);
         }
 
+        // ★★★ 核心修复：直接截取目标区域，避免二次裁剪导致偏移 ★★★
         async function captureAndOCR(left, top, width, height) {
             const loadingMask = document.createElement('div');
             loadingMask.className = 'loading-mask';
@@ -159,29 +160,28 @@
             ocrStatus.innerHTML = '⏳ 正在识别...';
 
             try {
+                const scrollX = window.scrollX || window.pageXOffset;
+                const scrollY = window.scrollY || window.pageYOffset;
+                const docX = left + scrollX;
+                const docY = top + scrollY;
+
+                // 直接截取目标区域（文档坐标），不进行二次裁剪
                 const canvas = await html2canvas(document.body, {
                     scale: 2,
                     logging: false,
                     useCORS: true,
+                    x: docX,
+                    y: docY,
+                    width: width,
+                    height: height,
                     windowWidth: document.documentElement.scrollWidth,
                     windowHeight: document.documentElement.scrollHeight
                 });
-                const croppedCanvas = document.createElement('canvas');
-                const ctx = croppedCanvas.getContext('2d');
-                croppedCanvas.width = width;
-                croppedCanvas.height = height;
 
-                const scrollX = window.scrollX || window.pageXOffset;
-                const scrollY = window.scrollY || window.pageYOffset;
-                const docLeft = left + scrollX;
-                const docTop = top + scrollY;
+                // canvas 即为目标区域，直接保存
+                lastCroppedCanvas = canvas;
 
-                ctx.drawImage(canvas, docLeft, docTop, width, height, 0, 0, width, height);
-
-                // ★ 保存裁剪后的 Canvas 供下载使用
-                lastCroppedCanvas = croppedCanvas;
-
-                const blob = await new Promise(resolve => croppedCanvas.toBlob(resolve, 'image/png'));
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
                 const formData = new FormData();
                 formData.append('image', blob, 'screenshot.png');
                 const resp = await fetch(API_BASE + '/ocr', { method: 'POST', body: formData });

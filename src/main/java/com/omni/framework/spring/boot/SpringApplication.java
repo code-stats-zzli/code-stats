@@ -1,5 +1,6 @@
 package com.omni.framework.spring.boot;
 
+import com.omni.business.assistance.screenshot.bootstrap.ScreenshotAssistantBootstrap;
 import com.omni.framework.jdbc.DataSourceUtils;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
@@ -41,7 +42,7 @@ public class SpringApplication {
         int port = Integer.parseInt(ConfigLoader.getProperty("server.port", "8080"));
         String contextPath = ConfigLoader.getProperty("context.path", "/omni");
         log.info("Access http://localhost:{}{}/demo/index.html", port, contextPath);
-
+        ScreenshotAssistantBootstrap.start();
         // 5. 优雅关闭：等待关闭信号（Ctrl+C 或 IDEA 停止按钮）
         final CountDownLatch latch = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -66,6 +67,8 @@ public class SpringApplication {
             log.warn("Main thread interrupted");
         }
         log.info("Application shutdown complete.");
+
+
     }
 
     private static void printBanner() {

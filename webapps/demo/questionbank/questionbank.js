@@ -50,6 +50,7 @@
         const ocrSearchBtn = document.getElementById('ocrSearchBtn');
 
         let currentRecognizedText = '';
+        let lastCroppedCanvas = null;  // ★ 新增：保存最近一次裁剪的 Canvas
 
         function showOcrWidget() { ocrWidget.style.display = 'block'; }
         function hideOcrWidget() {
@@ -57,6 +58,7 @@
             ocrStatus.innerHTML = '';
             ocrResultDiv.style.display = 'none';
             currentRecognizedText = '';
+            lastCroppedCanvas = null;
         }
         if (ocrFab) ocrFab.addEventListener('click', showOcrWidget);
         if (closeOcrWidgetBtn) closeOcrWidgetBtn.addEventListener('click', hideOcrWidget);
@@ -122,7 +124,6 @@
                 return;
             }
 
-            // 有效选区：清理遮罩和矩形框，直接识别
             cleanupSelection();
             await captureAndOCR(left, top, width, height);
         }
@@ -169,7 +170,17 @@
                 const ctx = croppedCanvas.getContext('2d');
                 croppedCanvas.width = width;
                 croppedCanvas.height = height;
-                ctx.drawImage(canvas, left, top, width, height, 0, 0, width, height);
+
+                const scrollX = window.scrollX || window.pageXOffset;
+                const scrollY = window.scrollY || window.pageYOffset;
+                const docLeft = left + scrollX;
+                const docTop = top + scrollY;
+
+                ctx.drawImage(canvas, docLeft, docTop, width, height, 0, 0, width, height);
+
+                // ★ 保存裁剪后的 Canvas 供下载使用
+                lastCroppedCanvas = croppedCanvas;
+
                 const blob = await new Promise(resolve => croppedCanvas.toBlob(resolve, 'image/png'));
                 const formData = new FormData();
                 formData.append('image', blob, 'screenshot.png');
@@ -189,6 +200,28 @@
                 ocrRecognizedTextSpan.innerText = recognizedText;
                 ocrResultDiv.style.display = 'block';
                 ocrStatus.innerHTML = '✅ 识别成功！可点击“立即搜索”或修改后搜索';
+
+                // ★ 添加“保存截图”按钮
+                let saveBtn = document.getElementById('saveScreenshotBtn');
+                if (!saveBtn) {
+                    saveBtn = document.createElement('button');
+                    saveBtn.id = 'saveScreenshotBtn';
+                    saveBtn.className = 'btn-secondary';
+                    saveBtn.textContent = '💾 保存截图';
+                    saveBtn.style.marginTop = '8px';
+                    ocrResultDiv.appendChild(saveBtn);
+                }
+                saveBtn.onclick = () => {
+                    if (!lastCroppedCanvas) return;
+                    lastCroppedCanvas.toBlob(function(blob) {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `screenshot_${Date.now()}.png`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                    }, 'image/png');
+                };
             } catch (err) {
                 loadingMask.remove();
                 ocrStatus.innerHTML = `<span style="color:#ef4444;">❌ 截图或识别失败: ${err.message}</span>`;

@@ -419,6 +419,7 @@ public class FloatingCaptureWindow extends JWindow {
             String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
             File outputFile = new File(saveDir, "screenshot_region_" + timestamp + ".png");
 
+            // ★ 关键：保存 lastResult.getImage()，即OCR截取的原始屏幕区域
             BufferedImage image = lastResult.getImage();
             ImageIO.write(image, "png", outputFile);
 

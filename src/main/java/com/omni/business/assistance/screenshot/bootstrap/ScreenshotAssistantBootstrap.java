@@ -1,7 +1,9 @@
 package com.omni.business.assistance.screenshot.bootstrap;
 
+import com.omni.business.assistance.directory.ui.DirectoryFloatingWindow;
 import com.omni.business.assistance.screenshot.service.ScreenshotService;
 import com.omni.business.assistance.screenshot.ui.FloatingCaptureWindow;
+import com.omni.business.assistance.screenshot.ui.MiniCaptureWindow;
 import com.omni.framework.spring.config.ConfigLoader;
 
 import javax.swing.*;
@@ -11,13 +13,15 @@ import java.awt.image.BufferedImage;
 
 /**
  * 截图助手启动类（系统托盘 + 浮窗管理）
- * 支持最小化到托盘，点击托盘图标显示/隐藏浮窗
+ * 默认启动极简模式浮窗
  */
 public class ScreenshotAssistantBootstrap {
 
-    private static FloatingCaptureWindow captureWindow;
     private static ScreenshotService screenshotService;
+    private static MiniCaptureWindow miniWindow;
+    private static FloatingCaptureWindow fullWindow;
     private static TrayIcon trayIcon;
+    private static boolean fullModeActive = false;
 
     public static void start() {
         SwingUtilities.invokeLater(() -> {
@@ -27,31 +31,31 @@ public class ScreenshotAssistantBootstrap {
 
             screenshotService = new ScreenshotService();
 
-            // 创建浮窗（默认在右下角）
-            captureWindow = new FloatingCaptureWindow(screenshotService);
-            // ★ 新增：读取配置，控制是否默认显示面板，默认 false（关闭）
-            boolean autoShow = Boolean.parseBoolean(ConfigLoader.getProperty("screenshot.assistant.autoShow", "false"));
-            captureWindow.setVisible(autoShow);
+            // 默认启动极简模式
+            miniWindow = new MiniCaptureWindow(screenshotService);
             // 定位到右下角
             Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
-            int w = captureWindow.getWidth();
-            int h = captureWindow.getHeight();
-            captureWindow.setLocation(screen.width - w - 30, screen.height - h - 50);
+            int w = miniWindow.getWidth();
+            int h = miniWindow.getHeight();
+            miniWindow.setLocation(screen.width - w - 30, screen.height - h - 50);
 
             // 系统托盘
             if (SystemTray.isSupported()) {
                 SystemTray tray = SystemTray.getSystemTray();
                 PopupMenu popup = new PopupMenu();
-                MenuItem showItem = new MenuItem("📷 显示截图助手");
-                MenuItem hideItem = new MenuItem("🙈 隐藏截图助手");
+                MenuItem showMiniItem = new MenuItem("📷 极简模式");
+                MenuItem showFullItem = new MenuItem("📷 完整模式");
+                MenuItem showDirItem = new MenuItem("📁 目录浏览");
                 MenuItem exitItem = new MenuItem("退出");
 
-                showItem.addActionListener(e -> showWindow());
-                hideItem.addActionListener(e -> hideWindow());
+                showMiniItem.addActionListener(e -> showMiniMode());
+                showFullItem.addActionListener(e -> showFullMode());
+                showDirItem.addActionListener(e -> new DirectoryFloatingWindow());
                 exitItem.addActionListener(e -> System.exit(0));
 
-                popup.add(showItem);
-                popup.add(hideItem);
+                popup.add(showMiniItem);
+                popup.add(showFullItem);
+                popup.add(showDirItem);
                 popup.addSeparator();
                 popup.add(exitItem);
 
@@ -59,11 +63,11 @@ public class ScreenshotAssistantBootstrap {
                 trayIcon = new TrayIcon(icon, "截图助手", popup);
                 trayIcon.setImageAutoSize(true);
                 trayIcon.addActionListener(e -> {
-                    // 双击托盘图标切换显示
-                    if (captureWindow.isVisible()) {
-                        hideWindow();
+                    // 双击托盘切换显示极简模式
+                    if (miniWindow != null && miniWindow.isVisible()) {
+                        miniWindow.setVisible(false);
                     } else {
-                        showWindow();
+                        showMiniMode();
                     }
                 });
                 try {
@@ -73,44 +77,51 @@ public class ScreenshotAssistantBootstrap {
                 }
             }
 
-            // 全局热键 Ctrl+Shift+S 显示/隐藏浮窗（保留）
+            // 全局热键 Ctrl+Shift+S 显示极简模式
             KeyboardFocusManager.getCurrentKeyboardFocusManager()
                     .addKeyEventDispatcher(e -> {
                         if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_S) {
-                            if (captureWindow.isVisible()) {
-                                hideWindow();
+                            if (miniWindow != null && miniWindow.isVisible()) {
+                                miniWindow.setVisible(false);
                             } else {
-                                showWindow();
+                                showMiniMode();
                             }
                             return true;
                         }
                         return false;
                     });
 
-            // 应用退出时清理资源
+            // 应用退出时清理
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 if (trayIcon != null) {
                     SystemTray.getSystemTray().remove(trayIcon);
                 }
-                if (captureWindow != null) {
-                    captureWindow.dispose();
-                }
+                if (miniWindow != null) miniWindow.dispose();
+                if (fullWindow != null) fullWindow.dispose();
             }));
         });
     }
 
-    private static void showWindow() {
-        if (captureWindow != null) {
-            captureWindow.setVisible(true);
-            captureWindow.toFront();
-            captureWindow.requestFocus();
+    private static void showMiniMode() {
+        if (fullWindow != null && fullWindow.isVisible()) {
+            fullWindow.setVisible(false);
         }
+        if (miniWindow == null) {
+            miniWindow = new MiniCaptureWindow(screenshotService);
+        }
+        miniWindow.setVisible(true);
+        fullModeActive = false;
     }
 
-    private static void hideWindow() {
-        if (captureWindow != null) {
-            captureWindow.setVisible(false);
+    private static void showFullMode() {
+        if (miniWindow != null && miniWindow.isVisible()) {
+            miniWindow.setVisible(false);
         }
+        if (fullWindow == null) {
+            fullWindow = new FloatingCaptureWindow(screenshotService);
+        }
+        fullWindow.setVisible(true);
+        fullModeActive = true;
     }
 
     private static Image createTrayIconImage() {
@@ -127,7 +138,6 @@ public class ScreenshotAssistantBootstrap {
         return img;
     }
 
-    // 独立入口测试
     public static void main(String[] args) {
         start();
     }

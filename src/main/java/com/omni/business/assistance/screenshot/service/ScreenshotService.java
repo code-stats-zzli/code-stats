@@ -36,10 +36,6 @@ public class ScreenshotService {
 
     /**
      * 获取截图保存目录（支持配置）
-     * 优先级：1. 系统属性/配置文件 screenshot.save.dir
-     *         2. 题库根目录（questionbank.default.rootDir）下的 screenshots 子目录
-     *         3. 用户主目录下的 screenshots
-     *         4. 当前工作目录下的 screenshots
      */
     public File getSaveDirectory() {
         if (saveDirectory != null && saveDirectory.exists()) {
@@ -50,7 +46,6 @@ public class ScreenshotService {
                 return saveDirectory;
             }
             String dirPath = null;
-            // 1. 从配置读取自定义目录
             try {
                 dirPath = ConfigLoader.getProperty("screenshot.save.dir");
                 if (dirPath != null && !dirPath.trim().isEmpty()) {
@@ -65,7 +60,6 @@ public class ScreenshotService {
                 log.warn("读取 screenshot.save.dir 失败", e);
             }
 
-            // 2. 尝试题库根目录
             try {
                 String qbRoot = questionBankService.getDefaultRootDir();
                 if (qbRoot != null && !qbRoot.trim().isEmpty()) {
@@ -80,7 +74,6 @@ public class ScreenshotService {
                 log.warn("无法使用题库目录创建截图子目录", e);
             }
 
-            // 3. 回退到用户主目录下的 screenshots
             try {
                 Path fallback = Paths.get(System.getProperty("user.home"), "screenshots");
                 if (Files.isDirectory(fallback) || Files.createDirectories(fallback) != null) {
@@ -92,7 +85,6 @@ public class ScreenshotService {
                 log.warn("无法创建回退目录", e);
             }
 
-            // 4. 最终保险：当前工作目录
             saveDirectory = new File("screenshots");
             if (!saveDirectory.exists()) {
                 saveDirectory.mkdirs();
@@ -103,9 +95,7 @@ public class ScreenshotService {
     }
 
     /**
-     * 直接对给定的图像进行 OCR 识别和题库搜索（供浮窗/选区使用）
-     * @param image 要识别的图像
-     * @return 包含识别文本和匹配结果的 ScreenshotResult
+     * OCR 识别并搜索
      */
     public ScreenshotResult captureAndSearchWithImage(BufferedImage image) {
         ScreenshotResult result = new ScreenshotResult();
@@ -143,9 +133,7 @@ public class ScreenshotService {
     }
 
     /**
-     * 截取指定屏幕区域并进行 OCR 识别和搜索（选区模式使用）
-     * @param rect 屏幕矩形区域
-     * @return 识别结果
+     * 截取屏幕区域并识别
      */
     public ScreenshotResult captureAndSearch(Rectangle rect) {
         ScreenshotResult result = new ScreenshotResult();
@@ -159,5 +147,20 @@ public class ScreenshotService {
             result.setRecognizedText("异常: " + e.getMessage());
             return result;
         }
+    }
+
+    /**
+     * 直接按关键词搜索题库（不依赖截图）
+     */
+    public List<Map<String, String>> searchByText(String keyword) {
+        try {
+            Map<String, Object> result = questionBankService.getPreviewData(keyword, 1, 200);
+            if (result != null && result.containsKey("rows")) {
+                return (List<Map<String, String>>) result.get("rows");
+            }
+        } catch (Exception e) {
+            log.error("搜索题库失败", e);
+        }
+        return null;
     }
 }

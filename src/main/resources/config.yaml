@@ -1,5 +1,5 @@
 # 分析根目录
-rootDir: D:\space\git\CodeStats\src\main\java
+rootDir: D:\work\git\CodeStats\src\main\java
 # 包含的扩展名
 extensions:
   - java
@@ -25,12 +25,12 @@ useGitIgnore: true
 
 # 新增的默认路径
 
-defaultInputPath: 'D:\space\code\merge.txt'
-defaultOutputPath: 'D:\space\code\merge.txt'
+defaultInputPath: 'D:\work\code\merge.txt'
+defaultOutputPath: 'D:\work\code\merge.txt'
 
 # ★ 额外要追加的其他代码文件路径（逗号分隔的目录或文件）
 extraPaths:
-  - D:/space/git/CodeStats/webapps
+  - D:/work/git/CodeStats/webapps
 
 questionbank:
   default:

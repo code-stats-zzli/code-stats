@@ -13,8 +13,8 @@ import java.util.Map;
 
 /**
  * 极简模式截图助手浮窗
- * - 默认显示：粘贴按钮 + 输入框 + 搜索按钮 + 正常模式切换 + 关闭按钮
- * - 搜索触发结果显示面板（面板自动出现，鼠标移出自动消失）
+ * - 主窗口尺寸：320x140
+ * - 结果浮窗尺寸：320x300，滚动条按需，默认显示顶部
  */
 public class MiniCaptureWindow extends JWindow {
     private static final Logger log = LoggerFactory.getLogger(MiniCaptureWindow.class);
@@ -23,9 +23,10 @@ public class MiniCaptureWindow extends JWindow {
     private JPanel mainPanel;
     private JPanel titleBar;
     private JTextField searchField;
-    private JButton pasteBtn, searchBtn, normalModeBtn, closeBtn;
-    private JPanel resultPanel;
+    private JButton pasteBtn, searchBtn, fullModeBtn, closeBtn;
+    private JWindow resultWindow;
     private JTextArea resultArea;
+    private JScrollPane resultScroll;
     private JLabel statusLabel;
 
     private boolean resultVisible = false;
@@ -34,65 +35,65 @@ public class MiniCaptureWindow extends JWindow {
         this.screenshotService = service;
         initUI();
         setupDrag();
-        setSize(400, 160);
+        initResultWindow();
+        setSize(320, 140);   // 主窗口尺寸 320x140
         setAlwaysOnTop(true);
         setBackground(new Color(0, 0, 0, 100));
         setLocationRelativeTo(null);
-        setVisible(true);
-        log.info("极简模式截图助手启动");
+        setVisible(false);
+        log.info("极简模式截图助手初始化");
     }
 
     private void initUI() {
-        mainPanel = new JPanel(new BorderLayout(4, 4));
+        mainPanel = new JPanel(new BorderLayout(2, 2));
         mainPanel.setOpaque(false);
         mainPanel.setBorder(BorderFactory.createCompoundBorder(
                 new LineBorder(new Color(0, 102, 255, 200), 2, true),
-                BorderFactory.createEmptyBorder(4, 4, 4, 4)
+                BorderFactory.createEmptyBorder(2, 2, 2, 2)
         ));
 
         // ---- 标题栏（可拖拽） ----
         titleBar = new JPanel(new BorderLayout());
         titleBar.setOpaque(false);
-        titleBar.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
-        JLabel dragLabel = new JLabel("⠿ 极简助手");
-        dragLabel.setFont(new Font("Inter", Font.PLAIN, 14));
+        titleBar.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+        JLabel dragLabel = new JLabel("⠿ 极简");
+        dragLabel.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         dragLabel.setForeground(Color.WHITE);
         dragLabel.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
         titleBar.add(dragLabel, BorderLayout.WEST);
 
-        // 正常模式按钮和关闭按钮
-        JPanel rightBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        JPanel rightBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));
         rightBtns.setOpaque(false);
 
-        normalModeBtn = new JButton("完整模式");
-        normalModeBtn.setFont(new Font("Inter", Font.PLAIN, 11));
-        normalModeBtn.setForeground(Color.WHITE);
-        normalModeBtn.setBackground(new Color(60, 60, 60, 200));
-        normalModeBtn.setBorderPainted(false);
-        normalModeBtn.setFocusPainted(false);
-        normalModeBtn.setOpaque(true);
-        normalModeBtn.addActionListener(e -> switchToFullMode());
-        rightBtns.add(normalModeBtn);
+        fullModeBtn = new JButton("完整");
+        fullModeBtn.setFont(new Font("微软雅黑", Font.PLAIN, 10));
+        fullModeBtn.setForeground(Color.WHITE);
+        fullModeBtn.setBackground(new Color(60, 60, 60, 200));
+        fullModeBtn.setBorderPainted(false);
+        fullModeBtn.setFocusPainted(false);
+        fullModeBtn.setOpaque(true);
+        fullModeBtn.addActionListener(e -> switchToFullMode());
+        rightBtns.add(fullModeBtn);
 
         closeBtn = new JButton("✖");
-        closeBtn.setFont(new Font("Inter", Font.PLAIN, 14));
+        closeBtn.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         closeBtn.setForeground(Color.WHITE);
         closeBtn.setBackground(new Color(60, 60, 60, 200));
         closeBtn.setBorderPainted(false);
         closeBtn.setFocusPainted(false);
         closeBtn.setOpaque(true);
-        closeBtn.addActionListener(e -> dispose());
+        closeBtn.addActionListener(e -> setVisible(false));
         rightBtns.add(closeBtn);
 
         titleBar.add(rightBtns, BorderLayout.EAST);
         mainPanel.add(titleBar, BorderLayout.NORTH);
 
         // ---- 搜索输入行 ----
-        JPanel inputRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 2));
+        JPanel inputRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 2));
         inputRow.setOpaque(false);
 
-        pasteBtn = new JButton("📋 粘贴");
-        pasteBtn.setFont(new Font("Inter", Font.PLAIN, 12));
+        pasteBtn = new JButton("粘贴");
+        pasteBtn.setFont(new Font("微软雅黑", Font.PLAIN, 11));
         pasteBtn.setForeground(Color.WHITE);
         pasteBtn.setBackground(new Color(0, 102, 255, 200));
         pasteBtn.setBorderPainted(false);
@@ -101,15 +102,15 @@ public class MiniCaptureWindow extends JWindow {
         pasteBtn.addActionListener(e -> pasteFromClipboard());
         inputRow.add(pasteBtn);
 
-        searchField = new JTextField(16);
-        searchField.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        searchField = new JTextField(14);
+        searchField.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         searchField.setBackground(new Color(255, 255, 255, 220));
         searchField.setForeground(Color.BLACK);
         searchField.addActionListener(e -> doSearch());
         inputRow.add(searchField);
 
-        searchBtn = new JButton("🔍 搜索");
-        searchBtn.setFont(new Font("Inter", Font.PLAIN, 12));
+        searchBtn = new JButton("搜索");
+        searchBtn.setFont(new Font("微软雅黑", Font.PLAIN, 11));
         searchBtn.setForeground(Color.WHITE);
         searchBtn.setBackground(new Color(0, 102, 255, 200));
         searchBtn.setBorderPainted(false);
@@ -122,53 +123,58 @@ public class MiniCaptureWindow extends JWindow {
 
         // ---- 状态标签 ----
         statusLabel = new JLabel("就绪");
-        statusLabel.setFont(new Font("Inter", Font.PLAIN, 11));
+        statusLabel.setFont(new Font("微软雅黑", Font.PLAIN, 10));
         statusLabel.setForeground(Color.WHITE);
         statusLabel.setBackground(new Color(0, 0, 0, 150));
         statusLabel.setOpaque(true);
-        statusLabel.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
+        statusLabel.setBorder(BorderFactory.createEmptyBorder(1, 6, 1, 6));
         mainPanel.add(statusLabel, BorderLayout.SOUTH);
 
-        // ---- 结果面板（独立于主面板，浮在下方） ----
-        resultPanel = new JPanel(new BorderLayout());
-        resultPanel.setBackground(new Color(0, 0, 0, 200));
-        resultPanel.setBorder(new LineBorder(new Color(0, 102, 255, 150), 2));
-        resultPanel.setVisible(false);
+        setContentPane(mainPanel);
+    }
+
+    private void initResultWindow() {
+        resultWindow = new JWindow();
+        resultWindow.setAlwaysOnTop(true);
+        resultWindow.setBackground(new Color(0, 0, 0, 200));
+
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+        panel.setBorder(new LineBorder(new Color(0, 102, 255, 150), 2));
 
         resultArea = new JTextArea();
         resultArea.setEditable(false);
         resultArea.setLineWrap(true);
         resultArea.setWrapStyleWord(true);
-        resultArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        resultArea.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         resultArea.setBackground(new Color(0, 0, 0, 150));
         resultArea.setForeground(Color.WHITE);
-        resultArea.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        JScrollPane scroll = new JScrollPane(resultArea);
-        scroll.setBorder(null);
-        scroll.setOpaque(false);
-        scroll.getViewport().setOpaque(false);
-        resultPanel.add(scroll, BorderLayout.CENTER);
+        resultArea.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        // 鼠标移出结果面板时自动隐藏（延迟）
-        resultPanel.addMouseListener(new MouseAdapter() {
+        resultScroll = new JScrollPane(resultArea);
+        resultScroll.setBorder(null);
+        resultScroll.setOpaque(false);
+        resultScroll.getViewport().setOpaque(false);
+        resultScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        panel.add(resultScroll, BorderLayout.CENTER);
+
+        // 鼠标移出自动隐藏
+        panel.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseExited(MouseEvent e) {
+                hideResultDelayed();
+            }
+        });
+        resultWindow.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseExited(MouseEvent e) {
                 hideResultDelayed();
             }
         });
 
-        setContentPane(mainPanel);
-
-        // 添加全局鼠标监听，当鼠标移出整个窗口时，如果结果面板显示则延迟隐藏
-        addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseExited(MouseEvent e) {
-                Point p = e.getPoint();
-                if (p.x < 0 || p.y < 0 || p.x > getWidth() || p.y > getHeight()) {
-                    hideResultDelayed();
-                }
-            }
-        });
+        resultWindow.setContentPane(panel);
+        resultWindow.setSize(320, 300);   // 结果窗口尺寸 320x300
+        resultWindow.setVisible(false);
     }
 
     private void pasteFromClipboard() {
@@ -209,69 +215,62 @@ public class MiniCaptureWindow extends JWindow {
                         resultArea.setText("😞 未找到匹配的题目");
                         statusLabel.setText("😞 无匹配");
                     } else {
+                        Map<String, String> firstRow = rows.get(0);
                         StringBuilder sb = new StringBuilder();
-                        if (!rows.isEmpty()) {
-                            Map<String, String> first = rows.get(0);
-                            for (String col : first.keySet()) {
-                                sb.append("【").append(col).append("】");
-                            }
-                            sb.append("\n");
-                            sb.append("=".repeat(60)).append("\n");
-                        }
-                        for (Map<String, String> row : rows) {
-                            for (Map.Entry<String, String> entry : row.entrySet()) {
-                                sb.append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
-                            }
-                            sb.append("---\n");
+                        sb.append("📌 共匹配 ").append(rows.size()).append(" 条，显示第 1 条：\n\n");
+                        for (Map.Entry<String, String> entry : firstRow.entrySet()) {
+                            sb.append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
                         }
                         resultArea.setText(sb.toString());
+                        // 滚动到顶部
+                        resultArea.setCaretPosition(0);
                         statusLabel.setText("✅ 找到 " + rows.size() + " 条匹配");
                     }
-                    showResultPanel();
+                    showResultWindow();
                 } catch (Exception e) {
                     log.error("搜索失败", e);
                     resultArea.setText("❌ 搜索失败: " + e.getMessage());
                     statusLabel.setText("❌ 搜索失败");
-                    showResultPanel();
+                    showResultWindow();
                 }
             }
         }.execute();
     }
 
-    private void showResultPanel() {
-        // 将结果面板显示在主窗口下方
+    private void showResultWindow() {
+        if (resultWindow == null) return;
         Point location = getLocation();
-        resultPanel.setSize(getWidth(), 200);
-        resultPanel.setLocation(location.x, location.y + getHeight() + 2);
-        // 确保不超出屏幕
+        int x = location.x;
+        int y = location.y + getHeight() + 2;
         Rectangle screen = GraphicsEnvironment.getLocalGraphicsEnvironment()
                 .getDefaultScreenDevice().getDefaultConfiguration().getBounds();
-        if (resultPanel.getY() + resultPanel.getHeight() > screen.height) {
-            resultPanel.setLocation(location.x, location.y - resultPanel.getHeight() - 2);
+        if (y + resultWindow.getHeight() > screen.height) {
+            y = location.y - resultWindow.getHeight() - 2;
         }
-        resultPanel.setVisible(true);
+        resultWindow.setLocation(x, y);
+        resultWindow.setVisible(true);
         resultVisible = true;
-        // 10秒后自动隐藏（如果鼠标未移入）
+
         Timer timer = new Timer(10000, e -> {
-            // ★ 使用 getMousePosition() 判断鼠标是否在结果面板上
-            if (resultVisible && resultPanel.getMousePosition() == null) {
-                hideResultPanel();
+            if (resultVisible && resultWindow.getMousePosition() == null) {
+                hideResultWindow();
             }
         });
         timer.setRepeats(false);
         timer.start();
     }
 
-    private void hideResultPanel() {
-        resultPanel.setVisible(false);
+    private void hideResultWindow() {
+        if (resultWindow != null) {
+            resultWindow.setVisible(false);
+        }
         resultVisible = false;
     }
 
     private void hideResultDelayed() {
         Timer timer = new Timer(300, e -> {
-            // ★ 使用 getMousePosition() 判断鼠标是否在结果面板上
-            if (resultVisible && resultPanel.getMousePosition() == null) {
-                hideResultPanel();
+            if (resultVisible && resultWindow != null && resultWindow.getMousePosition() == null) {
+                hideResultWindow();
             }
         });
         timer.setRepeats(false);
@@ -279,12 +278,19 @@ public class MiniCaptureWindow extends JWindow {
     }
 
     private void switchToFullMode() {
-        // 关闭极简模式，打开完整模式
-        dispose();
+        setVisible(false);
+        hideResultWindow();
         SwingUtilities.invokeLater(() -> {
-            // 完整模式浮窗
-            FloatingCaptureWindow fullWindow = new FloatingCaptureWindow(screenshotService);
-            fullWindow.setVisible(true);
+            try {
+                Class<?> bootstrap = Class.forName("com.omni.business.assistance.screenshot.bootstrap.ScreenshotAssistantBootstrap");
+                java.lang.reflect.Method method = bootstrap.getDeclaredMethod("showFullMode");
+                method.setAccessible(true);
+                method.invoke(null);
+            } catch (Exception ex) {
+                log.error("切换完整模式失败", ex);
+                FloatingCaptureWindow full = new FloatingCaptureWindow(screenshotService);
+                full.setVisible(true);
+            }
         });
     }
 
@@ -301,8 +307,8 @@ public class MiniCaptureWindow extends JWindow {
                     Point newPos = getLocation();
                     newPos.translate(e.getX() - start.x, e.getY() - start.y);
                     setLocation(newPos);
-                    if (resultVisible) {
-                        resultPanel.setLocation(newPos.x, newPos.y + getHeight() + 2);
+                    if (resultVisible && resultWindow != null) {
+                        resultWindow.setLocation(newPos.x, newPos.y + getHeight() + 2);
                     }
                 }
             }
@@ -312,8 +318,19 @@ public class MiniCaptureWindow extends JWindow {
     }
 
     @Override
+    public void setVisible(boolean visible) {
+        super.setVisible(visible);
+        if (!visible && resultWindow != null) {
+            resultWindow.setVisible(false);
+            resultVisible = false;
+        }
+    }
+
+    @Override
     public void dispose() {
-        if (resultPanel != null) resultPanel.setVisible(false);
+        if (resultWindow != null) {
+            resultWindow.dispose();
+        }
         super.dispose();
     }
 }

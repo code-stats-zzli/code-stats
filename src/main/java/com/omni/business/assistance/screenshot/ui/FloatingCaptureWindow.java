@@ -1,5 +1,6 @@
 package com.omni.business.assistance.screenshot.ui;
 
+import com.omni.business.assistance.screenshot.bootstrap.ScreenshotAssistantBootstrap;
 import com.omni.business.assistance.screenshot.model.ScreenshotResult;
 import com.omni.business.assistance.screenshot.service.ScreenshotService;
 import com.omni.framework.log.LoggerFactory;
@@ -17,11 +18,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 截图助手浮窗
- * 支持：
- * 1. 拖拽浮窗 → 识别浮窗内“识别文字区域”的内容（内缩 5px 去除边框干扰）
- * 2. 点击“选区识别” → 全屏拖拽矩形 → 识别选定区域
- * 3. 搜索行：粘贴（直接替换识别文字并搜索）、搜索、复制、关闭（按钮右对齐）
+ * 截图助手浮窗 - 完整模式
+ * 支持：拖拽识别、选区识别、搜索、复制、保存截图，以及切换到极简模式
  */
 public class FloatingCaptureWindow extends JWindow {
     private static final Logger log = LoggerFactory.getLogger(FloatingCaptureWindow.class);
@@ -34,9 +32,9 @@ public class FloatingCaptureWindow extends JWindow {
     private JPanel titleBar;
     private JButton closeButton, copyTextButton, saveScreenshotButton, selectAreaButton, recaptureButton;
     private JButton zoomInButton, zoomOutButton;
-    // 搜索行按钮
     private JButton pasteButton;
     private JButton searchButton;
+    private JButton miniModeButton;            // 新增：切换到极简模式
 
     // 状态控制
     private final AtomicBoolean isCapturing = new AtomicBoolean(false);
@@ -78,7 +76,7 @@ public class FloatingCaptureWindow extends JWindow {
             }
         });
 
-        log.info("截图助手浮窗初始化完成（搜索行按钮右对齐，粘贴替换识别文字）");
+        log.info("截图助手浮窗初始化完成（含极简模式切换按钮）");
     }
 
     // ==================== UI 初始化 ====================
@@ -132,7 +130,7 @@ public class FloatingCaptureWindow extends JWindow {
                 new Font("Inter", Font.PLAIN, 12), Color.WHITE
         ));
 
-        // 搜索行（只包含按钮，右对齐）
+        // 搜索行（包含所有按钮，新增“极简”按钮）
         JPanel searchRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 2));
         searchRow.setOpaque(false);
 
@@ -148,7 +146,22 @@ public class FloatingCaptureWindow extends JWindow {
         pasteButton.addActionListener(e -> pasteAndSearch());
         searchRow.add(pasteButton);
 
-        // 2. 搜索按钮（基于当前识别文字）
+        // 2. 极简模式切换按钮（新增）
+        miniModeButton = new JButton("极简");
+        miniModeButton.setFont(new Font("Inter", Font.PLAIN, 11));
+        miniModeButton.setForeground(Color.WHITE);
+        miniModeButton.setBackground(new Color(60, 60, 60, 200));
+        miniModeButton.setBorderPainted(false);
+        miniModeButton.setFocusPainted(false);
+        miniModeButton.setOpaque(true);
+        miniModeButton.setToolTipText("切换到极简模式");
+        miniModeButton.addActionListener(e -> {
+            ScreenshotAssistantBootstrap.showMiniMode();
+            setVisible(false);
+        });
+        searchRow.add(miniModeButton);
+
+        // 3. 搜索按钮
         searchButton = new JButton("🔍 搜索");
         searchButton.setFont(new Font("Inter", Font.PLAIN, 11));
         searchButton.setForeground(Color.WHITE);
@@ -160,7 +173,7 @@ public class FloatingCaptureWindow extends JWindow {
         searchButton.addActionListener(e -> searchByKeyword());
         searchRow.add(searchButton);
 
-        // 3. 复制文本按钮
+        // 4. 复制文本按钮
         copyTextButton = new JButton("📋 复制文本");
         copyTextButton.setFont(new Font("Inter", Font.PLAIN, 11));
         copyTextButton.setForeground(Color.WHITE);
@@ -172,7 +185,7 @@ public class FloatingCaptureWindow extends JWindow {
         copyTextButton.addActionListener(e -> copyRecognizedText());
         searchRow.add(copyTextButton);
 
-        // 4. 关闭按钮
+        // 5. 关闭按钮
         closeButton = new JButton("✖ 关闭");
         closeButton.setFont(new Font("Inter", Font.PLAIN, 11));
         closeButton.setForeground(Color.WHITE);
@@ -223,7 +236,7 @@ public class FloatingCaptureWindow extends JWindow {
         bottomPanel.add(statusRow);
         bottomPanel.add(Box.createVerticalStrut(4));
 
-        // 功能按钮行（保留缩放、选区识别、重新识别、保存截图）
+        // 功能按钮行（全部保留，保持不变）
         JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         buttonRow.setOpaque(false);
 
@@ -296,9 +309,7 @@ public class FloatingCaptureWindow extends JWindow {
                     .getData(java.awt.datatransfer.DataFlavor.stringFlavor)
                     .toString();
             if (clipboardText != null && !clipboardText.isEmpty()) {
-                // 替换识别文字区域的内容
                 recognizedTextArea.setText(clipboardText);
-                // 自动搜索
                 searchByKeyword();
             } else {
                 statusLabel.setText("⚠️ 剪贴板为空");

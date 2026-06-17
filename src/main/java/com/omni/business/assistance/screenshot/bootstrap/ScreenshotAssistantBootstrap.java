@@ -116,7 +116,7 @@ public class ScreenshotAssistantBootstrap {
         });
     }
 
-    private static void showMiniMode() {
+    public static void showMiniMode() {
         if (fullWindow != null && fullWindow.isVisible()) {
             fullWindow.setVisible(false);
         }

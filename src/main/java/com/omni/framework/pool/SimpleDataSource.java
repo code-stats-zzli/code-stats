@@ -1,3 +1,4 @@
+// ======== D:\space\git\CodeStats\src\main\java\com\omni\framework\pool\SimpleDataSource.java ========
 package com.omni.framework.pool;
 
 import java.sql.Connection;
@@ -57,7 +58,6 @@ public class SimpleDataSource {
         if (closed) {
             throw new SQLException("DataSource is closed");
         }
-        // 先尝试获取许可证（控制最大活跃数）
         boolean acquired;
         try {
             if (maxWaitMillis > 0) {
@@ -74,10 +74,8 @@ public class SimpleDataSource {
             throw new SQLException("Timeout waiting for connection");
         }
 
-        // 从空闲队列中获取连接
         Connection conn = idleConnections.poll();
         if (conn == null) {
-            // 没有空闲连接，创建新连接（但已经通过 semaphore 限制了总数）
             try {
                 conn = createNewConnection();
             } catch (SQLException e) {
@@ -86,12 +84,10 @@ public class SimpleDataSource {
             }
         }
         activeCount.incrementAndGet();
-        // 验证连接是否有效
         if (!isValid(conn)) {
             try {
                 conn.close();
             } catch (SQLException ignored) {}
-            // 递归重试获取一个有效连接
             return getConnection();
         }
         return new PooledConnection(conn, this);
@@ -103,7 +99,6 @@ public class SimpleDataSource {
             return;
         }
         activeCount.decrementAndGet();
-        // 如果空闲连接数未超过 maxIdle，则放回队列，否则直接关闭
         if (idleConnections.size() < maxIdle) {
             if (isValid(conn)) {
                 idleConnections.offer(conn);
@@ -134,6 +129,19 @@ public class SimpleDataSource {
             try { conn.close(); } catch (SQLException ignored) {}
         }
         idleConnections.clear();
+    }
+
+    // ========== 新增：对外暴露连接池状态 ==========
+    public int getActiveCount() {
+        return activeCount.get();
+    }
+
+    public int getIdleCount() {
+        return idleConnections.size();
+    }
+
+    public int getMaxActive() {
+        return maxActive;
     }
 
     // Builder 模式

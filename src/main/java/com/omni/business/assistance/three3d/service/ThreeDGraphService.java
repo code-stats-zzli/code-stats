@@ -1,5 +1,6 @@
 package com.omni.business.assistance.three3d.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.omni.business.assistance.codestat.service.CodeAnalysisService;
 import com.omni.framework.codestats.dependency.model.ClassInfo;
 import com.omni.framework.codestats.dependency.model.DependencyGraph;
@@ -18,9 +19,9 @@ public class ThreeDGraphService {
     @Autowired
     private CodeAnalysisService codeAnalysisService;
 
-    /**
-     * 获取 3D 图数据，若指定 className 则只返回该类的直接依赖和被依赖子图
-     */
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // ---------- 依赖图相关方法（保持不变） ----------
     public Map<String, Object> getGraphData(Map<String, String> params) {
         try {
             DependencyResult fullResult = codeAnalysisService.getDependencyResult(params);
@@ -40,9 +41,6 @@ public class ThreeDGraphService {
         }
     }
 
-    /**
-     * 获取所有类名列表（用于前端下拉）
-     */
     public List<String> getClassNames(Map<String, String> params) {
         try {
             DependencyResult result = codeAnalysisService.getDependencyResult(params);
@@ -62,7 +60,6 @@ public class ThreeDGraphService {
             node.put("type", type);
             nodes.add(node);
         }
-
         List<Map<String, String>> links = new ArrayList<>();
         DependencyGraph graph = result.getGraph();
         for (String src : graph.getAllClasses()) {
@@ -73,7 +70,6 @@ public class ThreeDGraphService {
                 links.add(link);
             }
         }
-
         Map<String, Object> graphData = new LinkedHashMap<>();
         graphData.put("nodes", nodes);
         graphData.put("links", links);
@@ -86,26 +82,20 @@ public class ThreeDGraphService {
     private Map<String, Object> buildSubGraph(DependencyResult fullResult, String className) {
         Map<String, ClassInfo> classInfoMap = fullResult.getClassInfoMap();
         DependencyGraph fullGraph = fullResult.getGraph();
-
         if (!classInfoMap.containsKey(className)) {
             throw new IllegalArgumentException("类不存在: " + className);
         }
-
-        // 收集涉及的类名
         Set<String> involvedClasses = new HashSet<>();
         involvedClasses.add(className);
-        // 出向依赖
         Set<String> outgoing = fullGraph.getDependencies(className);
         involvedClasses.addAll(outgoing);
-        // 入向依赖
         Set<String> incoming = new HashSet<>(fullGraph.getInverseDependencies(className));
         involvedClasses.addAll(incoming);
 
-        // 构建节点
         List<Map<String, String>> nodes = new ArrayList<>();
         for (String cls : involvedClasses) {
             ClassInfo info = classInfoMap.get(cls);
-            if (info == null) continue; // 理论上不应发生
+            if (info == null) continue;
             Map<String, String> node = new HashMap<>();
             node.put("id", cls);
             String type = info.getType().name().toLowerCase();
@@ -113,16 +103,13 @@ public class ThreeDGraphService {
             nodes.add(node);
         }
 
-        // 构建边：只包含与 className 直接相关的边
         List<Map<String, String>> links = new ArrayList<>();
-        // 出向边
         for (String target : outgoing) {
             Map<String, String> link = new HashMap<>();
             link.put("source", className);
             link.put("target", target);
             links.add(link);
         }
-        // 入向边（从依赖者指向 className）
         for (String source : incoming) {
             Map<String, String> link = new HashMap<>();
             link.put("source", source);
@@ -138,5 +125,50 @@ public class ThreeDGraphService {
         graphData.put("analysisTimeMs", fullResult.getAnalysisTimeMs());
         graphData.put("selectedClass", className);
         return graphData;
+    }
+
+    // ==================== 新增：柱状图数据（真实统计） ====================
+    /**
+     * 获取柱状图数据：按语言统计代码行数
+     * 调用 CodeAnalysisService.analyze 获得真实结果，解析语言统计部分
+     */
+    public Map<String, Object> getBarData(Map<String, String> params) {
+        try {
+            // 调用 CodeAnalysisService 执行分析，获得 JSON 字符串结果
+            String resultJson = codeAnalysisService.analyze(params);
+            // 解析 JSON
+            Map<String, Object> resultMap = objectMapper.readValue(resultJson, Map.class);
+            Map<String, Object> languages = (Map<String, Object>) resultMap.get("languages");
+            if (languages == null || languages.isEmpty()) {
+                return buildEmptyBarData();
+            }
+
+            // 构造 ECharts 柱状图数据格式
+            List<String> categories = new ArrayList<>();
+            List<Number> series = new ArrayList<>();
+            for (Map.Entry<String, Object> entry : languages.entrySet()) {
+                String lang = entry.getKey();
+                Map<String, Object> stats = (Map<String, Object>) entry.getValue();
+                categories.add(lang);
+                // 使用代码行数（code）作为柱高
+                Number codeLines = (Number) stats.get("code");
+                if (codeLines == null) codeLines = 0;
+                series.add(codeLines);
+            }
+            Map<String, Object> barData = new LinkedHashMap<>();
+            barData.put("categories", categories);
+            barData.put("series", series);
+            return barData;
+        } catch (Exception e) {
+            log.error("获取柱状图数据失败", e);
+            return buildEmptyBarData();
+        }
+    }
+
+    private Map<String, Object> buildEmptyBarData() {
+        Map<String, Object> empty = new LinkedHashMap<>();
+        empty.put("categories", Collections.emptyList());
+        empty.put("series", Collections.emptyList());
+        return empty;
     }
 }

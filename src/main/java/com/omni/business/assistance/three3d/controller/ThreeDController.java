@@ -17,59 +17,44 @@ public class ThreeDController {
     @Autowired
     private ThreeDGraphService threeDGraphService;
 
-    @RequestMapping("/config")
+    // ==================== 保留柱状图接口 ====================
+    @RequestMapping("/bar-data")
     @ResponseBody
-    public String getSceneConfig() {
-        Map<String, Object> config = new LinkedHashMap<>();
-        config.put("color", "#0066ff");
-        config.put("size", 2.0);
-        config.put("rotationSpeed", 0.01);
-        config.put("wireframe", false);
-        return JsonUtil.toJson(config);
-    }
-
-    @RequestMapping("/models")
-    @ResponseBody
-    public String getModelList() {
-        List<Map<String, String>> models = new ArrayList<>();
-        models.add(Map.of("id", "cube", "name", "立方体"));
-        models.add(Map.of("id", "sphere", "name", "球体"));
-        models.add(Map.of("id", "torus", "name", "圆环"));
-        return JsonUtil.toJson(models);
-    }
-
-    /**
-     * 获取 3D 依赖图数据（支持按类名过滤）
-     * 参数：rootDir, extensions, excludePaths, extraPaths, threadCount, excludeComments, className(可选)
-     */
-    @RequestMapping("/graph")
-    @ResponseBody
-    public String getGraphData() {
-        Map<String, String> params = ParamUtils.parseQueryParams();
-
-        // 设置默认参数
-        params.putIfAbsent("rootDir", System.getProperty("user.dir"));
-        params.putIfAbsent("extensions", "java");
-        params.putIfAbsent("excludeComments", "true");
-        params.putIfAbsent("threadCount", String.valueOf(Runtime.getRuntime().availableProcessors()));
-
-        Map<String, Object> graphData = threeDGraphService.getGraphData(params);
-        return JsonUtil.toJson(graphData);
-    }
-
-    /**
-     * 获取所有类名列表（用于前端下拉框）
-     */
-    @RequestMapping("/classes")
-    @ResponseBody
-    public String getClassNames() {
+    public String getBarData() {
         Map<String, String> params = ParamUtils.parseQueryParams();
         params.putIfAbsent("rootDir", System.getProperty("user.dir"));
         params.putIfAbsent("extensions", "java");
         params.putIfAbsent("excludeComments", "true");
         params.putIfAbsent("threadCount", String.valueOf(Runtime.getRuntime().availableProcessors()));
+        Map<String, Object> barData = threeDGraphService.getBarData(params);
+        return JsonUtil.toJson(barData);
+    }
 
-        List<String> classNames = threeDGraphService.getClassNames(params);
-        return JsonUtil.toJson(classNames);
+    // ==================== 新增：模块信息接口 ====================
+    /**
+     * 获取项目模块列表（用于 3D 展示）
+     * GET /3d/api/modules
+     */
+    @RequestMapping("/modules")
+    @ResponseBody
+    public String getModules() {
+        // 直接调用项目介绍接口获取模块列表（复用现有数据）
+        // 为避免循环依赖，通过 HTTP 调用或直接构造，这里直接构造静态数据（也可从数据库读取）
+        List<Map<String, Object>> modules = new ArrayList<>();
+        modules.add(createModule("轻量 Web 框架", "⚙️", "自研 IoC/MVC，嵌入式 Tomcat，连接池，MyBatis 风格映射"));
+        modules.add(createModule("数据库管理", "🗄️", "JDBC 元数据服务，树形导航，表结构查看，数据预览"));
+        modules.add(createModule("代码分析", "📊", "多线程行数统计，语言识别，注释排除，复杂度估算"));
+        modules.add(createModule("目录管理", "📁", "虚拟文件系统，上传下载，在线编辑，安全路径校验"));
+        modules.add(createModule("智能 Agent", "🤖", "集成 Ollama/DeepSeek，项目助手，知识库问答"));
+        modules.add(createModule("API 调试", "🔌", "Swagger 风格文档，在线请求调试，自定义请求"));
+        return JsonUtil.toJson(modules);
+    }
+
+    private Map<String, Object> createModule(String name, String icon, String desc) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("name", name);
+        m.put("icon", icon);
+        m.put("description", desc);
+        return m;
     }
 }

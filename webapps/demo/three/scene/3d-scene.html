@@ -6,7 +6,7 @@
     <title>3D 场景中心</title>
     <link rel="stylesheet" href="3d-scene.css" />
 
-    <!-- 使用 CDN 加载 Three.js 和 3d-force-graph -->
+    <!-- 使用 Three.js（核心库和辅助库） -->
     <script type="importmap">
         {
             "imports": {
@@ -15,72 +15,117 @@
             }
         }
     </script>
-    <!-- 3d-force-graph 全局脚本 -->
-    <script src="https://cdn.jsdelivr.net/npm/3d-force-graph@1.77.0/dist/3d-force-graph.min.js">
-    </script>
+
+    <!-- ECharts + echarts-gl（场景二柱状图使用） -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2/dist/echarts-gl.min.js"></script>
+
+    <style>
+        /* 场景容器 */
+        #module-container, #graph-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: #0a0f1a;
+        }
+        #module-container canvas {
+            display: block;
+        }
+        /* 信息提示浮窗 */
+        .module-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            color: #e2e8f0;
+            padding: 16px 24px;
+            border-radius: 16px;
+            border: 1px solid rgba(0, 102, 255, 0.6);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            max-width: 280px;
+            font-size: 14px;
+            line-height: 1.5;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+        .module-tooltip.visible {
+            opacity: 1;
+        }
+        .module-tooltip .icon {
+            font-size: 28px;
+            display: block;
+            margin-bottom: 6px;
+        }
+        .module-tooltip .name {
+            font-weight: 600;
+            color: #4da6ff;
+        }
+        .module-tooltip .desc {
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+        /* 柱状图容器 */
+        #bar-chart-container {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+        }
+        .bar-chart-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .placeholder-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #94a3b8;
+            text-align: center;
+            padding: 40px;
+        }
+    </style>
 </head>
 <body>
-<!-- 页面结构保持不变，与之前一致 -->
 <div id="app">
     <aside class="sidebar">
         <div class="sidebar-header">
             <h3>🌐 3D 场景</h3>
         </div>
         <ul class="nav-list">
-            <li class="nav-item active" data-tab="dependency">
-                <span class="icon">📊</span> 依赖分析
+            <li class="nav-item active" data-tab="modules">
+                <span class="icon">🧩</span> 项目模块
             </li>
-            <li class="nav-item" data-tab="scene2">
-                <span class="icon">🔮</span> 场景二（预留）
+            <li class="nav-item" data-tab="barchart">
+                <span class="icon">📊</span> 3D 柱状图
             </li>
             <li class="nav-item" data-tab="scene3">
-                <span class="icon">🧩</span> 场景三（预留）
+                <span class="icon">🔮</span> 场景三（预留）
             </li>
         </ul>
     </aside>
 
     <main class="content">
-        <!-- 依赖分析 Tab -->
-        <div id="tab-dependency" class="tab-pane active">
-            <div id="graph-container">
-                <div id="loading-overlay">
-                    <div class="spinner"></div>
-                    <div id="loading-text">正在加载依赖数据...</div>
-                    <div id="loading-error" class="error-msg" style="display:none;"></div>
-                </div>
-                <div class="info-bar">
-                    <strong>🌐 3D 依赖图谱</strong> &nbsp;·&nbsp;
-                    <span id="node-count">0</span> 个节点 &nbsp;·&nbsp;
-                    <span id="edge-count">0</span> 条边
-                </div>
-                <!-- 在 info-bar 下方添加选择器 -->
-                <div style="position: absolute; top: 80px; left: 20px; z-index: 10; background: rgba(0,0,0,0.6); padding: 10px 16px; border-radius: 40px; backdrop-filter: blur(8px); border: 1px solid rgba(0,102,255,0.4); display: flex; gap: 12px; align-items: center;">
-                    <label style="color: #e2e8f0; font-size: 14px;">选择类：</label>
-                    <select id="classSelector" style="background: #1e293b; color: #e2e8f0; border: 1px solid #4da6ff; border-radius: 20px; padding: 4px 12px; font-size: 13px; min-width: 200px;">
-                        <option value="">-- 全部 --</option>
-                    </select>
-                    <button id="refreshGraphBtn" class="btn-primary" style="padding: 4px 16px; font-size: 12px;">🔄 更新</button>
-                </div>
-                <div class="legend">
-                    <div class="legend-item"><span class="legend-color class"></span> 类 (Class)</div>
-                    <div class="legend-item"><span class="legend-color interface"></span> 接口 (Interface)</div>
-                    <div class="legend-item"><span class="legend-color enum"></span> 枚举 (Enum)</div>
-                    <div class="legend-item"><span class="legend-color edge"></span> 依赖关系</div>
-                </div>
-                <div class="control-hint">🖱 滚轮缩放 · 拖拽旋转 · 点击节点高亮</div>
+        <!-- 场景一：项目模块 3D 展示 -->
+        <div id="tab-modules" class="tab-pane active">
+            <div id="module-container">
+                <div id="moduleTooltip" class="module-tooltip"></div>
             </div>
         </div>
 
-        <!-- 预留其他 Tab -->
-        <div id="tab-scene2" class="tab-pane">
-            <div class="placeholder-content">
-                <h2>🔮 场景二</h2>
-                <p>此区域预留用于其他 3D 可视化内容，您可以根据需要扩展。</p>
-            </div>
+        <!-- 场景二：3D 柱状图 -->
+        <div id="tab-barchart" class="tab-pane">
+            <div id="bar-chart-container" class="bar-chart-wrapper"></div>
         </div>
+
+        <!-- 场景三：预留 -->
         <div id="tab-scene3" class="tab-pane">
             <div class="placeholder-content">
-                <h2>🧩 场景三</h2>
+                <h2>🔮 场景三</h2>
                 <p>此区域预留用于更多 3D 场景。</p>
             </div>
         </div>

@@ -20,6 +20,7 @@ const loadingOverlay = document.getElementById('loading-overlay');
 const loadingText = document.getElementById('loading-text');
 const statusSpan = document.getElementById('status');
 const toggleBtn = document.getElementById('toggleAutoRotate');
+const sendBtn = document.getElementById('sendBtn');
 const threadTableBody = document.getElementById('threadTableBody');
 
 let scene, camera, renderer, labelRenderer, controls;
@@ -107,7 +108,7 @@ function clearGroup(group) {
     }
 }
 
-// ----- 渲染各组件（与之前相同，此处只列出核心更新部分）-----
+// ----- 渲染各组件（保持不变）-----
 function renderThreads(data) {
     clearGroup(threadGroup);
     const states = data.states || {};
@@ -421,7 +422,7 @@ function renderRequestStats(data) {
     requestStatsGroup.add(label);
 }
 
-// ===================== 线程列表渲染 =====================
+// ===================== 线程列表渲染（带排序） =====================
 function renderThreadList(threads) {
     if (!threadTableBody) return;
     if (!threads || threads.length === 0) {
@@ -429,8 +430,31 @@ function renderThreadList(threads) {
         return;
     }
 
-    const order = { 'BLOCKED': 0, 'RUNNING': 1, 'COMPLETED': 2, 'IDLE': 3 };
-    const sorted = [...threads].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+    // 状态优先级（数字越小越靠前）
+    const statusPriority = {
+        'RUNNING': 1,
+        'BLOCKED': 2,
+        'WAITING': 3,
+        'TIMED_WAITING': 4,
+        'NEW': 5,
+        'TERMINATED': 6,
+        'IDLE': 7,
+        'COMPLETED': 8
+    };
+
+    // 深度排序（先按状态优先级，再按时间降序）
+    const sorted = [...threads].sort((a, b) => {
+        const statusA = a.status || 'IDLE';
+        const statusB = b.status || 'IDLE';
+        const priA = statusPriority[statusA] || 9;
+        const priB = statusPriority[statusB] || 9;
+        if (priA !== priB) return priA - priB;
+
+        // 同状态内按时间降序（最新在前）
+        const timeA = a.startTime || a.timestamp || a.lastActiveTime || 0;
+        const timeB = b.startTime || b.timestamp || b.lastActiveTime || 0;
+        return timeB - timeA;
+    });
 
     let html = '';
     sorted.forEach(t => {
@@ -454,21 +478,51 @@ function escapeHtml(str) {
     return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
 }
 
-// ===================== 更新所有场景 =====================
+// ===================== 更新所有场景（核心入口） =====================
 function updateScene(data) {
     if (!data) return;
+
+    // ---------- 对线程详情进行排序（用于列表和粒子流） ----------
+    let sortedThreads = [];
+    if (data.threadDetails && data.threadDetails.length) {
+        const statusPriority = {
+            'RUNNING': 1,
+            'BLOCKED': 2,
+            'WAITING': 3,
+            'TIMED_WAITING': 4,
+            'NEW': 5,
+            'TERMINATED': 6,
+            'IDLE': 7,
+            'COMPLETED': 8
+        };
+        sortedThreads = [...data.threadDetails].sort((a, b) => {
+            const statusA = a.status || 'IDLE';
+            const statusB = b.status || 'IDLE';
+            const priA = statusPriority[statusA] || 9;
+            const priB = statusPriority[statusB] || 9;
+            if (priA !== priB) return priA - priB;
+
+            const timeA = a.startTime || a.timestamp || a.lastActiveTime || 0;
+            const timeB = b.startTime || b.timestamp || b.lastActiveTime || 0;
+            return timeB - timeA;
+        });
+    } else {
+        sortedThreads = data.threadDetails || [];
+    }
+
+    // 渲染各三维组件
     renderThreads(data.threads);
     renderMemory(data.memory);
     renderPool(data.pool);
     renderRequestStats(data.requests);
     renderMemoryRegions(data.memory.pools);
 
-    if (data.threadDetails) {
-        renderThreadList(data.threadDetails);
-        // 更新粒子流
-        if (cleanupThreadFlow) {
-            updateThreadFlowData(data.threadDetails);
-        }
+    // 线程列表使用排序后的数据
+    renderThreadList(sortedThreads);
+
+    // 粒子流也使用排序后的数据（取第一条线程的调用链）
+    if (cleanupThreadFlow) {
+        updateThreadFlowData(sortedThreads);
     }
 }
 
@@ -544,6 +598,23 @@ function animate() {
     labelRenderer.render(scene, camera);
 }
 
+// ===================== 发送测试调用链请求 =====================
+async function sendTestRequest() {
+    statusSpan.textContent = '⏳ 发送测试调用链...';
+    try {
+        const resp = await fetch(apiUrl('/3d/api/test-call-chain'));
+        const data = await resp.json();
+        if (data.success) {
+            statusSpan.textContent = '✅ 测试调用链已触发，观察粒子流变化';
+            fetchMonitorData();
+        } else {
+            statusSpan.textContent = '❌ 请求失败: ' + (data.message || '未知错误');
+        }
+    } catch (err) {
+        statusSpan.textContent = '❌ 请求异常: ' + err.message;
+    }
+}
+
 // ----- 启动 -----
 function start() {
     if (!scene) {
@@ -564,6 +635,8 @@ toggleBtn.addEventListener('click', () => {
     controls.autoRotate = autoRotate;
     toggleBtn.textContent = autoRotate ? '⏸️ 暂停旋转' : '▶️ 恢复旋转';
 });
+
+sendBtn.addEventListener('click', sendTestRequest);
 
 if (document.readyState === 'complete') {
     start();

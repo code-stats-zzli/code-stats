@@ -10,10 +10,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-/**
- * 自研 Java 源码依赖提取器
- * 通过词法扫描 + 状态机提取包名、导入、类声明、字段类型、方法返回类型/参数类型
- */
 public class JavaDependencyExtractor {
 
     public ExtractedResult extract(Path file) throws IOException {
@@ -21,21 +17,22 @@ public class JavaDependencyExtractor {
         SimpleJavaLexer lexer = new SimpleJavaLexer(source);
         List<SimpleJavaLexer.Token> tokens = lexer.tokenize();
 
-        // 解析包名
         String packageName = parsePackage(tokens);
-        // 解析导入列表
         List<String> imports = parseImports(tokens);
-        // 解析类型声明（类/接口/枚举/注解）
         TypeDeclaration mainType = parseTypeDeclaration(tokens);
         if (mainType == null) {
             throw new IOException("无法找到类型声明: " + file);
+        }
+
+        // ★ 修复：确保 mainType.name 不为空
+        if (mainType.name == null || mainType.name.isEmpty()) {
+            throw new IOException("类型名称为空: " + file);
         }
 
         String fqName = packageName.isEmpty() ? mainType.name : packageName + "." + mainType.name;
         ClassInfo.ClassType classType = mapClassType(mainType.kind);
         ClassInfo classInfo = new ClassInfo(fqName, packageName, mainType.name, classType);
 
-        // 收集所有类型引用（字段、方法返回值、参数、父类/接口）
         Set<String> rawTypes = collectTypeReferences(tokens, mainType);
         TypeNameResolver resolver = new TypeNameResolver(packageName, imports);
         Set<String> resolvedDeps = new HashSet<>();
@@ -49,6 +46,7 @@ public class JavaDependencyExtractor {
 
         DependencyGraph graph = new DependencyGraph();
         for (String dep : resolvedDeps) {
+            // ★ 修复：addDependency 内部已做 null 检查，但此处 fqName 已确保非空
             graph.addDependency(fqName, dep);
         }
         Map<String, ClassInfo> classInfoMap = new HashMap<>();
@@ -57,8 +55,7 @@ public class JavaDependencyExtractor {
         return new ExtractedResult(classInfo, resolvedDeps, result);
     }
 
-    // ----- 解析辅助方法 -----
-
+    // ----- 解析辅助方法（保持不变） -----
     private String parsePackage(List<SimpleJavaLexer.Token> tokens) {
         for (int i = 0; i < tokens.size(); i++) {
             if (tokens.get(i).type == SimpleJavaLexer.TokenType.KEYWORD && "package".equals(tokens.get(i).text)) {
@@ -110,7 +107,7 @@ public class JavaDependencyExtractor {
         List<String> extendedTypes = new ArrayList<>();
         List<String> implementedTypes = new ArrayList<>();
         int startTokenIndex;
-        int endTokenIndex; // 粗略边界，用于后续收集类型引用
+        int endTokenIndex;
     }
 
     private TypeDeclaration parseTypeDeclaration(List<SimpleJavaLexer.Token> tokens) {
@@ -121,7 +118,6 @@ public class JavaDependencyExtractor {
                 if (kw.equals("class") || kw.equals("interface") || kw.equals("enum")) {
                     TypeDeclaration decl = new TypeDeclaration();
                     decl.kind = kw;
-                    // 跳过可能存在的注解
                     i++;
                     while (i < tokens.size() && tokens.get(i).type == SimpleJavaLexer.TokenType.IDENTIFIER) {
                         decl.name = tokens.get(i).text;
@@ -142,7 +138,6 @@ public class JavaDependencyExtractor {
                         i++;
                     }
                     decl.startTokenIndex = i;
-                    // 简单找到匹配的 '}' 作为结束（简化）
                     int braceCount = 0;
                     while (i < tokens.size()) {
                         if ("{".equals(tokens.get(i).text)) braceCount++;
@@ -191,7 +186,6 @@ public class JavaDependencyExtractor {
             } else if (",".equals(text) || "{".equals(text) || "extends".equals(text) || "implements".equals(text)) {
                 break;
             } else {
-                // 可能是泛型 < 等，忽略
                 break;
             }
             i++;
@@ -210,38 +204,30 @@ public class JavaDependencyExtractor {
 
     private Set<String> collectTypeReferences(List<SimpleJavaLexer.Token> tokens, TypeDeclaration mainType) {
         Set<String> types = new HashSet<>();
-        // 添加父类和接口
         types.addAll(mainType.extendedTypes);
         types.addAll(mainType.implementedTypes);
 
-        // 在类的 body 范围内扫描字段和方法
         int start = mainType.startTokenIndex;
         int end = mainType.endTokenIndex;
         for (int i = start; i <= end && i < tokens.size(); i++) {
             SimpleJavaLexer.Token t = tokens.get(i);
-            // 跳过修饰符
             if (t.type == SimpleJavaLexer.TokenType.KEYWORD && isModifier(t.text)) continue;
-            // 检测字段声明: 类型 标识符 [= ...] ;
             if (t.type == SimpleJavaLexer.TokenType.IDENTIFIER && isPossibleTypeName(t.text)) {
-                // 检查下一个 token 是否是标识符（字段名）
                 int nextIdx = i + 1;
                 if (nextIdx < tokens.size() && tokens.get(nextIdx).type == SimpleJavaLexer.TokenType.IDENTIFIER) {
                     String fieldType = t.text;
                     types.add(fieldType);
                 }
             }
-            // 检测方法返回类型
             if (t.type == SimpleJavaLexer.TokenType.IDENTIFIER && isPossibleTypeName(t.text)) {
                 int nextIdx = i + 1;
                 if (nextIdx < tokens.size() && tokens.get(nextIdx).type == SimpleJavaLexer.TokenType.IDENTIFIER) {
-                    // 可能是方法返回类型 方法名(
                     int afterName = nextIdx + 1;
                     if (afterName < tokens.size() && "(".equals(tokens.get(afterName).text)) {
                         types.add(t.text);
                     }
                 }
             }
-            // 检测方法参数：在 '(' 和 ')' 之间查找类型
             if ("(".equals(t.text)) {
                 int paramStart = i + 1;
                 int braceCount = 1;
@@ -250,7 +236,6 @@ public class JavaDependencyExtractor {
                     if ("(".equals(tokens.get(j).text)) braceCount++;
                     else if (")".equals(tokens.get(j).text)) braceCount--;
                     else if (braceCount == 1 && tokens.get(j).type == SimpleJavaLexer.TokenType.IDENTIFIER) {
-                        // 可能是参数类型（后面跟标识符或逗号）
                         types.add(tokens.get(j).text);
                     }
                     j++;
@@ -267,10 +252,7 @@ public class JavaDependencyExtractor {
     }
 
     private boolean isPossibleTypeName(String word) {
-        // 简单启发：首字母大写或为常见类型
         if (Character.isUpperCase(word.charAt(0))) return true;
         return Set.of("int", "long", "double", "float", "boolean", "char", "byte", "short", "void").contains(word);
     }
-
-
 }

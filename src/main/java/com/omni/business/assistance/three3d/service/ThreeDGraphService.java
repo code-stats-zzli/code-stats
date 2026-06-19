@@ -9,13 +9,8 @@ import com.omni.framework.spring.annotation.Service;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 
-
 import java.util.*;
 
-/**
- * 3D 依赖图数据服务
- * 负责将 CodeAnalysisService 的依赖分析结果转换为前端 3D 力导向图所需的节点和边数据
- */
 @Service
 public class ThreeDGraphService {
     private static final Logger log = LoggerFactory.getLogger(ThreeDGraphService.class);
@@ -24,56 +19,124 @@ public class ThreeDGraphService {
     private CodeAnalysisService codeAnalysisService;
 
     /**
-     * 获取 3D 图数据（节点和边）
-     *
-     * @param params 分析参数（与 CodeAnalysisService 一致）
-     * @return Map 包含 nodes 和 links，以及附加统计信息
+     * 获取 3D 图数据，若指定 className 则只返回该类的直接依赖和被依赖子图
      */
     public Map<String, Object> getGraphData(Map<String, String> params) {
         try {
-            // 1. 调用 CodeAnalysisService 获取依赖分析结果（含缓存）
-            DependencyResult result = codeAnalysisService.getDependencyResult(params);
-
-            // 2. 构建节点列表
-            List<Map<String, String>> nodes = new ArrayList<>();
-            for (Map.Entry<String, ClassInfo> entry : result.getClassInfoMap().entrySet()) {
-                Map<String, String> node = new HashMap<>();
-                node.put("id", entry.getKey());
-                String type = entry.getValue().getType().name().toLowerCase();
-                node.put("type", type); // class / interface / enum / annotation
-                nodes.add(node);
+            DependencyResult fullResult = codeAnalysisService.getDependencyResult(params);
+            String className = params.get("className");
+            if (className != null && !className.trim().isEmpty()) {
+                return buildSubGraph(fullResult, className.trim());
+            } else {
+                return buildFullGraph(fullResult);
             }
-
-            // 3. 构建边列表
-            List<Map<String, String>> links = new ArrayList<>();
-            DependencyGraph graph = result.getGraph();
-            for (String src : graph.getAllClasses()) {
-                for (String target : graph.getDependencies(src)) {
-                    Map<String, String> link = new HashMap<>();
-                    link.put("source", src);
-                    link.put("target", target);
-                    links.add(link);
-                }
-            }
-
-            // 4. 组装返回数据
-            Map<String, Object> graphData = new LinkedHashMap<>();
-            graphData.put("nodes", nodes);
-            graphData.put("links", links);
-            graphData.put("totalClasses", result.getTotalClasses());
-            graphData.put("totalEdges", links.size());
-            graphData.put("analysisTimeMs", result.getAnalysisTimeMs());
-
-            log.info("3D 图数据生成成功，节点数={}，边数={}", nodes.size(), links.size());
-            return graphData;
         } catch (Exception e) {
             log.error("生成 3D 图数据失败", e);
-            // 返回空图，避免前端报错
             Map<String, Object> empty = new LinkedHashMap<>();
             empty.put("nodes", Collections.emptyList());
             empty.put("links", Collections.emptyList());
             empty.put("error", e.getMessage());
             return empty;
         }
+    }
+
+    /**
+     * 获取所有类名列表（用于前端下拉）
+     */
+    public List<String> getClassNames(Map<String, String> params) {
+        try {
+            DependencyResult result = codeAnalysisService.getDependencyResult(params);
+            return new ArrayList<>(result.getClassInfoMap().keySet());
+        } catch (Exception e) {
+            log.error("获取类名列表失败", e);
+            return Collections.emptyList();
+        }
+    }
+
+    private Map<String, Object> buildFullGraph(DependencyResult result) {
+        List<Map<String, String>> nodes = new ArrayList<>();
+        for (Map.Entry<String, ClassInfo> entry : result.getClassInfoMap().entrySet()) {
+            Map<String, String> node = new HashMap<>();
+            node.put("id", entry.getKey());
+            String type = entry.getValue().getType().name().toLowerCase();
+            node.put("type", type);
+            nodes.add(node);
+        }
+
+        List<Map<String, String>> links = new ArrayList<>();
+        DependencyGraph graph = result.getGraph();
+        for (String src : graph.getAllClasses()) {
+            for (String target : graph.getDependencies(src)) {
+                Map<String, String> link = new HashMap<>();
+                link.put("source", src);
+                link.put("target", target);
+                links.add(link);
+            }
+        }
+
+        Map<String, Object> graphData = new LinkedHashMap<>();
+        graphData.put("nodes", nodes);
+        graphData.put("links", links);
+        graphData.put("totalClasses", result.getTotalClasses());
+        graphData.put("totalEdges", links.size());
+        graphData.put("analysisTimeMs", result.getAnalysisTimeMs());
+        return graphData;
+    }
+
+    private Map<String, Object> buildSubGraph(DependencyResult fullResult, String className) {
+        Map<String, ClassInfo> classInfoMap = fullResult.getClassInfoMap();
+        DependencyGraph fullGraph = fullResult.getGraph();
+
+        if (!classInfoMap.containsKey(className)) {
+            throw new IllegalArgumentException("类不存在: " + className);
+        }
+
+        // 收集涉及的类名
+        Set<String> involvedClasses = new HashSet<>();
+        involvedClasses.add(className);
+        // 出向依赖
+        Set<String> outgoing = fullGraph.getDependencies(className);
+        involvedClasses.addAll(outgoing);
+        // 入向依赖
+        Set<String> incoming = new HashSet<>(fullGraph.getInverseDependencies(className));
+        involvedClasses.addAll(incoming);
+
+        // 构建节点
+        List<Map<String, String>> nodes = new ArrayList<>();
+        for (String cls : involvedClasses) {
+            ClassInfo info = classInfoMap.get(cls);
+            if (info == null) continue; // 理论上不应发生
+            Map<String, String> node = new HashMap<>();
+            node.put("id", cls);
+            String type = info.getType().name().toLowerCase();
+            node.put("type", type);
+            nodes.add(node);
+        }
+
+        // 构建边：只包含与 className 直接相关的边
+        List<Map<String, String>> links = new ArrayList<>();
+        // 出向边
+        for (String target : outgoing) {
+            Map<String, String> link = new HashMap<>();
+            link.put("source", className);
+            link.put("target", target);
+            links.add(link);
+        }
+        // 入向边（从依赖者指向 className）
+        for (String source : incoming) {
+            Map<String, String> link = new HashMap<>();
+            link.put("source", source);
+            link.put("target", className);
+            links.add(link);
+        }
+
+        Map<String, Object> graphData = new LinkedHashMap<>();
+        graphData.put("nodes", nodes);
+        graphData.put("links", links);
+        graphData.put("totalClasses", nodes.size());
+        graphData.put("totalEdges", links.size());
+        graphData.put("analysisTimeMs", fullResult.getAnalysisTimeMs());
+        graphData.put("selectedClass", className);
+        return graphData;
     }
 }

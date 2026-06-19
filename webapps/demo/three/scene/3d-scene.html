@@ -6,26 +6,22 @@
     <title>3D 场景中心</title>
     <link rel="stylesheet" href="3d-scene.css" />
 
-    <!-- Import Map -->
+    <!-- 使用 CDN 加载 Three.js 和 3d-force-graph -->
     <script type="importmap">
         {
             "imports": {
-                "three": "../../lib/three.module.js",
-                "three/addons/": "../../lib/"
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
             }
         }
     </script>
-
-    <!-- 3d-force-graph CDN -->
+    <!-- 3d-force-graph 全局脚本 -->
     <script src="https://cdn.jsdelivr.net/npm/3d-force-graph@1.77.0/dist/3d-force-graph.min.js">
     </script>
-
-    <!-- 全局工具 -->
-    <script src="../../global.js"></script>
 </head>
 <body>
+<!-- 页面结构保持不变，与之前一致 -->
 <div id="app">
-    <!-- 左侧导航栏 -->
     <aside class="sidebar">
         <div class="sidebar-header">
             <h3>🌐 3D 场景</h3>
@@ -43,38 +39,39 @@
         </ul>
     </aside>
 
-    <!-- 右侧内容区 -->
     <main class="content">
         <!-- 依赖分析 Tab -->
         <div id="tab-dependency" class="tab-pane active">
             <div id="graph-container">
-                <!-- 加载遮罩 -->
                 <div id="loading-overlay">
                     <div class="spinner"></div>
                     <div id="loading-text">正在加载依赖数据...</div>
                     <div id="loading-error" class="error-msg" style="display:none;"></div>
                 </div>
-
-                <!-- 信息栏 -->
                 <div class="info-bar">
                     <strong>🌐 3D 依赖图谱</strong> &nbsp;·&nbsp;
                     <span id="node-count">0</span> 个节点 &nbsp;·&nbsp;
                     <span id="edge-count">0</span> 条边
                 </div>
-
-                <!-- 图例 -->
+                <!-- 在 info-bar 下方添加选择器 -->
+                <div style="position: absolute; top: 80px; left: 20px; z-index: 10; background: rgba(0,0,0,0.6); padding: 10px 16px; border-radius: 40px; backdrop-filter: blur(8px); border: 1px solid rgba(0,102,255,0.4); display: flex; gap: 12px; align-items: center;">
+                    <label style="color: #e2e8f0; font-size: 14px;">选择类：</label>
+                    <select id="classSelector" style="background: #1e293b; color: #e2e8f0; border: 1px solid #4da6ff; border-radius: 20px; padding: 4px 12px; font-size: 13px; min-width: 200px;">
+                        <option value="">-- 全部 --</option>
+                    </select>
+                    <button id="refreshGraphBtn" class="btn-primary" style="padding: 4px 16px; font-size: 12px;">🔄 更新</button>
+                </div>
                 <div class="legend">
                     <div class="legend-item"><span class="legend-color class"></span> 类 (Class)</div>
                     <div class="legend-item"><span class="legend-color interface"></span> 接口 (Interface)</div>
                     <div class="legend-item"><span class="legend-color enum"></span> 枚举 (Enum)</div>
                     <div class="legend-item"><span class="legend-color edge"></span> 依赖关系</div>
                 </div>
-
                 <div class="control-hint">🖱 滚轮缩放 · 拖拽旋转 · 点击节点高亮</div>
             </div>
         </div>
 
-        <!-- 预留其他 Tab 内容 -->
+        <!-- 预留其他 Tab -->
         <div id="tab-scene2" class="tab-pane">
             <div class="placeholder-content">
                 <h2>🔮 场景二</h2>

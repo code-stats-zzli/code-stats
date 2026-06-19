@@ -6,6 +6,11 @@ public class DependencyGraph {
     private final Map<String, Set<String>> adjacencyMap = new HashMap<>();
 
     public void addDependency(String fromClass, String toClass) {
+        // ★ 修复：防止 fromClass 或 toClass 为 null 导致 NPE
+        if (fromClass == null || toClass == null) {
+            // 可记录警告日志（此处简化处理，直接忽略）
+            return;
+        }
         if (fromClass.equals(toClass)) return;
         adjacencyMap.computeIfAbsent(fromClass, k -> new HashSet<>()).add(toClass);
     }
@@ -56,6 +61,7 @@ public class DependencyGraph {
         }
         return new AbstractMap.SimpleEntry<>(max, maxClasses);
     }
+
     // ========== 循环依赖检测（Tarjan 算法） ==========
     public List<Set<String>> detectCycles() {
         Map<String, Integer> index = new HashMap<>();
@@ -71,7 +77,6 @@ public class DependencyGraph {
             }
         }
 
-        // 过滤掉大小为 1 的强连通分量（自循环可保留，但通常不算循环依赖）
         cycles.removeIf(cycle -> cycle.size() <= 1);
         return cycles;
     }

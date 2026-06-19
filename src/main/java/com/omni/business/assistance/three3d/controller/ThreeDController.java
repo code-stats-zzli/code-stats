@@ -17,9 +17,6 @@ public class ThreeDController {
     @Autowired
     private ThreeDGraphService threeDGraphService;
 
-    /**
-     * 获取场景配置（颜色、大小、旋转速度）
-     */
     @RequestMapping("/config")
     @ResponseBody
     public String getSceneConfig() {
@@ -31,9 +28,6 @@ public class ThreeDController {
         return JsonUtil.toJson(config);
     }
 
-    /**
-     * 获取预置模型列表（供前端选择或扩展）
-     */
     @RequestMapping("/models")
     @ResponseBody
     public String getModelList() {
@@ -45,33 +39,37 @@ public class ThreeDController {
     }
 
     /**
-     * 获取 3D 依赖图数据（节点和边）
-     * 调用 ThreeDGraphService 进行数据转换
-     *
-     * 修改说明：去掉 @RequestParam 参数，改用 ParamUtils.parseQueryParams()
-     * 直接获取请求中的所有查询参数，避免参数绑定异常
+     * 获取 3D 依赖图数据（支持按类名过滤）
+     * 参数：rootDir, extensions, excludePaths, extraPaths, threadCount, excludeComments, className(可选)
      */
     @RequestMapping("/graph")
     @ResponseBody
     public String getGraphData() {
-        // 从当前请求中解析所有查询参数
         Map<String, String> params = ParamUtils.parseQueryParams();
 
-        // 设置合理的默认参数（如果前端未传）
-        if (!params.containsKey("rootDir")) {
-            params.put("rootDir", System.getProperty("user.dir"));
-        }
-        if (!params.containsKey("extensions")) {
-            params.put("extensions", "java");
-        }
-        if (!params.containsKey("excludeComments")) {
-            params.put("excludeComments", "true");
-        }
-        if (!params.containsKey("threadCount")) {
-            params.put("threadCount", String.valueOf(Runtime.getRuntime().availableProcessors()));
-        }
+        // 设置默认参数
+        params.putIfAbsent("rootDir", System.getProperty("user.dir"));
+        params.putIfAbsent("extensions", "java");
+        params.putIfAbsent("excludeComments", "true");
+        params.putIfAbsent("threadCount", String.valueOf(Runtime.getRuntime().availableProcessors()));
 
         Map<String, Object> graphData = threeDGraphService.getGraphData(params);
         return JsonUtil.toJson(graphData);
+    }
+
+    /**
+     * 获取所有类名列表（用于前端下拉框）
+     */
+    @RequestMapping("/classes")
+    @ResponseBody
+    public String getClassNames() {
+        Map<String, String> params = ParamUtils.parseQueryParams();
+        params.putIfAbsent("rootDir", System.getProperty("user.dir"));
+        params.putIfAbsent("extensions", "java");
+        params.putIfAbsent("excludeComments", "true");
+        params.putIfAbsent("threadCount", String.valueOf(Runtime.getRuntime().availableProcessors()));
+
+        List<String> classNames = threeDGraphService.getClassNames(params);
+        return JsonUtil.toJson(classNames);
     }
 }

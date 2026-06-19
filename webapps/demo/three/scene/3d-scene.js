@@ -1,5 +1,5 @@
 // ---------- API 基础路径 ----------
-const API_BASE = window.apiUrl('/3d/api');
+const API_BASE = (window.apiUrl ? window.apiUrl('/3d/api') : '/3d/api');
 
 // ---------- DOM 引用 ----------
 const container = document.getElementById('graph-container');
@@ -8,35 +8,81 @@ const loadingText = document.getElementById('loading-text');
 const loadingError = document.getElementById('loading-error');
 const nodeCountSpan = document.getElementById('node-count');
 const edgeCountSpan = document.getElementById('edge-count');
+const classSelector = document.getElementById('classSelector');
+const refreshBtn = document.getElementById('refreshGraphBtn');
 
-// ---------- 核心变量 ----------
 let forceGraph = null;
 
-// ---------- 获取数据 ----------
-async function fetchDependencyData() {
+// ---------- 获取类名列表 ----------
+async function fetchClassNames() {
     const params = new URLSearchParams();
-    const rootDir = '../../../';
-    params.append('rootDir', rootDir);
+    params.append('rootDir', '../../../');
     params.append('extensions', 'java');
     params.append('excludePaths', '');
     params.append('extraPaths', '');
     params.append('threadCount', '4');
     params.append('excludeComments', 'true');
 
+    const url = API_BASE + '/classes?' + params.toString();
     try {
-        const resp = await fetch(API_BASE + '/graph?' + params.toString());
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        return data;
+    } catch (err) {
+        console.warn('获取类名列表失败，使用模拟列表', err);
+        // 降级：使用硬编码列表（仅用于演示）
+        return [
+            'com.omni.Bootstrap',
+            'com.omni.framework.spring.boot.SpringApplication',
+            'com.omni.framework.tomcat.Catalina',
+            'com.omni.framework.spring.mvc.DispatcherServlet'
+        ];
+    }
+}
+
+// ---------- 填充下拉框 ----------
+async function populateClassSelector() {
+    const classes = await fetchClassNames();
+    classSelector.innerHTML = '<option value="">-- 全部 --</option>';
+    for (const cls of classes) {
+        const option = document.createElement('option');
+        option.value = cls;
+        option.textContent = cls;
+        classSelector.appendChild(option);
+    }
+}
+
+// ---------- 获取依赖数据 ----------
+async function fetchDependencyData(className = '') {
+    const params = new URLSearchParams();
+    params.append('rootDir', '../../../');
+    params.append('extensions', 'java');
+    params.append('excludePaths', '');
+    params.append('extraPaths', '');
+    params.append('threadCount', '4');
+    params.append('excludeComments', 'true');
+    if (className) {
+        params.append('className', className);
+    }
+
+    const url = API_BASE + '/graph?' + params.toString();
+    console.log('请求 URL:', url);
+    try {
+        const resp = await fetch(url);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
         return data;
     } catch (err) {
         console.warn('后端数据获取失败，使用模拟数据', err);
-        return generateMockData();
+        return generateMockData(className);
     }
 }
 
-// ---------- 模拟数据 ----------
-function generateMockData() {
+// ---------- 模拟数据（可保留，用于降级） ----------
+function generateMockData(className = '') {
+    // 保持原有模拟逻辑，但可以根据 className 过滤（这里简单返回全部）
     const classes = [
         'com.omni.Bootstrap',
         'com.omni.framework.spring.boot.SpringApplication',
@@ -64,22 +110,28 @@ function generateMockData() {
         ['com.omni.framework.spring.boot.SpringApplication', 'com.omni.business.assistance.agent.controller.AgentController'],
         ['com.omni.framework.spring.boot.SpringApplication', 'com.omni.business.assistance.codestat.controller.CodeAnalysisController']
     ];
+    // 如果指定了 className，过滤相关的边（简单实现，仅演示）
+    let filteredEdges = edges;
+    if (className) {
+        filteredEdges = edges.filter(([src, tgt]) => src === className || tgt === className);
+    }
     const nodeSet = new Set();
-    edges.forEach(([src, tgt]) => { nodeSet.add(src); nodeSet.add(tgt); });
+    filteredEdges.forEach(([src, tgt]) => { nodeSet.add(src); nodeSet.add(tgt); });
     const nodes = Array.from(nodeSet).map(id => ({ id, type: 'class' }));
-    return {
-        nodes,
-        links: edges.map(([src, tgt]) => ({ source: src, target: tgt })),
-        totalClasses: nodes.length,
-        totalEdges: edges.length
-    };
+    return { nodes, links: filteredEdges.map(([src, tgt]) => ({ source: src, target: tgt })) };
 }
 
 // ---------- 数据转换 ----------
 function transformData(raw) {
     if (raw.nodes && raw.links) {
-        return { nodes: raw.nodes, links: raw.links };
+        const nodes = raw.nodes.map(n => ({ id: String(n.id), type: n.type || 'class' }));
+        const links = raw.links.map(l => ({
+            source: String(l.source),
+            target: String(l.target)
+        }));
+        return { nodes, links };
     }
+    // 兼容其他结构
     if (raw.classInfoMap && raw.graph) {
         const nodes = Object.keys(raw.classInfoMap).map(id => {
             const info = raw.classInfoMap[id];
@@ -99,27 +151,43 @@ function transformData(raw) {
         }
         return { nodes, links };
     }
+    console.warn('未知数据结构，使用模拟数据');
     return generateMockData();
 }
 
 // ---------- 渲染 3D 图 ----------
 function renderGraph(data) {
     if (forceGraph) {
-        forceGraph._destructor();
+        try { forceGraph._destructor(); } catch (e) { /* ignore */ }
         forceGraph = null;
     }
 
-    if (typeof ForceGraph3D !== 'function') {
+    const rect = container.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+        container.style.width = '100vw';
+        container.style.height = '100vh';
+        if (container.getBoundingClientRect().width === 0) {
+            container.style.width = window.innerWidth + 'px';
+            container.style.height = window.innerHeight + 'px';
+        }
+    }
+
+    if (typeof window.ForceGraph3D !== 'function') {
         console.error('ForceGraph3D 未定义');
         loadingText.textContent = '3D 库加载失败，请刷新重试';
+        loadingError.style.display = 'block';
+        loadingError.textContent = '请检查网络或刷新页面';
         return;
     }
 
     try {
-        forceGraph = ForceGraph3D()(container);
+        const Graph = window.ForceGraph3D;
+        forceGraph = Graph()(container);
     } catch (e) {
         console.error('初始化 3D 图失败', e);
         loadingText.textContent = '初始化 3D 图失败，请刷新重试';
+        loadingError.style.display = 'block';
+        loadingError.textContent = e.message || '未知错误';
         return;
     }
 
@@ -132,95 +200,72 @@ function renderGraph(data) {
         .linkDirectionalParticles(1)
         .linkDirectionalParticleSpeed(0.01)
         .backgroundColor(0x0a0f1a)
-        .onNodeClick((node, event) => {
+        .onNodeClick((node) => {
             if (!node) return;
-            const graphData = forceGraph.graphData();
-            const nodes = graphData.nodes;
-            nodes.forEach(n => { n.color = undefined; });
-            const target = nodes.find(n => n.id === node.id);
+            const gd = forceGraph.graphData();
+            gd.nodes.forEach(n => n.color = undefined);
+            const target = gd.nodes.find(n => n.id === node.id);
             if (target) target.color = '#ff6b6b';
-            forceGraph.graphData(graphData);
+            forceGraph.graphData(gd);
         });
 
-    forceGraph.cameraPosition({ x: 25, y: 20, z: 25 });
+    const cameraDist = Math.max(30, Math.log10(data.nodes.length) * 15);
+    forceGraph.cameraPosition({ x: cameraDist, y: cameraDist * 0.8, z: cameraDist });
 
     nodeCountSpan.textContent = data.nodes.length;
     edgeCountSpan.textContent = data.links.length;
 
     loadingOverlay.classList.add('hidden');
     setTimeout(() => { loadingOverlay.style.display = 'none'; }, 500);
+
+    console.log(`✅ 3D 图渲染成功，节点数: ${data.nodes.length}, 边数: ${data.links.length}`);
 }
 
-// ---------- 侧边栏切换 ----------
-function initSidebar() {
-    const navItems = document.querySelectorAll('.nav-item');
-    const panes = {
-        dependency: document.getElementById('tab-dependency'),
-        scene2: document.getElementById('tab-scene2'),
-        scene3: document.getElementById('tab-scene3')
-    };
+// ---------- 主加载函数 ----------
+async function loadGraph(className = '') {
+    loadingOverlay.style.display = 'flex';
+    loadingOverlay.classList.remove('hidden');
+    loadingText.textContent = '正在获取依赖数据...';
+    loadingError.style.display = 'none';
 
-    navItems.forEach(item => {
-        item.addEventListener('click', () => {
-            // 更新 active 状态
-            navItems.forEach(n => n.classList.remove('active'));
-            item.classList.add('active');
-
-            // 切换 pane
-            const tab = item.dataset.tab;
-            Object.keys(panes).forEach(key => {
-                const pane = panes[key];
-                if (key === tab) {
-                    pane.classList.add('active');
-                } else {
-                    pane.classList.remove('active');
-                }
-            });
-
-            // 如果是依赖分析 tab，且 forceGraph 未初始化，则重新初始化（或 resize）
-            if (tab === 'dependency' && forceGraph) {
-                // 可以触发 resize 来适应容器
-                setTimeout(() => {
-                    if (forceGraph) forceGraph._destructor();
-                    // 重新获取数据并渲染
-                    init();
-                }, 100);
-            }
-        });
-    });
-}
-
-// ---------- 启动 ----------
-async function init() {
     try {
-        loadingText.textContent = '正在获取依赖数据...';
-        const raw = await fetchDependencyData();
+        const raw = await fetchDependencyData(className);
         const graphData = transformData(raw);
         renderGraph(graphData);
     } catch (err) {
-        console.error('初始化失败', err);
+        console.error('加载失败', err);
         loadingText.textContent = '加载失败，请刷新重试';
         loadingError.style.display = 'block';
         loadingError.textContent = err.message || '未知错误';
-        try {
-            const mock = generateMockData();
-            renderGraph(mock);
-        } catch (e) {
-            loadingError.textContent += ' (模拟数据也失败)';
-        }
     }
 }
 
-// ---------- 页面加载后执行 ----------
-if (document.readyState === 'complete') {
-    initSidebar();
-    init();
-} else {
-    window.addEventListener('load', () => {
-        initSidebar();
-        init();
+// ---------- 初始化 ----------
+async function init() {
+    await populateClassSelector();
+    // 默认加载全部
+    await loadGraph('');
+
+    // 绑定刷新按钮
+    refreshBtn.addEventListener('click', () => {
+        const selected = classSelector.value;
+        loadGraph(selected);
+    });
+
+    // 也可以监听选择变化自动刷新（可选）
+    classSelector.addEventListener('change', () => {
+        // 可以取消注释实现自动刷新
+        // const selected = classSelector.value;
+        // loadGraph(selected);
     });
 }
 
+// 页面加载完成后初始化
+if (document.readyState === 'complete') {
+    init();
+} else {
+    window.addEventListener('load', init);
+}
+
 // 暴露重新加载函数
-window.reload3DGraph = init;
+window.reload3DGraph = loadGraph;

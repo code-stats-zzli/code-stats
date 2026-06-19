@@ -13,12 +13,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
-/**
- * 依赖分析阶段：并行分析文件列表，构建完整的依赖图
- * 修复：增加超时控制和健壮的中断处理
- */
 public class DependencyAnalysisStage implements Stage<List<Path>, DependencyResult> {
     private static final Logger log = LoggerFactory.getLogger(DependencyAnalysisStage.class);
 
@@ -38,7 +33,6 @@ public class DependencyAnalysisStage implements Stage<List<Path>, DependencyResu
 
         long startTime = System.currentTimeMillis();
 
-        // 并行分析每个文件
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
         List<Future<ExtractedResult>> futures = new ArrayList<>();
 
@@ -48,32 +42,29 @@ public class DependencyAnalysisStage implements Stage<List<Path>, DependencyResu
                     return extractor.extract(file);
                 } catch (IOException e) {
                     log.error("解析文件失败: {}", file, e);
-                    return new ExtractedResult(null, Collections.emptySet(), null);
+                    return null;  // 返回 null 表示失败
                 }
             }));
         }
 
-        // 合并结果
         Map<String, ClassInfo> allClassInfo = new HashMap<>();
         DependencyGraph globalGraph = new DependencyGraph();
 
-        // 增加超时控制，避免无限等待
         int totalTasks = futures.size();
         int completed = 0;
         for (Future<ExtractedResult> future : futures) {
             try {
-                // 每个任务最多等待 30 秒，防止单个文件卡死
                 ExtractedResult result = future.get(30, TimeUnit.SECONDS);
                 completed++;
-                if (result.getClassInfo() != null) {
+                if (result != null && result.getClassInfo() != null) {
                     ClassInfo info = result.getClassInfo();
                     allClassInfo.put(info.getFullyQualifiedName(), info);
                     for (String dep : result.getDependencies()) {
+                        // ★ 防御：addDependency 内部已做 null 检查
                         globalGraph.addDependency(info.getFullyQualifiedName(), dep);
                     }
                 }
             } catch (InterruptedException e) {
-                // 线程被中断，停止等待并退出
                 Thread.currentThread().interrupt();
                 log.warn("依赖分析被中断，已处理 {}/{} 个文件", completed, totalTasks);
                 break;
@@ -81,12 +72,11 @@ public class DependencyAnalysisStage implements Stage<List<Path>, DependencyResu
                 log.error("解析任务执行异常", e);
             } catch (TimeoutException e) {
                 log.warn("单个文件解析超时 (30s)，已处理 {}/{} 个文件", completed, totalTasks);
-                future.cancel(true); // 取消该任务
+                future.cancel(true);
             }
         }
 
-        // 关闭线程池并等待所有任务结束（剩余任务将被中断）
-        executor.shutdownNow(); // 立即中断未完成的任务
+        executor.shutdownNow();
         try {
             if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
                 log.warn("线程池未在 5 秒内完全终止");

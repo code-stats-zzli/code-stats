@@ -6,7 +6,8 @@ const iframe = document.getElementById('sceneFrame');
 const pageMap = {
     modules: '../modules/modules.html',
     barchart: '../barchart/barchart.html',
-    callchain: '../callchain/callchain.html'
+    callchain: '../callchain/callchain.html',
+    trace: '../trace/trace.html'   // 新增动态调用链
 };
 
 // 切换页签

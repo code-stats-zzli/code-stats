@@ -86,4 +86,95 @@ public class ThreeDController {
             return JsonUtil.toJson(err);
         }
     }
+
+    // ==================== 新增：动态调用链追踪（模拟） ====================
+    /**
+     * 获取模拟的调用链追踪数据（用于流光动画）
+     * GET /3d/api/trace
+     * 返回示例：包含节点、边、路径顺序、总耗时
+     */
+    @RequestMapping("/trace")
+    @ResponseBody
+    public String getTrace() {
+        // 模拟调用链（按顺序）
+        List<String> tracePath = Arrays.asList(
+                "Bootstrap",
+                "SpringApplication",
+                "Catalina",
+                "Connector",
+                "Request",
+                "Response",
+                "DispatcherServlet",
+                "HandlerMapping",
+                "ParamBinder",
+                "AgentController",
+                "AIChatService",
+                "JdbcTemplate",
+                "DataSourceUtils",
+                "SimpleDataSource",
+                "PooledConnection"
+        );
+
+        // 节点定义（名称、类型、颜色）
+        List<Map<String, Object>> nodes = new ArrayList<>();
+        Map<String, String> colorMap = new HashMap<>();
+        colorMap.put("Bootstrap", "#4da6ff");
+        colorMap.put("SpringApplication", "#4da6ff");
+        colorMap.put("Catalina", "#4da6ff");
+        colorMap.put("Connector", "#4da6ff");
+        colorMap.put("Request", "#4da6ff");
+        colorMap.put("Response", "#4da6ff");
+        colorMap.put("DispatcherServlet", "#4da6ff");
+        colorMap.put("HandlerMapping", "#4da6ff");
+        colorMap.put("ParamBinder", "#4da6ff");
+        colorMap.put("AgentController", "#22c55e");
+        colorMap.put("AIChatService", "#22c55e");
+        colorMap.put("JdbcTemplate", "#f59e0b");
+        colorMap.put("DataSourceUtils", "#f59e0b");
+        colorMap.put("SimpleDataSource", "#f59e0b");
+        colorMap.put("PooledConnection", "#f59e0b");
+
+        // 计算节点位置（分层：前5个在y=4，中间5个在y=0，最后5个在y=-4，水平均匀分布）
+        int total = tracePath.size();
+        double spacingX = 3.0;
+        for (int i = 0; i < total; i++) {
+            String name = tracePath.get(i);
+            Map<String, Object> node = new LinkedHashMap<>();
+            node.put("id", name);
+            node.put("label", name);
+            // 根据索引分配层级
+            double y;
+            if (i < 5) y = 4;
+            else if (i < 10) y = 0;
+            else y = -4;
+            // 水平位置居中
+            double x = (i - (total - 1) / 2.0) * spacingX;
+            double z = 0;
+            node.put("x", x);
+            node.put("y", y);
+            node.put("z", z);
+            node.put("color", colorMap.getOrDefault(name, "#94a3b8"));
+            node.put("type", i < 5 ? "controller" : (i < 10 ? "service" : "mapper"));
+            nodes.add(node);
+        }
+
+        // 边：按顺序连接相邻节点
+        List<Map<String, String>> links = new ArrayList<>();
+        for (int i = 0; i < total - 1; i++) {
+            Map<String, String> link = new HashMap<>();
+            link.put("source", tracePath.get(i));
+            link.put("target", tracePath.get(i + 1));
+            links.add(link);
+        }
+
+        // 随机生成总耗时（100-500ms），用于粒子速度模拟
+        long durationMs = 100 + (long)(Math.random() * 400);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("nodes", nodes);
+        result.put("links", links);
+        result.put("tracePath", tracePath);
+        result.put("durationMs", durationMs);
+        return JsonUtil.toJson(result);
+    }
 }

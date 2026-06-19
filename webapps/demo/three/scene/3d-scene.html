@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D 场景中心</title>
+    <link rel="stylesheet" href="3d-scene.css" />
+
+    <!-- Import Map -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "../../lib/three.module.js",
+                "three/addons/": "../../lib/"
+            }
+        }
+    </script>
+
+    <!-- 3d-force-graph CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/3d-force-graph@1.77.0/dist/3d-force-graph.min.js">
+    </script>
+
+    <!-- 全局工具 -->
+    <script src="../../global.js"></script>
+</head>
+<body>
+<div id="app">
+    <!-- 左侧导航栏 -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h3>🌐 3D 场景</h3>
+        </div>
+        <ul class="nav-list">
+            <li class="nav-item active" data-tab="dependency">
+                <span class="icon">📊</span> 依赖分析
+            </li>
+            <li class="nav-item" data-tab="scene2">
+                <span class="icon">🔮</span> 场景二（预留）
+            </li>
+            <li class="nav-item" data-tab="scene3">
+                <span class="icon">🧩</span> 场景三（预留）
+            </li>
+        </ul>
+    </aside>
+
+    <!-- 右侧内容区 -->
+    <main class="content">
+        <!-- 依赖分析 Tab -->
+        <div id="tab-dependency" class="tab-pane active">
+            <div id="graph-container">
+                <!-- 加载遮罩 -->
+                <div id="loading-overlay">
+                    <div class="spinner"></div>
+                    <div id="loading-text">正在加载依赖数据...</div>
+                    <div id="loading-error" class="error-msg" style="display:none;"></div>
+                </div>
+
+                <!-- 信息栏 -->
+                <div class="info-bar">
+                    <strong>🌐 3D 依赖图谱</strong> &nbsp;·&nbsp;
+                    <span id="node-count">0</span> 个节点 &nbsp;·&nbsp;
+                    <span id="edge-count">0</span> 条边
+                </div>
+
+                <!-- 图例 -->
+                <div class="legend">
+                    <div class="legend-item"><span class="legend-color class"></span> 类 (Class)</div>
+                    <div class="legend-item"><span class="legend-color interface"></span> 接口 (Interface)</div>
+                    <div class="legend-item"><span class="legend-color enum"></span> 枚举 (Enum)</div>
+                    <div class="legend-item"><span class="legend-color edge"></span> 依赖关系</div>
+                </div>
+
+                <div class="control-hint">🖱 滚轮缩放 · 拖拽旋转 · 点击节点高亮</div>
+            </div>
+        </div>
+
+        <!-- 预留其他 Tab 内容 -->
+        <div id="tab-scene2" class="tab-pane">
+            <div class="placeholder-content">
+                <h2>🔮 场景二</h2>
+                <p>此区域预留用于其他 3D 可视化内容，您可以根据需要扩展。</p>
+            </div>
+        </div>
+        <div id="tab-scene3" class="tab-pane">
+            <div class="placeholder-content">
+                <h2>🧩 场景三</h2>
+                <p>此区域预留用于更多 3D 场景。</p>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script type="module" src="3d-scene.js"></script>
+</body>
+</html>

@@ -1,0 +1,271 @@
+Three.js 与 3d-force-graph 手动部署指南
+一、准备工作
+Node.js 环境（建议 v16+，仅用于 npm 下载，后续可删除）
+
+项目根目录：假设为 /your-project/
+
+目标目录：/your-project/webapps/demo/three/
+
+二、创建目录结构
+在项目根目录下执行：
+
+bash
+mkdir -p webapps/demo/three/lib/controls
+mkdir -p webapps/demo/three/lib/renderers
+mkdir -p webapps/demo/three/core
+mkdir -p webapps/demo/three/modules
+最终目录结构：
+
+text
+webapps/demo/three/
+├── lib/
+│   ├── three.module.js
+│   ├── controls/
+│   │   └── OrbitControls.js
+│   ├── renderers/
+│   │   └── CSS2DRenderer.js
+│   └── 3d-force-graph.es.js
+├── core/
+│   ├── ThreeModuleManager.js
+│   └── BaseModule.js
+└── modules/
+    └── Dependency3DModule.js
+三、下载 Three.js 核心库（v0.160.0）
+方式 A：通过 npm 下载（推荐，保证版本一致）
+bash
+# 1. 初始化临时 package.json（若还没有）
+npm init -y
+
+# 2. 安装指定版本
+npm install three@0.160.0
+
+# 3. 复制核心库
+cp node_modules/three/build/three.module.js webapps/demo/three/lib/
+
+# 4. 复制 OrbitControls
+cp node_modules/three/examples/jsm/controls/OrbitControls.js webapps/demo/three/lib/controls/
+
+# 5. 复制 CSS2DRenderer
+cp node_modules/three/examples/jsm/renderers/CSS2DRenderer.js webapps/demo/three/lib/renderers/
+
+# 6. （可选）清理 node_modules 以节省空间
+rm -rf node_modules package-lock.json
+方式 B：完全手动下载（无需 npm）
+访问 Three.js 官网：https://threejs.org/build/three.module.js
+
+右键 → "另存为" → 保存到 webapps/demo/three/lib/three.module.js
+
+下载 OrbitControls：
+
+访问：https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js
+
+保存到 webapps/demo/three/lib/controls/OrbitControls.js
+
+下载 CSS2DRenderer：
+
+访问：https://unpkg.com/three@0.160.0/examples/jsm/renderers/CSS2DRenderer.js
+
+保存到 webapps/demo/three/lib/renderers/CSS2DRenderer.js
+
+四、下载 3d-force-graph
+方式 A：通过 npm
+bash
+npm install 3d-force-graph
+
+# 复制主文件
+cp node_modules/3d-force-graph/dist/3d-force-graph.es.js webapps/demo/three/lib/
+
+# 清理（可选）
+rm -rf node_modules package-lock.json
+方式 B：手动下载
+访问：https://unpkg.com/3d-force-graph/dist/3d-force-graph.es.js
+
+右键 → "另存为" → 保存到 webapps/demo/three/lib/3d-force-graph.es.js
+
+五、创建自定义模块文件
+如果 core/ 和 modules/ 目录下的文件尚未存在，请手动创建：
+
+core/ThreeModuleManager.js
+javascript
+// ThreeModuleManager.js - 模块管理核心
+export class ThreeModuleManager {
+  constructor(scene, camera, renderer) {
+    this.scene = scene;
+    this.camera = camera;
+    this.renderer = renderer;
+    this.modules = new Map();
+  }
+
+  registerModule(name, module) {
+    this.modules.set(name, module);
+    module.init(this.scene, this.camera, this.renderer);
+  }
+
+  getModule(name) {
+    return this.modules.get(name);
+  }
+
+  update(time) {
+    for (const [_, module] of this.modules) {
+      if (module.update) module.update(time);
+    }
+  }
+}
+core/BaseModule.js
+javascript
+// BaseModule.js - 模块基类
+export class BaseModule {
+  constructor() {
+    this.scene = null;
+    this.camera = null;
+    this.renderer = null;
+  }
+
+  init(scene, camera, renderer) {
+    this.scene = scene;
+    this.camera = camera;
+    this.renderer = renderer;
+    this.setup();
+  }
+
+  setup() {
+    // 由子类重写
+  }
+
+  update(time) {
+    // 由子类重写
+  }
+
+  dispose() {
+    // 由子类重写
+  }
+}
+modules/Dependency3DModule.js
+javascript
+// Dependency3DModule.js - 3D 依赖图模块
+import { BaseModule } from '../core/BaseModule.js';
+
+export class Dependency3DModule extends BaseModule {
+  setup() {
+    // 在此初始化 3d-force-graph 或自定义逻辑
+    console.log('Dependency3DModule initialized');
+  }
+
+  update(time) {
+    // 每帧更新逻辑
+  }
+}
+六、验证安装
+创建一个测试 HTML 文件 webapps/demo/index.html：
+
+html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Three.js 测试</title>
+  <style>body { margin: 0; overflow: hidden; }</style>
+</head>
+<body>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./three/lib/three.module.js",
+    "three/addons/": "./three/lib/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// 场景
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x111122);
+
+// 相机
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(2, 2, 5);
+
+// WebGL渲染器
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// CSS2D渲染器（用于标签）
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(window.innerWidth, window.innerHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0px';
+labelRenderer.domElement.style.left = '0px';
+labelRenderer.domElement.style.pointerEvents = 'none';
+document.body.appendChild(labelRenderer.domElement);
+
+// 控制器
+const controls = new OrbitControls(camera, renderer.domElement);
+
+// 添加一个测试物体
+const geometry = new THREE.BoxGeometry(1, 1, 1);
+const material = new THREE.MeshBasicMaterial({ color: 0x00ff88, wireframe: true });
+const cube = new THREE.Mesh(geometry, material);
+scene.add(cube);
+
+// 动画循环
+function animate() {
+  requestAnimationFrame(animate);
+  cube.rotation.x += 0.01;
+  cube.rotation.y += 0.01;
+  controls.update();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+}
+animate();
+
+// 窗口自适应
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  labelRenderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+console.log('✅ Three.js 加载成功！');
+</script>
+</body>
+</html>
+七、启动验证
+使用任意静态服务器（如 VS Code Live Server 或 Python HTTP Server）：
+
+bash
+# Python 3
+cd webapps/demo
+python3 -m http.server 8080
+
+# 或使用 Node.js serve
+npx serve .
+浏览器访问 http://localhost:8080，看到一个旋转的线框立方体即表示部署成功。
+
+八、故障排查
+问题	解决方案
+Failed to resolve module specifier "three"	检查 importmap 中的路径是否正确
+OrbitControls is not a constructor	检查文件是否完整下载，版本是否为 0.160.0
+页面空白	打开浏览器开发者工具 → Console 查看具体报错
+3d-force-graph 加载失败	确保 3d-force-graph.es.js 已复制到 lib/ 目录
+九、完整文件清单（核对用）
+text
+webapps/demo/three/
+├── lib/
+│   ├── three.module.js          ✅ (~620KB)
+│   ├── controls/
+│   │   └── OrbitControls.js     ✅ (~30KB)
+│   ├── renderers/
+│   │   └── CSS2DRenderer.js    ✅ (~12KB)
+│   └── 3d-force-graph.es.js    ✅ (~150KB)
+├── core/
+│   ├── ThreeModuleManager.js    ✅ (手动创建)
+│   └── BaseModule.js           ✅ (手动创建)
+└── modules/
+    └── Dependency3DModule.js   ✅ (手动创建)
+如需使用 3d-force-graph 的完整示例，或遇到其他兼容性问题，随时告诉我，我可以为您补充相应的适配代码。

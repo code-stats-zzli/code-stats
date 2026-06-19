@@ -38,6 +38,11 @@
         <button class="topbar-tab" data-tab="apiexplorer">
             <span class="tab-icon">🔌</span> API 调试
         </button>
+        <!-- ======== 新增 3D 依赖图选项卡 ======== -->
+        <button class="topbar-tab" data-tab="3d">
+            <span class="tab-icon">🌐</span> 3D 依赖图
+        </button>
+        <!-- ======================================= -->
     </nav>
     <div class="topbar-status" id="topbarStatus">
         <span class="status-dot"></span>
@@ -65,8 +70,14 @@
         <iframe id="iframeOpensource" src="opensource/opensource.html" title="开源工具" class="panel-iframe"></iframe>
     </div>
     <div class="tab-panel" id="panel-apiexplorer">
-        <iframe src="apiexplorer/index.html" class="panel-iframe" title="API 调试"></iframe>
+        <iframe src="apiexplorer/index.html" class="panel-iframe" title="API调试"></iframe>
     </div>
+    <!-- ======== 新增 3D 依赖图面板 ======== -->
+    <!-- 对应的 panel -->
+    <div class="tab-panel" id="panel-3d">
+        <iframe src="three/scene/3d-scene.html" class="panel-iframe" title="3D场景"></iframe>
+    </div>
+    <!-- =================================== -->
 </main>
 
 <div class="toast-container" id="toastContainer"></div>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D 代码依赖图谱 - CodeStats</title>
+    <!-- 引入外部 CSS -->
+    <link rel="stylesheet" href="dependency-graph.css" />
+
+    <!-- Import Map：指向本地的 Three.js 库 -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "../../lib/three.module.js",
+                "three/addons/": "../../lib/"
+            }
+        }
+    </script>
+
+    <!-- 3d-force-graph 从 CDN 加载 -->
+    <script src="https://cdn.jsdelivr.net/npm/3d-force-graph@1.77.0/dist/3d-force-graph.min.js">
+    </script>
+
+    <!-- 全局工具（提供 window.apiUrl） -->
+    <script src="../../global.js"></script>
+</head>
+<body>
+<div id="graph-container">
+    <!-- 加载遮罩 -->
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div id="loading-text">正在加载依赖数据...</div>
+        <div id="loading-error" class="error-msg" style="display:none;"></div>
+    </div>
+
+    <!-- 信息栏 -->
+    <div class="info-bar">
+        <strong>🌐 3D 依赖图谱</strong> &nbsp;·&nbsp;
+        <span id="node-count">0</span> 个节点 &nbsp;·&nbsp;
+        <span id="edge-count">0</span> 条边
+    </div>
+
+    <!-- 图例 -->
+    <div class="legend">
+        <div class="legend-item"><span class="legend-color class"></span> 类 (Class)</div>
+        <div class="legend-item"><span class="legend-color interface"></span> 接口 (Interface)</div>
+        <div class="legend-item"><span class="legend-color enum"></span> 枚举 (Enum)</div>
+        <div class="legend-item"><span class="legend-color edge"></span> 依赖关系</div>
+    </div>
+
+    <div class="control-hint">🖱 滚轮缩放 · 拖拽旋转 · 点击节点高亮</div>
+</div>
+
+<!-- 引入外部 JS -->
+<script type="module" src="dependency-graph.js"></script>
+</body>
+</html>

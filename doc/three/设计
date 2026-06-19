@@ -1,0 +1,71 @@
+一、设计文档
+1.1 概述
+在 CodeStats 平台中集成 Three.js，实现 3D 数据可视化模块。通过统一的管理器按需加载不同可视化模块（依赖图、目录树、统计图表等），与现有后端 API 无缝衔接，不破坏原有页面结构。
+
+1.2 架构
+ThreeModuleManager：全局管理器，负责加载 Three.js 核心库、管理模块生命周期、切换模块。
+
+BaseModule：所有 3D 模块的基类，定义 init、show、hide、resize、destroy 等标准接口。
+
+具体模块：继承 BaseModule，实现特定可视化逻辑（如 Dependency3DModule 使用力导向图展示类依赖）。
+
+容器：在需要展示 3D 的页面（如 codeStats.html）中预留 <div id="three-container"></div>，由管理器渲染。
+
+1.3 模块接口
+javascript
+class BaseModule {
+  constructor(container) { this.container = container; }
+  async init(config) { /* 加载资源，构建场景 */ }
+  show() { /* 显示渲染器 */ }
+  hide() { /* 隐藏渲染器（保留场景） */ }
+  resize() { /* 响应容器尺寸变化 */ }
+  destroy() { /* 释放内存，移除DOM */ }
+}
+1.4 交互设计
+鼠标拖拽旋转场景（OrbitControls）
+
+点击节点触发回调，联动其他 UI 组件（如高亮表格行、打开编辑面板）
+
+悬停显示工具提示（使用 CSS2DRenderer 或 Raycaster）
+
+1.5 性能优化
+按需加载 Three.js 及扩展（ES Module 动态导入）
+
+场景复用：切换模块时清空场景对象，重用渲染器和相机
+
+对大数据集使用 InstancedMesh 或 LOD
+
+节流 resize 事件
+
+1.6 资源本地化
+将 Three.js 及其扩展下载到 webapps/demo/three/lib/ 目录，通过相对路径引用，减少 CDN 依赖。
+
+二、资源下载与本地替换
+2.1 下载 Three.js
+建议使用 npm 下载到项目目录，然后复制所需文件到 webapps/demo/three/lib/。
+
+bash
+# 在项目根目录执行
+npm install three@0.160.0
+# 复制核心库和扩展
+cp -r node_modules/three/build/three.module.js webapps/demo/three/lib/
+cp -r node_modules/three/examples/jsm/controls/OrbitControls.js webapps/demo/three/lib/controls/
+cp -r node_modules/three/examples/jsm/renderers/CSS2DRenderer.js webapps/demo/three/lib/renderers/
+# 若使用 3d-force-graph，同样下载
+npm install 3d-force-graph
+cp -r node_modules/3d-force-graph/dist/3d-force-graph.es.js webapps/demo/three/lib/
+2.2 目录结构
+text
+webapps/demo/three/
+├── lib/
+│   ├── three.module.js
+│   ├── controls/
+│   │   └── OrbitControls.js
+│   ├── renderers/
+│   │   └── CSS2DRenderer.js
+│   └── 3d-force-graph.es.js
+├── core/
+│   ├── ThreeModuleManager.js
+│   └── BaseModule.js
+└── modules/
+    └── Dependency3DModule.js

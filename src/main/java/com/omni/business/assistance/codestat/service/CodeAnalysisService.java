@@ -380,7 +380,7 @@ public class CodeAnalysisService {
     /**
      * 获取依赖分析结果对象（供内部使用，优先从缓存取）
      */
-    private DependencyResult getDependencyResult(Map<String, String> params) throws Exception {
+    public DependencyResult getDependencyResult(Map<String, String> params) throws Exception {
         String cacheKey = generateDependencyCacheKey(params);
         DependencyResult cached = dependencyCache.get(cacheKey);
         if (cached != null) {
@@ -414,4 +414,46 @@ public class CodeAnalysisService {
         resp.put("incoming", incoming);
         return resp;
     }
+
+    /**
+     * 获取供 3D 力导向图使用的节点和边数据
+     * @param params 分析参数（与依赖分析相同）
+     * @return 包含 nodes 和 links 的 Map
+     */
+    public Map<String, Object> getGraphDataFor3D(Map<String, String> params) throws Exception {
+        // 复用已有的依赖分析结果（带缓存）
+        DependencyResult result = getDependencyResult(params);
+
+        List<Map<String, String>> nodes = new ArrayList<>();
+        for (Map.Entry<String, ClassInfo> entry : result.getClassInfoMap().entrySet()) {
+            Map<String, String> node = new HashMap<>();
+            node.put("id", entry.getKey());
+            String type = entry.getValue().getType().name().toLowerCase();
+            node.put("type", type);
+            nodes.add(node);
+        }
+
+        List<Map<String, String>> links = new ArrayList<>();
+        DependencyGraph graph = result.getGraph();
+        for (String src : graph.getAllClasses()) {
+            for (String target : graph.getDependencies(src)) {
+                Map<String, String> link = new HashMap<>();
+                link.put("source", src);
+                link.put("target", target);
+                links.add(link);
+            }
+        }
+
+        Map<String, Object> graphData = new LinkedHashMap<>();
+        graphData.put("nodes", nodes);
+        graphData.put("links", links);
+        // 可选附带统计信息
+        graphData.put("totalClasses", result.getTotalClasses());
+        graphData.put("totalEdges", links.size());
+        return graphData;
+    }
+
+// 注意：getDependencyResult 是私有方法，需要将其可见性改为 private 或 protected，它已经存在。
+// 如果它不可见，请确保以下方法存在（已存在于您的代码中）：
+// private DependencyResult getDependencyResult(Map<String, String> params) throws Exception
 }

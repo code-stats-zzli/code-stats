@@ -7,7 +7,8 @@ const pageMap = {
     modules: '../modules/modules.html',
     barchart: '../barchart/barchart.html',
     callchain: '../callchain/callchain.html',
-    trace: '../trace/trace.html'   // 新增动态调用链
+    trace: '../trace/trace.html',
+    realtime: '../realtime/realtime-monitor.html'   // 新增
 };
 
 // 切换页签

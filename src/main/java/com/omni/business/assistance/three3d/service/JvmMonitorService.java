@@ -127,7 +127,84 @@ public class JvmMonitorService {
         requests.put("avgResponseTime", avgResponseTime);
         requests.put("recent", recentRequests);
         result.put("requests", requests);
+        result.put("threads", getAllThreadsInfo());
+        result.put("memory", getMemoryInfo());
+        result.put("pool", DataSourceUtils.getPoolStats());
+
+        // ★ 新增：线程详情（包含调用链）
+        result.put("threadDetails", getThreadDetails());
 
         return result;
+    }
+    // ======== JvmMonitorService.java 新增内容 ========
+
+
+    /**
+     * 获取所有线程的详细信息（包含调用链）
+     */
+    private List<Map<String, Object>> getThreadDetails() {
+        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+        long[] allThreadIds = threadMXBean.getAllThreadIds();
+        // 获取带堆栈的线程信息（最大深度 20）
+        ThreadInfo[] infos = threadMXBean.getThreadInfo(allThreadIds, 20);
+        Map<Long, TraceContextHolder.TraceContext> contextMap = TraceContextHolder.getAllContexts();
+        List<Map<String, Object>> details = new ArrayList<>();
+
+        for (ThreadInfo info : infos) {
+            if (info == null) continue;
+            Map<String, Object> item = new LinkedHashMap<>();
+            long tid = info.getThreadId();
+            item.put("threadId", tid);
+            item.put("threadName", info.getThreadName());
+            item.put("state", info.getThreadState().name());
+
+            // 匹配 TraceContext
+            TraceContextHolder.TraceContext ctx = contextMap.get(tid);
+            String callChain = null;
+            String status = "IDLE";
+            if (ctx != null) {
+                if (ctx.endTime == 0) {
+                    status = "RUNNING";
+                    callChain = ctx.nodePath != null ? ctx.nodePath : "Dispatcher";
+                } else {
+                    status = "COMPLETED";
+                    // 已完成也保留最后一次调用链（可选）
+                    callChain = ctx.nodePath != null ? ctx.nodePath : "Completed";
+                }
+            } else {
+                // 如果线程栈中包含我们感兴趣的业务类，也可以提取简化的调用链
+                // 这里简单起见，只显示前几个栈元素作为调用链
+                StackTraceElement[] stack = info.getStackTrace();
+                if (stack != null && stack.length > 0) {
+                    StringBuilder sb = new StringBuilder();
+                    int count = 0;
+                    for (StackTraceElement ste : stack) {
+                        String className = ste.getClassName();
+                        // 过滤掉框架内部类，只保留业务包
+                        if (className.startsWith("com.omni.business") || className.startsWith("com.omni.framework")) {
+                            if (count > 0) sb.append(" → ");
+                            sb.append(ste.getMethodName());
+                            count++;
+                            if (count >= 5) break;
+                        }
+                    }
+                    if (sb.length() > 0) {
+                        callChain = sb.toString();
+                    }
+                }
+            }
+            item.put("callChain", callChain != null ? callChain : "");
+            item.put("status", status);
+
+            // 对于 RUNNING 状态的线程，额外提供栈信息用于前端粒子动画（可选）
+            if ("RUNNING".equals(status) && callChain != null) {
+                // 可以拆分成节点列表
+                String[] nodes = callChain.split(" → ");
+                item.put("nodes", nodes);
+            }
+
+            details.add(item);
+        }
+        return details;
     }
 }

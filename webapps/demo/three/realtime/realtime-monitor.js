@@ -25,12 +25,12 @@ const toggleBtn = document.getElementById('toggleAutoRotate');
 
 // ----- Three.js 全局变量 -----
 let scene, camera, renderer, labelRenderer, controls;
-let threadGroup, memoryGroup, poolGroup, requestStatsGroup;
+let threadGroup, memoryGroup, poolGroup, requestStatsGroup, memoryRegionGroup, threadFlowGroup;
 let animationId = null;
 let autoRotate = true;
 let dataInterval = null;
-
 let currentData = null;
+let flowParticles = []; // 存储每个线程流的粒子系统
 
 // ----- 初始化场景 -----
 function initScene() {
@@ -78,14 +78,19 @@ function initScene() {
     gridHelper.position.y = -3;
     scene.add(gridHelper);
 
+    // 分组
     threadGroup = new THREE.Group();
     memoryGroup = new THREE.Group();
     poolGroup = new THREE.Group();
     requestStatsGroup = new THREE.Group();
+    memoryRegionGroup = new THREE.Group();
+    threadFlowGroup = new THREE.Group();
     scene.add(threadGroup);
     scene.add(memoryGroup);
     scene.add(poolGroup);
     scene.add(requestStatsGroup);
+    scene.add(memoryRegionGroup);
+    scene.add(threadFlowGroup);
 
     window.addEventListener('resize', onResize);
     loadingOverlay.classList.add('hidden');
@@ -109,7 +114,7 @@ function clearGroup(group) {
     }
 }
 
-// ----- 渲染线程柱状体 -----
+// ----- 渲染线程柱状体（原有）-----
 function renderThreads(data) {
     clearGroup(threadGroup);
     const states = data.states || {};
@@ -161,7 +166,7 @@ function renderThreads(data) {
     });
 }
 
-// ----- 渲染内存（环形图 + 细分区域） -----
+// ----- 渲染内存（环形图 + 细分区域）-----
 function renderMemory(data) {
     clearGroup(memoryGroup);
     const { heapUsed, heapMax, nonHeapUsed, pools } = data;
@@ -207,7 +212,7 @@ function renderMemory(data) {
         memoryGroup.add(cube);
     }
 
-    // 细分内存池（使用小立方体堆叠成环形）
+    // 细分内存池（环形小立方体）
     if (pools) {
         const poolNames = Object.keys(pools).filter(k => k.endsWith('.used'));
         const poolColors = [0x22d3ee, 0x60a5fa, 0x34d399, 0xfbbf24, 0xf472b6];
@@ -250,6 +255,87 @@ function renderMemory(data) {
     const label = new CSS2DObject(labelDiv);
     label.position.set(0, 0.5, 0);
     memoryGroup.add(label);
+}
+
+// ----- 渲染内存分区（新生代/老年代 3D 模型）-----
+function renderMemoryRegions(pools) {
+    clearGroup(memoryRegionGroup);
+    if (!pools) return;
+
+    // 从 pools 中提取各区域大小（单位 MB）
+    const edenUsed = (pools['Eden Space.used'] || 0) / (1024 * 1024);
+    const edenMax = (pools['Eden Space.max'] || 1) / (1024 * 1024);
+    const s0Used = (pools['Survivor Space.used'] || 0) / (1024 * 1024);
+    const s0Max = (pools['Survivor Space.max'] || 1) / (1024 * 1024);
+    const s1Used = (pools['Survivor Space.used'] || 0) / (1024 * 1024); // 通常 S0 和 S1 大小相同
+    const s1Max = (pools['Survivor Space.max'] || 1) / (1024 * 1024);
+    const oldUsed = (pools['Tenured Gen.used'] || 0) / (1024 * 1024);
+    const oldMax = (pools['Tenured Gen.max'] || 1) / (1024 * 1024);
+
+    // 比例因子（缩放至合适大小）
+    const scale = 0.8 / Math.max(edenMax, s0Max, s1Max, oldMax, 1);
+
+    // 创建区域
+    const regionData = [
+        { name: 'Eden', used: edenUsed, max: edenMax, color: 0x4fc3f7, y: 2 },
+        { name: 'S0', used: s0Used, max: s0Max, color: 0x4dd0e1, y: 0 },
+        { name: 'S1', used: s1Used, max: s1Max, color: 0x4dd0e1, y: -2 },
+        { name: 'Old', used: oldUsed, max: oldMax, color: 0x1a237e, y: -4 }
+    ];
+
+    const width = 2.0;
+    const depth = 1.5;
+    const maxHeight = 3.0;
+
+    regionData.forEach((r, idx) => {
+        const ratio = Math.min(1, r.used / r.max);
+        const height = Math.max(0.2, ratio * maxHeight);
+        const geo = new THREE.BoxGeometry(width, height, depth);
+        const mat = new THREE.MeshPhongMaterial({
+            color: r.color,
+            transparent: true,
+            opacity: 0.8,
+            emissive: new THREE.Color(r.color).multiplyScalar(0.2)
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        const x = (idx - 1.5) * 3.0;
+        mesh.position.set(x, height / 2 - 2, 0);
+        memoryRegionGroup.add(mesh);
+
+        // 边框
+        const edges = new THREE.EdgesGeometry(geo);
+        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 }));
+        line.position.copy(mesh.position);
+        memoryRegionGroup.add(line);
+
+        // 标签
+        const labelDiv = document.createElement('div');
+        labelDiv.textContent = `${r.name}\n${(r.used).toFixed(1)}MB / ${(r.max).toFixed(1)}MB`;
+        labelDiv.style.color = '#fff';
+        labelDiv.style.fontSize = '11px';
+        labelDiv.style.textAlign = 'center';
+        labelDiv.style.background = 'rgba(0,0,0,0.6)';
+        labelDiv.style.padding = '2px 6px';
+        labelDiv.style.borderRadius = '8px';
+        labelDiv.style.border = '1px solid rgba(255,255,255,0.2)';
+        labelDiv.style.whiteSpace = 'pre-line';
+        const label = new CSS2DObject(labelDiv);
+        label.position.set(x, height + 0.3 - 2, 0);
+        memoryRegionGroup.add(label);
+    });
+
+    // 添加算法说明
+    const algoDiv = document.createElement('div');
+    algoDiv.textContent = '新生代: 复制算法  |  老年代: 标记-整理';
+    algoDiv.style.color = '#94a3b8';
+    algoDiv.style.fontSize = '12px';
+    algoDiv.style.background = 'rgba(0,0,0,0.5)';
+    algoDiv.style.padding = '4px 12px';
+    algoDiv.style.borderRadius = '20px';
+    algoDiv.style.border = '1px solid rgba(255,255,255,0.1)';
+    const algoLabel = new CSS2DObject(algoDiv);
+    algoLabel.position.set(0, -5, 0);
+    memoryRegionGroup.add(algoLabel);
 }
 
 // ----- 渲染连接池蓄水池 -----
@@ -317,35 +403,236 @@ function renderPool(data) {
     poolGroup.add(label);
 }
 
-// ----- 渲染请求统计（CSS2D显示） -----
+// ----- 渲染请求统计（科技感面板）-----
 function renderRequestStats(data) {
     clearGroup(requestStatsGroup);
     if (!data) return;
 
     const { total, running, errors, avgResponseTime, recent } = data;
+    const errorRate = total > 0 ? (errors / total * 100).toFixed(1) : 0;
+
     const div = document.createElement('div');
-    div.style.color = '#e2e8f0';
-    div.style.fontSize = '13px';
-    div.style.background = 'rgba(0,0,0,0.6)';
-    div.style.padding = '12px 16px';
-    div.style.borderRadius = '16px';
-    div.style.border = '1px solid rgba(0,102,255,0.4)';
-    div.style.backdropFilter = 'blur(4px)';
-    div.style.maxWidth = '300px';
-    div.style.maxHeight = '200px';
-    div.style.overflowY = 'auto';
+    div.style.cssText = `
+        color: #e2e8f0;
+        font-size: 13px;
+        background: rgba(0,0,0,0.7);
+        backdrop-filter: blur(8px);
+        padding: 16px 20px;
+        border-radius: 16px;
+        border: 1px solid rgba(0,102,255,0.6);
+        box-shadow: 0 0 20px rgba(0,102,255,0.2);
+        min-width: 220px;
+        pointer-events: none;
+    `;
     div.innerHTML = `
-        <div><strong>📊 请求统计</strong></div>
-        <div>总请求: ${total}</div>
-        <div>运行中: ${running}</div>
-        <div>错误: ${errors}</div>
-        <div>平均响应: ${avgResponseTime}ms</div>
-        <div style="margin-top:8px;font-size:12px;">最近请求:</div>
-        ${recent ? recent.map(r => `<div style="border-bottom:1px solid #333;padding:4px 0;">${r.uri} (${r.duration}ms)${r.error ? ' ❌' : ''}</div>`).join('') : ''}
+        <div style="font-weight:600;color:#4da6ff;margin-bottom:10px;font-size:14px;">📊 请求统计</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">
+            <span>总请求</span><span style="color:#4da6ff;font-weight:600;">${total}</span>
+            <span>运行中</span><span style="color:#22c55e;font-weight:600;">${running}</span>
+            <span>错误</span><span style="color:#ef4444;font-weight:600;">${errors}</span>
+            <span>平均响应</span><span style="color:#fbbf24;font-weight:600;">${avgResponseTime}ms</span>
+        </div>
+        <div style="margin-top:8px;height:4px;background:#1e293b;border-radius:4px;overflow:hidden;">
+            <div style="width:${errorRate}%;height:100%;background:linear-gradient(90deg,#ef4444,#f59e0b);"></div>
+        </div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px;text-align:right;">错误率 ${errorRate}%</div>
+        ${recent && recent.length ? `<div style="margin-top:8px;font-size:11px;color:#94a3b8;border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;">最近: ${recent.slice(0,2).map(r => `${r.uri} (${r.duration}ms)`).join(' | ')}</div>` : ''}
     `;
     const label = new CSS2DObject(div);
     label.position.set(8, 2, 0);
     requestStatsGroup.add(label);
+}
+
+// ===================== 线程详情面板 =====================
+let threadPanel = null;
+
+function renderThreadDetails(threads) {
+    if (!threadPanel) {
+        const div = document.createElement('div');
+        div.id = 'threadPanel';
+        div.style.cssText = `
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 460px;
+            max-height: 60vh;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(8px);
+            border-radius: 16px;
+            border: 1px solid rgba(0,102,255,0.4);
+            padding: 12px 16px;
+            color: #e2e8f0;
+            font-size: 12px;
+            pointer-events: auto;
+            z-index: 10;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+        `;
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;';
+        header.innerHTML = `
+            <span style="font-weight:600;color:#4da6ff;">🧵 线程实时详情</span>
+            <button id="testCallChainBtn" style="background:#0066ff;color:#fff;border:none;border-radius:40px;padding:4px 16px;cursor:pointer;font-size:12px;">🚀 测试调用链</button>
+        `;
+        div.appendChild(header);
+        container.appendChild(div);
+        threadPanel = div;
+
+        document.getElementById('testCallChainBtn').addEventListener('click', async () => {
+            try {
+                const resp = await fetch(apiUrl('/3d/api/test-call-chain'));
+                const data = await resp.json();
+                statusSpan.textContent = data.message || '测试已触发';
+            } catch (err) {
+                statusSpan.textContent = '测试失败: ' + err.message;
+            }
+        });
+    }
+
+    // 按状态排序：BLOCKED > RUNNING > COMPLETED > 其他
+    const sorted = [...threads].sort((a, b) => {
+        const order = { 'BLOCKED': 0, 'RUNNING': 1, 'COMPLETED': 2 };
+        const sa = order[a.status] ?? 3;
+        const sb = order[b.status] ?? 3;
+        return sa - sb;
+    });
+    // 只显示前10条
+    const display = sorted.slice(0, 10);
+
+    let html = '';
+    display.forEach(t => {
+        const statusColor = t.status === 'RUNNING' ? '#22c55e' :
+            (t.status === 'COMPLETED' ? '#3b82f6' : '#94a3b8');
+        const chain = t.callChain || '—';
+        const nodes = t.nodes || [];
+        let chainHtml = '';
+        if (nodes.length > 0) {
+            chainHtml = `<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">
+                ${nodes.map(n => `<span style="background:rgba(0,102,255,0.2);padding:0 6px;border-radius:4px;">${n}</span>`).join(' → ')}
+                <span class="flow-particle" data-thread="${t.threadId}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff6b6b;animation:flowPulse 0.8s infinite;"></span>
+             </div>`;
+        } else if (chain !== '—') {
+            chainHtml = `<div style="margin-top:4px;font-size:11px;color:#94a3b8;">${chain}</div>`;
+        } else {
+            chainHtml = `<div style="margin-top:4px;font-size:11px;color:#64748b;">（空闲）</div>`;
+        }
+        html += `
+            <div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
+                <div style="display:flex;justify-content:space-between;">
+                    <span><strong>${t.threadName}</strong> (ID:${t.threadId})</span>
+                    <span style="color:${statusColor};font-weight:500;">${t.status}</span>
+                </div>
+                ${chainHtml}
+            </div>
+        `;
+    });
+    if (threads.length > 10) {
+        html += `<div style="text-align:center;color:#94a3b8;padding:4px;">... 还有 ${threads.length - 10} 条</div>`;
+    }
+
+    const contentDiv = document.createElement('div');
+    contentDiv.innerHTML = html;
+    while (threadPanel.children.length > 1) {
+        threadPanel.removeChild(threadPanel.lastChild);
+    }
+    threadPanel.appendChild(contentDiv);
+}
+
+// ===================== 线程 3D 流图（运行中/阻塞）=====================
+let flowParticlesList = [];
+let flowCurves = [];
+
+function renderThreadFlows(threads) {
+    // 清除旧的粒子流
+    clearGroup(threadFlowGroup);
+    flowParticlesList = [];
+    flowCurves = [];
+
+    const targetThreads = threads.filter(t => t.status === 'RUNNING' || t.status === 'BLOCKED');
+    if (targetThreads.length === 0) return;
+
+    // 为每个线程生成一条路径
+    targetThreads.forEach((t, idx) => {
+        const nodes = t.nodes || [];
+        if (nodes.length < 2) return;
+
+        // 构建三维坐标点（随机分布，避免重叠）
+        const baseX = (idx - targetThreads.length/2) * 4;
+        const baseY = 2 + Math.sin(idx) * 1.5;
+        const baseZ = 0;
+
+        const points = nodes.map((n, i) => {
+            const x = baseX + i * 2.5;
+            const y = baseY + Math.sin(i * 0.8) * 1.2;
+            const z = baseZ + Math.cos(i * 0.5) * 1.0;
+            return new THREE.Vector3(x, y, z);
+        });
+
+        // 创建平滑曲线
+        const curve = new THREE.CatmullRomCurve3(points);
+        flowCurves.push(curve);
+
+        // 创建流动粒子
+        const particleCount = 30;
+        const positions = new Float32Array(particleCount * 3);
+        const colors = new Float32Array(particleCount * 3);
+        const sizes = new Float32Array(particleCount);
+        const progresses = new Float32Array(particleCount);
+
+        const color = new THREE.Color().setHSL(idx / targetThreads.length, 0.8, 0.6);
+        for (let i = 0; i < particleCount; i++) {
+            progresses[i] = i / particleCount;
+            sizes[i] = 0.2 + Math.random() * 0.3;
+            colors[i*3] = color.r;
+            colors[i*3+1] = color.g;
+            colors[i*3+2] = color.b;
+        }
+
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+        const mat = new THREE.PointsMaterial({
+            size: 0.3,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            sizeAttenuation: true
+        });
+        const particleSystem = new THREE.Points(geo, mat);
+        particleSystem.userData = {
+            curve: curve,
+            progresses: progresses,
+            speed: 0.005 + Math.random() * 0.005,
+            offset: 0
+        };
+        threadFlowGroup.add(particleSystem);
+        flowParticlesList.push(particleSystem);
+    });
+}
+
+// 更新粒子位置（每帧调用）
+function updateFlowParticles() {
+    flowParticlesList.forEach(ps => {
+        const data = ps.userData;
+        if (!data) return;
+        data.offset += data.speed;
+        if (data.offset > 1) data.offset -= 1;
+
+        const positions = ps.geometry.attributes.position.array;
+        const count = data.progresses.length;
+        for (let i = 0; i < count; i++) {
+            let t = (data.progresses[i] + data.offset) % 1;
+            const point = data.curve.getPoint(t);
+            positions[i*3] = point.x;
+            positions[i*3+1] = point.y;
+            positions[i*3+2] = point.z;
+        }
+        ps.geometry.attributes.position.needsUpdate = true;
+    });
 }
 
 // ----- 更新所有场景 -----
@@ -356,12 +643,16 @@ function updateScene(data) {
     renderMemory(data.memory);
     renderPool(data.pool);
     renderRequestStats(data.requests);
+    renderMemoryRegions(data.memory.pools);
+    if (data.threadDetails) {
+        renderThreadDetails(data.threadDetails);
+        renderThreadFlows(data.threadDetails);
+    }
 }
 
-// ----- 从后端获取数据（✅ 修正接口路径）-----
+// ----- 从后端获取数据 -----
 async function fetchMonitorData() {
     try {
-        // ★★★ 修改点：路径从 /3d/api/jvm-data 改为 /3d/api/monitor-data ★★★
         const resp = await fetch(apiUrl('/3d/api/monitor-data'));
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
@@ -376,7 +667,7 @@ async function fetchMonitorData() {
     }
 }
 
-// ----- 模拟数据（仅演示，正常情况下不会触发）-----
+// ----- 模拟数据（仅演示）-----
 function generateMockData() {
     return {
         threads: {
@@ -409,7 +700,13 @@ function generateMockData() {
                 { uri: '/code/api/analyze', duration: 350, error: false },
                 { uri: '/dbclient/api/tables', duration: 80, error: true },
             ]
-        }
+        },
+        threadDetails: [
+            { threadId: 1, threadName: 'main', state: 'RUNNABLE', status: 'RUNNING', callChain: 'TestController.execute → TestService.step1 → TestService.step1_1', nodes: ['TestController.execute', 'TestService.step1', 'TestService.step1_1'] },
+            { threadId: 2, threadName: 'http-nio-8080-exec-1', state: 'WAITING', status: 'IDLE', callChain: '' },
+            { threadId: 3, threadName: 'pool-1-thread-1', state: 'RUNNABLE', status: 'COMPLETED', callChain: 'TestMapper.query → JdbcTemplate.execute', nodes: [] },
+            { threadId: 4, threadName: 'blocked-thread', state: 'BLOCKED', status: 'BLOCKED', callChain: 'synchronized-block', nodes: ['Lock.wait', 'synchronized'] },
+        ]
     };
 }
 
@@ -424,6 +721,7 @@ function startPolling() {
 function animate() {
     animationId = requestAnimationFrame(animate);
     controls.update();
+    updateFlowParticles();
     renderer.render(scene, camera);
     labelRenderer.render(scene, camera);
 }

@@ -1,7 +1,7 @@
 // ======== thread-flow-module.js ========
 // 功能：在右侧面板中显示调用链的节点（球体+标签），节点间连线，并带有流动粒子效果
 // 每个节点显示类/方法名称，支持鼠标悬停查看详情
-// 节点从左到右水平排列，优先显示最新的线程（按 startTime 降序），若无时间则保持原顺序
+// 节点从左到右水平排列，优先显示最新的线程（按 lastActiveTime 降序），若无时间则保持原顺序
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -362,12 +362,12 @@ export function initThreadFlow(container) {
         let sortedThreads = threads;
         if (threads && threads.length > 0) {
             // 检查是否有时间字段，如果有则按时间降序排序
-            // 优先使用 startTime，其次 timestamp，最后 lastActiveTime
-            const hasTime = threads.some(t => t.startTime !== undefined || t.timestamp !== undefined || t.lastActiveTime !== undefined);
+            // 优先使用 lastActiveTime，其次 startTime，最后 timestamp
+            const hasTime = threads.some(t => t.lastActiveTime !== undefined || t.startTime !== undefined || t.timestamp !== undefined);
             if (hasTime) {
                 sortedThreads = [...threads].sort((a, b) => {
-                    const timeA = a.startTime || a.timestamp || a.lastActiveTime || 0;
-                    const timeB = b.startTime || b.timestamp || b.lastActiveTime || 0;
+                    const timeA = a.lastActiveTime || a.startTime || a.timestamp || 0;
+                    const timeB = b.lastActiveTime || b.startTime || b.timestamp || 0;
                     return timeB - timeA; // 降序，最新的在前
                 });
             } else {

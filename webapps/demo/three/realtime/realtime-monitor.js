@@ -450,9 +450,9 @@ function renderThreadList(threads) {
         const priB = statusPriority[statusB] || 9;
         if (priA !== priB) return priA - priB;
 
-        // 同状态内按时间降序（最新在前）
-        const timeA = a.startTime || a.timestamp || a.lastActiveTime || 0;
-        const timeB = b.startTime || b.timestamp || b.lastActiveTime || 0;
+        // 同状态内按时间降序（最新在前），优先使用 lastActiveTime
+        const timeA = a.lastActiveTime || a.startTime || a.timestamp || 0;
+        const timeB = b.lastActiveTime || b.startTime || b.timestamp || 0;
         return timeB - timeA;
     });
 
@@ -502,8 +502,8 @@ function updateScene(data) {
             const priB = statusPriority[statusB] || 9;
             if (priA !== priB) return priA - priB;
 
-            const timeA = a.startTime || a.timestamp || a.lastActiveTime || 0;
-            const timeB = b.startTime || b.timestamp || b.lastActiveTime || 0;
+            const timeA = a.lastActiveTime || a.startTime || a.timestamp || 0;
+            const timeB = b.lastActiveTime || b.startTime || b.timestamp || 0;
             return timeB - timeA;
         });
     } else {
@@ -544,6 +544,7 @@ async function fetchMonitorData() {
 }
 
 function generateMockData() {
+    const now = Date.now();
     return {
         threads: {
             count: 30,
@@ -577,10 +578,10 @@ function generateMockData() {
             ]
         },
         threadDetails: [
-            { threadId: 1, threadName: 'main', status: 'RUNNING', callChain: 'TestController.execute → TestService.step1 → TestService.step1_1', nodes: ['TestController.execute', 'TestService.step1', 'TestService.step1_1'] },
-            { threadId: 2, threadName: 'http-nio-8080-exec-1', status: 'IDLE', callChain: '' },
-            { threadId: 3, threadName: 'pool-1-thread-1', status: 'COMPLETED', callChain: 'TestMapper.query → JdbcTemplate.execute', nodes: [] },
-            { threadId: 4, threadName: 'blocked-thread', status: 'BLOCKED', callChain: 'synchronized-block', nodes: ['Lock.wait', 'synchronized'] },
+            { threadId: 1, threadName: 'main', status: 'RUNNING', lastActiveTime: now - 100, callChain: 'TestController.execute → TestService.step1 → TestService.step1_1', nodes: ['TestController.execute', 'TestService.step1', 'TestService.step1_1'] },
+            { threadId: 2, threadName: 'http-nio-8080-exec-1', status: 'IDLE', lastActiveTime: now - 5000, callChain: '' },
+            { threadId: 3, threadName: 'pool-1-thread-1', status: 'COMPLETED', lastActiveTime: now - 2000, callChain: 'TestMapper.query → JdbcTemplate.execute', nodes: [] },
+            { threadId: 4, threadName: 'blocked-thread', status: 'BLOCKED', lastActiveTime: now - 50, callChain: 'synchronized-block', nodes: ['Lock.wait', 'synchronized'] },
         ]
     };
 }

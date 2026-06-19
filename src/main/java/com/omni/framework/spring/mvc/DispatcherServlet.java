@@ -7,10 +7,10 @@ import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.spring.beans.factory.ConfigurableListableBeanFactory;
 import com.omni.framework.spring.context.AbstractApplicationContext;
 import com.omni.framework.spring.context.SpringContextHolder;
-import com.omni.framework.tomcat.servlet.CachedBodyHttpServletRequest;
 import com.omni.framework.tomcat.servlet.HttpServlet;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
+import com.omni.framework.web.TraceContextHolder;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -93,9 +93,15 @@ public class DispatcherServlet extends HttpServlet {
         String query = req.getQueryString();
         log.info("收到请求: {} {} {}", method, uri, query != null ? "?" + query : "");
 
+        // ====== 埋点：记录请求开始 ======
+        long threadId = Thread.currentThread().getId();
+        TraceContextHolder.putContext(threadId, uri);
+        // ===============================
+
         RequestContextHolder.setRequest(req);
         ResponseContextHolder.setResponse(res);
         MultipartResolver multipartResolver = null;
+        Throwable requestError = null;
         try {
             for (HandlerMapping hm : handlerMappings) {
                 Pattern pattern = Pattern.compile(hm.regex);
@@ -128,6 +134,7 @@ public class DispatcherServlet extends HttpServlet {
             res.write("<h1>404 - Not Found</h1>");
             res.send();
         } catch (Throwable e) {
+            requestError = e;
             // 专门处理客户端过早断开连接
             if (e instanceof SocketException) {
                 String msg = e.getMessage();
@@ -137,7 +144,6 @@ public class DispatcherServlet extends HttpServlet {
                 }
             }
             log.error("处理请求失败: {} {}", method, uri, e);
-            // 如果响应尚未提交，尝试返回错误页面
             if (!res.isCommitted()) {
                 try {
                     res.setStatus(500, "Internal Server Error");
@@ -148,6 +154,12 @@ public class DispatcherServlet extends HttpServlet {
                 }
             }
         } finally {
+            // ====== 埋点：记录请求结束 ======
+            String errorMsg = requestError != null ? requestError.getMessage() : null;
+            TraceContextHolder.updateContext(threadId, errorMsg, null);
+            // 注意：不立即删除，供监控服务读取（可设置超时清理）
+            // ===============================
+
             if (multipartResolver != null) {
                 multipartResolver.close();
             }
@@ -156,66 +168,7 @@ public class DispatcherServlet extends HttpServlet {
         }
     }
 
-    private void logRequestDetails(HttpServletRequest req) {
-        log.info(req.getRequestURI());
-        if (!log.isDebugEnabled()) {
-            return;
-        }
-        StringBuilder sb = new StringBuilder("\n========== HTTP Request ==========\n");
-        sb.append("Method : ").append(req.getMethod()).append("\n");
-        sb.append("URI    : ").append(req.getRequestURI()).append("\n");
-        String query = req.getQueryString();
-        sb.append("Query  : ").append(query != null ? query : "").append("\n");
-        sb.append("Headers:\n");
-        Enumeration<String> headerNames = req.getHeaderNames();
-        if (headerNames != null) {
-            while (headerNames.hasMoreElements()) {
-                String name = headerNames.nextElement();
-                Enumeration<String> values = req.getHeaders(name);
-                while (values.hasMoreElements()) {
-                    sb.append("  ").append(name).append(": ").append(values.nextElement()).append("\n");
-                }
-            }
-        }
-        sb.append("Parameters:\n");
-        Map<String, String[]> paramMap = req.getParameterMap();
-        if (paramMap != null && !paramMap.isEmpty()) {
-            paramMap.forEach((key, values) ->
-                    sb.append("  ").append(key).append(": ").append(Arrays.toString(values)).append("\n"));
-        } else {
-            sb.append("  (none)\n");
-        }
-        String body = safeReadBody(req);
-        if (body != null && !body.isEmpty()) {
-            sb.append("Body:\n").append(body).append("\n");
-        }
-        sb.append("==================================\n");
-        log.debug(sb.toString());
-    }
-
-    private String safeReadBody(HttpServletRequest req) {
-        String method = req.getMethod();
-        if (!"POST".equalsIgnoreCase(method) && !"PUT".equalsIgnoreCase(method) && !"PATCH".equalsIgnoreCase(method)) {
-            return null;
-        }
-        String contentType = req.getContentType();
-        if (contentType != null && contentType.startsWith("multipart/form-data")) {
-            return "[multipart content, not logged]";
-        }
-        try {
-            BufferedReader reader = req.getReader();
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line).append("\n");
-            }
-            return sb.toString();
-        } catch (Exception e) {
-            log.warn("Failed to read request body for logging", e);
-            return "[unreadable]";
-        }
-    }
-
+    // ---------- 原有辅助方法（保持不变） ----------
     private String toJson(Object obj) {
         if (obj == null) return "null";
         if (obj instanceof String) return "\"" + escapeJson((String) obj) + "\"";

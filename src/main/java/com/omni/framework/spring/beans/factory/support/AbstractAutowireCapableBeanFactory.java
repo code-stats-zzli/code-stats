@@ -1,6 +1,5 @@
 package com.omni.framework.spring.beans.factory.support;
 
-
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Primary;
 import com.omni.framework.spring.annotation.Qualifier;

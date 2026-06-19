@@ -25,17 +25,12 @@ const toggleBtn = document.getElementById('toggleAutoRotate');
 
 // ----- Three.js 全局变量 -----
 let scene, camera, renderer, labelRenderer, controls;
-let threadGroup, memoryGroup, poolGroup;
+let threadGroup, memoryGroup, poolGroup, requestStatsGroup;
 let animationId = null;
 let autoRotate = true;
 let dataInterval = null;
 
-// 数据缓存
-let currentData = {
-    threads: { running: 0, waiting: 0, blocked: 0, total: 0 },
-    memory: { heapUsed: 0, heapMax: 0, nonHeapUsed: 0 },
-    pool: { active: 0, idle: 0, max: 0 }
-};
+let currentData = null;
 
 // ----- 初始化场景 -----
 function initScene() {
@@ -70,7 +65,6 @@ function initScene() {
     controls.target.set(0, 0, 0);
     controls.update();
 
-    // 灯光
     const ambient = new THREE.AmbientLight(0x404060);
     scene.add(ambient);
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -80,20 +74,19 @@ function initScene() {
     backLight.position.set(-5, 0, -5);
     scene.add(backLight);
 
-    // 地面网格
     const gridHelper = new THREE.GridHelper(30, 20, 0x4da6ff, 0x2a4a7a);
     gridHelper.position.y = -3;
     scene.add(gridHelper);
 
-    // 分组容器
     threadGroup = new THREE.Group();
     memoryGroup = new THREE.Group();
     poolGroup = new THREE.Group();
+    requestStatsGroup = new THREE.Group();
     scene.add(threadGroup);
     scene.add(memoryGroup);
     scene.add(poolGroup);
+    scene.add(requestStatsGroup);
 
-    // 窗口自适应
     window.addEventListener('resize', onResize);
     loadingOverlay.classList.add('hidden');
 }
@@ -107,7 +100,6 @@ function onResize() {
     labelRenderer.setSize(width, height);
 }
 
-// ----- 清除旧图形 -----
 function clearGroup(group) {
     while (group.children.length) {
         const child = group.children[0];
@@ -120,30 +112,24 @@ function clearGroup(group) {
 // ----- 渲染线程柱状体 -----
 function renderThreads(data) {
     clearGroup(threadGroup);
-    const { running, waiting, blocked } = data.threads;
-    const total = running + waiting + blocked;
-    if (total === 0) {
-        // 显示占位
-        return;
-    }
+    const states = data.states || {};
+    const counts = ['RUNNABLE', 'WAITING', 'TIMED_WAITING', 'BLOCKED', 'NEW', 'TERMINATED'];
+    const colors = [0x22c55e, 0xf59e0b, 0xf59e0b, 0xef4444, 0x94a3b8, 0x94a3b8];
+    const labels = ['运行', '等待', '定时等待', '阻塞', '新建', '终止'];
 
     const barWidth = 2.0;
     const maxHeight = 8;
-    const maxCount = 50; // 用于归一化
-    const scale = Math.min(1, total / maxCount);
+    const maxCount = 50;
 
-    // 三个柱状体：运行、等待、阻塞
-    const colors = [0x22c55e, 0xf59e0b, 0xef4444];
-    const counts = [running, waiting, blocked];
-    const labels = ['运行', '等待', '阻塞'];
-
-    const totalBars = counts.reduce((a, b) => a + b, 0);
+    let totalBars = 0;
+    const validCounts = counts.map(s => states[s] || 0);
+    validCounts.forEach(c => totalBars += c);
     if (totalBars === 0) return;
 
-    const startX = - (totalBars * barWidth) / 2 + barWidth / 2;
+    const startX = -(totalBars * barWidth) / 2 + barWidth / 2;
     let x = startX;
 
-    counts.forEach((count, idx) => {
+    validCounts.forEach((count, idx) => {
         if (count === 0) return;
         const height = Math.max(0.5, (count / maxCount) * maxHeight);
         const geometry = new THREE.BoxGeometry(barWidth * 0.9, height, barWidth * 0.9);
@@ -157,7 +143,6 @@ function renderThreads(data) {
         box.position.set(x, height / 2 - 2.5, 0);
         threadGroup.add(box);
 
-        // 添加数值标签
         const div = document.createElement('div');
         div.textContent = `${labels[idx]}: ${count}`;
         div.style.color = '#e2e8f0';
@@ -176,16 +161,15 @@ function renderThreads(data) {
     });
 }
 
-// ----- 渲染内存地形（环形图） -----
+// ----- 渲染内存（环形图 + 细分区域） -----
 function renderMemory(data) {
     clearGroup(memoryGroup);
-    const { heapUsed, heapMax, nonHeapUsed } = data.memory;
-    const total = heapMax || 1;
-    const heapRatio = Math.min(1, heapUsed / total);
-    const nonHeapRatio = Math.min(1, nonHeapUsed / (total * 0.5));
+    const { heapUsed, heapMax, nonHeapUsed, pools } = data;
 
-    // 环形图由多个小立方体组成
-    const segments = 40;
+    const heapRatio = Math.min(1, heapUsed / (heapMax || 1));
+    const nonHeapRatio = Math.min(1, nonHeapUsed / (heapMax || 1) * 0.5);
+
+    const segments = 60;
     const radius = 3.5;
     const heightScale = 3.0;
 
@@ -196,7 +180,7 @@ function renderMemory(data) {
         const x = radius * Math.cos(angle);
         const z = radius * Math.sin(angle);
         const h = 0.3 + (i / segments) * heightScale;
-        const geo = new THREE.BoxGeometry(0.3, h, 0.3);
+        const geo = new THREE.BoxGeometry(0.25, h, 0.25);
         const mat = new THREE.MeshPhongMaterial({
             color: 0x4da6ff,
             emissive: new THREE.Color(0x4da6ff).multiplyScalar(0.2)
@@ -205,14 +189,15 @@ function renderMemory(data) {
         cube.position.set(x, h / 2 - 1.5, z);
         memoryGroup.add(cube);
     }
-    // 非堆内存（紫色）
+
+    // 非堆（紫色）
     const nonHeapCount = Math.floor(segments * nonHeapRatio);
     for (let i = 0; i < nonHeapCount; i++) {
         const angle = (i / segments) * Math.PI * 2 + 0.2;
         const x = (radius + 1.2) * Math.cos(angle);
         const z = (radius + 1.2) * Math.sin(angle);
         const h = 0.3 + (i / segments) * heightScale * 0.6;
-        const geo = new THREE.BoxGeometry(0.3, h, 0.3);
+        const geo = new THREE.BoxGeometry(0.25, h, 0.25);
         const mat = new THREE.MeshPhongMaterial({
             color: 0xa78bfa,
             emissive: new THREE.Color(0xa78bfa).multiplyScalar(0.2)
@@ -222,7 +207,36 @@ function renderMemory(data) {
         memoryGroup.add(cube);
     }
 
-    // 标签
+    // 细分内存池（使用小立方体堆叠成环形）
+    if (pools) {
+        const poolNames = Object.keys(pools).filter(k => k.endsWith('.used'));
+        const poolColors = [0x22d3ee, 0x60a5fa, 0x34d399, 0xfbbf24, 0xf472b6];
+        let idx = 0;
+        const poolRadius = radius + 2.5;
+        poolNames.forEach(key => {
+            const used = pools[key] || 0;
+            const maxKey = key.replace('.used', '.max');
+            const maxVal = pools[maxKey] || used;
+            const ratio = maxVal > 0 ? Math.min(1, used / maxVal) : 0;
+            if (ratio === 0) return;
+            const count = Math.max(1, Math.floor(segments * ratio * 0.3));
+            const color = poolColors[idx % poolColors.length];
+            const angleOffset = idx * 0.5;
+            for (let i = 0; i < count; i++) {
+                const angle = (i / segments) * Math.PI * 2 + angleOffset;
+                const x = poolRadius * Math.cos(angle);
+                const z = poolRadius * Math.sin(angle);
+                const h = 0.2 + ratio * 1.5;
+                const geo = new THREE.BoxGeometry(0.2, h, 0.2);
+                const mat = new THREE.MeshPhongMaterial({ color: color, emissive: new THREE.Color(color).multiplyScalar(0.2) });
+                const cube = new THREE.Mesh(geo, mat);
+                cube.position.set(x, h / 2 - 1.5, z);
+                memoryGroup.add(cube);
+            }
+            idx++;
+        });
+    }
+
     const labelDiv = document.createElement('div');
     labelDiv.textContent = `堆 ${(heapRatio*100).toFixed(0)}% | 非堆 ${(nonHeapRatio*100).toFixed(0)}%`;
     labelDiv.style.color = '#e2e8f0';
@@ -241,12 +255,11 @@ function renderMemory(data) {
 // ----- 渲染连接池蓄水池 -----
 function renderPool(data) {
     clearGroup(poolGroup);
-    const { active, idle, max } = data.pool;
+    const { active, idle, max } = data;
     const total = max || 1;
     const activeRatio = Math.min(1, active / total);
     const idleRatio = Math.min(1, idle / total);
 
-    // 蓄水池（一个圆柱体）
     const poolRadius = 2.5;
     const poolHeight = 4;
     const waterHeight = poolHeight * (activeRatio + idleRatio * 0.3);
@@ -262,7 +275,6 @@ function renderPool(data) {
     cylinder.position.set(0, 0, 0);
     poolGroup.add(cylinder);
 
-    // 水面（活性连接）
     if (waterHeight > 0.1) {
         const waterGeo = new THREE.CylinderGeometry(poolRadius * 0.9, poolRadius * 0.9, waterHeight, 32);
         const waterMat = new THREE.MeshPhongMaterial({
@@ -276,7 +288,6 @@ function renderPool(data) {
         poolGroup.add(water);
     }
 
-    // 空闲连接（黄色小点）
     const idleCount = Math.min(idle, 20);
     for (let i = 0; i < idleCount; i++) {
         const angle = (i / idleCount) * Math.PI * 2;
@@ -291,7 +302,6 @@ function renderPool(data) {
         poolGroup.add(dot);
     }
 
-    // 标签
     const labelDiv = document.createElement('div');
     labelDiv.textContent = `活跃 ${active} / 空闲 ${idle} / 最大 ${max}`;
     labelDiv.style.color = '#e2e8f0';
@@ -307,18 +317,51 @@ function renderPool(data) {
     poolGroup.add(label);
 }
 
+// ----- 渲染请求统计（CSS2D显示） -----
+function renderRequestStats(data) {
+    clearGroup(requestStatsGroup);
+    if (!data) return;
+
+    const { total, running, errors, avgResponseTime, recent } = data;
+    const div = document.createElement('div');
+    div.style.color = '#e2e8f0';
+    div.style.fontSize = '13px';
+    div.style.background = 'rgba(0,0,0,0.6)';
+    div.style.padding = '12px 16px';
+    div.style.borderRadius = '16px';
+    div.style.border = '1px solid rgba(0,102,255,0.4)';
+    div.style.backdropFilter = 'blur(4px)';
+    div.style.maxWidth = '300px';
+    div.style.maxHeight = '200px';
+    div.style.overflowY = 'auto';
+    div.innerHTML = `
+        <div><strong>📊 请求统计</strong></div>
+        <div>总请求: ${total}</div>
+        <div>运行中: ${running}</div>
+        <div>错误: ${errors}</div>
+        <div>平均响应: ${avgResponseTime}ms</div>
+        <div style="margin-top:8px;font-size:12px;">最近请求:</div>
+        ${recent ? recent.map(r => `<div style="border-bottom:1px solid #333;padding:4px 0;">${r.uri} (${r.duration}ms)${r.error ? ' ❌' : ''}</div>`).join('') : ''}
+    `;
+    const label = new CSS2DObject(div);
+    label.position.set(8, 2, 0);
+    requestStatsGroup.add(label);
+}
+
 // ----- 更新所有场景 -----
 function updateScene(data) {
     if (!data) return;
     currentData = data;
-    renderThreads(data);
-    renderMemory(data);
-    renderPool(data);
+    renderThreads(data.threads);
+    renderMemory(data.memory);
+    renderPool(data.pool);
+    renderRequestStats(data.requests);
 }
 
-// ----- 从后端获取数据（模拟） -----
+// ----- 从后端获取数据（✅ 修正接口路径）-----
 async function fetchMonitorData() {
     try {
+        // ★★★ 修改点：路径从 /3d/api/jvm-data 改为 /3d/api/monitor-data ★★★
         const resp = await fetch(apiUrl('/3d/api/monitor-data'));
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
@@ -326,39 +369,54 @@ async function fetchMonitorData() {
         updateScene(data);
         statusSpan.textContent = '🟢 实时';
     } catch (err) {
-        console.warn('使用模拟数据', err);
-        // 生成模拟数据
+        console.warn('获取数据失败，使用模拟数据', err);
         const mock = generateMockData();
         updateScene(mock);
         statusSpan.textContent = '🟡 模拟模式';
     }
 }
 
-// ----- 模拟数据生成器（可独立运行） -----
+// ----- 模拟数据（仅演示，正常情况下不会触发）-----
 function generateMockData() {
-    const active = Math.floor(Math.random() * 20) + 5;
-    const idle = Math.floor(Math.random() * 15);
-    const max = 30;
-    const heapUsed = Math.floor(Math.random() * 800) + 200;
-    const heapMax = 1024;
-    const nonHeapUsed = Math.floor(Math.random() * 200) + 50;
-
-    // 线程状态：保证总数合理
-    const running = Math.floor(Math.random() * 30) + 20;
-    const waiting = Math.floor(Math.random() * 15);
-    const blocked = Math.floor(Math.random() * 5);
-
     return {
-        threads: { running, waiting, blocked, total: running + waiting + blocked },
-        memory: { heapUsed, heapMax, nonHeapUsed },
-        pool: { active, idle, max }
+        threads: {
+            count: 30,
+            states: { RUNNABLE: 18, WAITING: 5, TIMED_WAITING: 4, BLOCKED: 2, NEW: 1, TERMINATED: 0 }
+        },
+        memory: {
+            heapUsed: 512 * 1024 * 1024,
+            heapMax: 1024 * 1024 * 1024,
+            nonHeapUsed: 120 * 1024 * 1024,
+            pools: {
+                "Eden Space.used": 200 * 1024 * 1024,
+                "Eden Space.max": 300 * 1024 * 1024,
+                "Survivor Space.used": 30 * 1024 * 1024,
+                "Survivor Space.max": 50 * 1024 * 1024,
+                "Tenured Gen.used": 280 * 1024 * 1024,
+                "Tenured Gen.max": 700 * 1024 * 1024,
+                "Metaspace.used": 100 * 1024 * 1024,
+                "Metaspace.max": 200 * 1024 * 1024
+            }
+        },
+        pool: { active: 8, idle: 5, max: 30 },
+        requests: {
+            total: 1250,
+            running: 3,
+            errors: 12,
+            avgResponseTime: 45,
+            recent: [
+                { uri: '/agent/api/chat', duration: 120, error: false },
+                { uri: '/code/api/analyze', duration: 350, error: false },
+                { uri: '/dbclient/api/tables', duration: 80, error: true },
+            ]
+        }
     };
 }
 
 // ----- 启动定时刷新 -----
 function startPolling() {
     if (dataInterval) clearInterval(dataInterval);
-    fetchMonitorData(); // 立即加载一次
+    fetchMonitorData();
     dataInterval = setInterval(fetchMonitorData, 1000);
 }
 
@@ -379,19 +437,16 @@ function start() {
     startPolling();
 }
 
-// 按钮事件
 toggleBtn.addEventListener('click', () => {
     autoRotate = !autoRotate;
     controls.autoRotate = autoRotate;
     toggleBtn.textContent = autoRotate ? '⏸️ 暂停旋转' : '▶️ 恢复旋转';
 });
 
-// 页面加载完成启动
 if (document.readyState === 'complete') {
     start();
 } else {
     window.addEventListener('load', start);
 }
 
-// 暴露重新加载（调试用）
 window.reloadMonitor = start;

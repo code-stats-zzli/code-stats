@@ -19,9 +19,16 @@ public class ThreeDGraphService {
     @Autowired
     private CodeAnalysisService codeAnalysisService;
 
+    @Autowired
+    private CallChainService callChainService;
+
+    public Map<String, Object> getCallChainData(Map<String, String> params) {
+        return callChainService.getCallChainData(params);
+    }
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // ---------- 依赖图相关方法（保持不变） ----------
+    // ---------- 依赖图相关方法 ----------
     public Map<String, Object> getGraphData(Map<String, String> params) {
         try {
             DependencyResult fullResult = codeAnalysisService.getDependencyResult(params);
@@ -127,30 +134,21 @@ public class ThreeDGraphService {
         return graphData;
     }
 
-    // ==================== 新增：柱状图数据（真实统计） ====================
-    /**
-     * 获取柱状图数据：按语言统计代码行数
-     * 调用 CodeAnalysisService.analyze 获得真实结果，解析语言统计部分
-     */
+    // ==================== 柱状图数据 ====================
     public Map<String, Object> getBarData(Map<String, String> params) {
         try {
-            // 调用 CodeAnalysisService 执行分析，获得 JSON 字符串结果
             String resultJson = codeAnalysisService.analyze(params);
-            // 解析 JSON
             Map<String, Object> resultMap = objectMapper.readValue(resultJson, Map.class);
             Map<String, Object> languages = (Map<String, Object>) resultMap.get("languages");
             if (languages == null || languages.isEmpty()) {
                 return buildEmptyBarData();
             }
-
-            // 构造 ECharts 柱状图数据格式
             List<String> categories = new ArrayList<>();
             List<Number> series = new ArrayList<>();
             for (Map.Entry<String, Object> entry : languages.entrySet()) {
                 String lang = entry.getKey();
                 Map<String, Object> stats = (Map<String, Object>) entry.getValue();
                 categories.add(lang);
-                // 使用代码行数（code）作为柱高
                 Number codeLines = (Number) stats.get("code");
                 if (codeLines == null) codeLines = 0;
                 series.add(codeLines);
@@ -170,5 +168,10 @@ public class ThreeDGraphService {
         empty.put("categories", Collections.emptyList());
         empty.put("series", Collections.emptyList());
         return empty;
+    }
+
+    // ==================== 新增：获取内置系统全链路数据 ====================
+    public Map<String, Object> getSystemCallChainData() {
+        return SystemCallChainData.getFixedData();
     }
 }

@@ -17,7 +17,7 @@ public class ThreeDController {
     @Autowired
     private ThreeDGraphService threeDGraphService;
 
-    // ==================== 保留柱状图接口 ====================
+    // ==================== 柱状图接口 ====================
     @RequestMapping("/bar-data")
     @ResponseBody
     public String getBarData() {
@@ -30,16 +30,10 @@ public class ThreeDController {
         return JsonUtil.toJson(barData);
     }
 
-    // ==================== 新增：模块信息接口 ====================
-    /**
-     * 获取项目模块列表（用于 3D 展示）
-     * GET /3d/api/modules
-     */
+    // ==================== 模块信息接口 ====================
     @RequestMapping("/modules")
     @ResponseBody
     public String getModules() {
-        // 直接调用项目介绍接口获取模块列表（复用现有数据）
-        // 为避免循环依赖，通过 HTTP 调用或直接构造，这里直接构造静态数据（也可从数据库读取）
         List<Map<String, Object>> modules = new ArrayList<>();
         modules.add(createModule("轻量 Web 框架", "⚙️", "自研 IoC/MVC，嵌入式 Tomcat，连接池，MyBatis 风格映射"));
         modules.add(createModule("数据库管理", "🗄️", "JDBC 元数据服务，树形导航，表结构查看，数据预览"));
@@ -56,5 +50,40 @@ public class ThreeDController {
         m.put("icon", icon);
         m.put("description", desc);
         return m;
+    }
+
+    // ==================== 项目调用链数据接口 ====================
+    @RequestMapping("/call-chain")
+    @ResponseBody
+    public String getCallChain() {
+        Map<String, String> params = ParamUtils.parseQueryParams();
+        params.putIfAbsent("rootDir", System.getProperty("user.dir"));
+        params.putIfAbsent("extensions", "java");
+        params.putIfAbsent("excludeComments", "true");
+        params.putIfAbsent("threadCount", String.valueOf(Runtime.getRuntime().availableProcessors()));
+        try {
+            Map<String, Object> data = threeDGraphService.getCallChainData(params);
+            return JsonUtil.toJson(data);
+        } catch (Exception e) {
+            log.error("获取调用链数据失败", e);
+            Map<String, Object> err = new HashMap<>();
+            err.put("error", e.getMessage());
+            return JsonUtil.toJson(err);
+        }
+    }
+
+    // ==================== 新增：内置系统全链路数据接口 ====================
+    @RequestMapping("/system-call-chain")
+    @ResponseBody
+    public String getSystemCallChain() {
+        try {
+            Map<String, Object> data = threeDGraphService.getSystemCallChainData();
+            return JsonUtil.toJson(data);
+        } catch (Exception e) {
+            log.error("获取系统全链路数据失败", e);
+            Map<String, Object> err = new HashMap<>();
+            err.put("error", e.getMessage());
+            return JsonUtil.toJson(err);
+        }
     }
 }

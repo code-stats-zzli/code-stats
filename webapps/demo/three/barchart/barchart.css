@@ -1,0 +1,17 @@
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background: #0a0f1a; overflow:hidden; font-family: 'Inter', sans-serif; }
+#chart-container { width:100vw; height:100vh; }
+.info {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,0.3);
+    font-size: 14px;
+    background: rgba(0,0,0,0.4);
+    padding: 6px 18px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.05);
+    pointer-events: none;
+    z-index: 10;
+}

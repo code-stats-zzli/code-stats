@@ -3,95 +3,12 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>3D 场景中心</title>
+    <title>3D 场景中心 · 页签切换</title>
     <link rel="stylesheet" href="3d-scene.css" />
-
-    <!-- 使用 Three.js（核心库和辅助库） -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-            }
-        }
-    </script>
-
-    <!-- ECharts + echarts-gl（场景二柱状图使用） -->
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2/dist/echarts-gl.min.js"></script>
-
-    <style>
-        /* 场景容器 */
-        #module-container, #graph-container {
-            width: 100%;
-            height: 100%;
-            position: relative;
-            background: #0a0f1a;
-        }
-        #module-container canvas {
-            display: block;
-        }
-        /* 信息提示浮窗 */
-        .module-tooltip {
-            position: absolute;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(8px);
-            color: #e2e8f0;
-            padding: 16px 24px;
-            border-radius: 16px;
-            border: 1px solid rgba(0, 102, 255, 0.6);
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s;
-            max-width: 280px;
-            font-size: 14px;
-            line-height: 1.5;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.5);
-            z-index: 100;
-        }
-        .module-tooltip.visible {
-            opacity: 1;
-        }
-        .module-tooltip .icon {
-            font-size: 28px;
-            display: block;
-            margin-bottom: 6px;
-        }
-        .module-tooltip .name {
-            font-weight: 600;
-            color: #4da6ff;
-        }
-        .module-tooltip .desc {
-            color: #94a3b8;
-            margin-top: 4px;
-        }
-        /* 柱状图容器 */
-        #bar-chart-container {
-            width: 100%;
-            height: 100%;
-            background: transparent;
-        }
-        .bar-chart-wrapper {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .placeholder-content {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: #94a3b8;
-            text-align: center;
-            padding: 40px;
-        }
-    </style>
 </head>
 <body>
 <div id="app">
+    <!-- 左侧导航栏 -->
     <aside class="sidebar">
         <div class="sidebar-header">
             <h3>🌐 3D 场景</h3>
@@ -103,31 +20,16 @@
             <li class="nav-item" data-tab="barchart">
                 <span class="icon">📊</span> 3D 柱状图
             </li>
-            <li class="nav-item" data-tab="scene3">
-                <span class="icon">🔮</span> 场景三（预留）
+            <li class="nav-item" data-tab="callchain">
+                <span class="icon">🔗</span> 调用链拓扑
             </li>
         </ul>
     </aside>
 
+    <!-- 右侧内容区（iframe 容器） -->
     <main class="content">
-        <!-- 场景一：项目模块 3D 展示 -->
-        <div id="tab-modules" class="tab-pane active">
-            <div id="module-container">
-                <div id="moduleTooltip" class="module-tooltip"></div>
-            </div>
-        </div>
-
-        <!-- 场景二：3D 柱状图 -->
-        <div id="tab-barchart" class="tab-pane">
-            <div id="bar-chart-container" class="bar-chart-wrapper"></div>
-        </div>
-
-        <!-- 场景三：预留 -->
-        <div id="tab-scene3" class="tab-pane">
-            <div class="placeholder-content">
-                <h2>🔮 场景三</h2>
-                <p>此区域预留用于更多 3D 场景。</p>
-            </div>
+        <div class="iframe-wrapper">
+            <iframe id="sceneFrame" src="../modules/modules.html" frameborder="0"></iframe>
         </div>
     </main>
 </div>

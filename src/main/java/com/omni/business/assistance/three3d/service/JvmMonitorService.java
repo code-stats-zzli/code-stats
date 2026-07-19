@@ -66,16 +66,12 @@ public class JvmMonitorService {
         return memory;
     }
 
-    /**
-     * 聚合所有监控数据（供前端 3D 大屏使用）
-     */
     public Map<String, Object> getAggregatedMonitorData() {
         Map<String, Object> result = new HashMap<>();
         result.put("threads", getAllThreadsInfo());
         result.put("memory", getMemoryInfo());
         result.put("pool", DataSourceUtils.getPoolStats());
 
-        // 请求追踪真实数据
         Map<Long, TraceContextHolder.TraceContext> allContexts = TraceContextHolder.getAllContexts();
         int total = 0;
         int running = 0;
@@ -115,15 +111,11 @@ public class JvmMonitorService {
         requests.put("recent", recentRequests);
         result.put("requests", requests);
 
-        // ★ 线程详情（包含 lastActiveTime）
         result.put("threadDetails", getThreadDetails());
 
         return result;
     }
 
-    /**
-     * 获取所有线程的详细信息（包含调用链和 lastActiveTime）
-     */
     private List<Map<String, Object>> getThreadDetails() {
         ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
         long[] allThreadIds = threadMXBean.getAllThreadIds();
@@ -142,20 +134,19 @@ public class JvmMonitorService {
             TraceContextHolder.TraceContext ctx = contextMap.get(tid);
             String callChain = null;
             String status = "IDLE";
-            long lastActiveTime = 0;  // ★ 最后活跃时间
+            long lastActiveTime = 0;
 
             if (ctx != null) {
                 if (ctx.endTime == 0) {
                     status = "RUNNING";
-                    lastActiveTime = System.currentTimeMillis();  // 正在运行，当前时间
+                    lastActiveTime = System.currentTimeMillis();
                     callChain = ctx.nodePath != null ? ctx.nodePath : "Dispatcher";
                 } else {
                     status = "COMPLETED";
-                    lastActiveTime = ctx.endTime;  // 完成时间作为最后活跃时间
+                    lastActiveTime = ctx.endTime;
                     callChain = ctx.nodePath != null ? ctx.nodePath : "Completed";
                 }
             } else {
-                // 没有 TraceContext，尝试从栈中提取调用链
                 StackTraceElement[] stack = info.getStackTrace();
                 if (stack != null && stack.length > 0) {
                     StringBuilder sb = new StringBuilder();
@@ -173,14 +164,13 @@ public class JvmMonitorService {
                         callChain = sb.toString();
                     }
                 }
-                lastActiveTime = 0;  // 空闲或无请求
+                lastActiveTime = 0;
             }
 
             item.put("callChain", callChain != null ? callChain : "");
             item.put("status", status);
-            item.put("lastActiveTime", lastActiveTime);  // ★ 关键字段
+            item.put("lastActiveTime", lastActiveTime);
 
-            // 对于 RUNNING 状态的线程，提供节点列表
             if ("RUNNING".equals(status) && callChain != null) {
                 String[] nodes = callChain.split(" → ");
                 item.put("nodes", nodes);
@@ -190,7 +180,7 @@ public class JvmMonitorService {
 
             details.add(item);
         }
-        // 按状态和时间降序排序（这里主要是为了调试，前端也会排序）
+
         details.sort((a, b) -> {
             String statusA = (String) a.getOrDefault("status", "IDLE");
             String statusB = (String) b.getOrDefault("status", "IDLE");
@@ -199,7 +189,7 @@ public class JvmMonitorService {
             if (priA != priB) return Integer.compare(priA, priB);
             long timeA = (long) a.getOrDefault("lastActiveTime", 0L);
             long timeB = (long) b.getOrDefault("lastActiveTime", 0L);
-            return Long.compare(timeB, timeA); // 降序
+            return Long.compare(timeB, timeA);
         });
 
         return details;

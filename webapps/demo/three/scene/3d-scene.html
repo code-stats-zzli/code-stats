@@ -8,39 +8,24 @@
 </head>
 <body>
 <div id="app">
-    <!-- 左侧导航栏 -->
     <aside class="sidebar">
-        <div class="sidebar-header">
-            <h3>🌐 3D 场景</h3>
-        </div>
+        <div class="sidebar-header"><h3>🌐 3D 场景</h3></div>
         <ul class="nav-list">
-            <li class="nav-item active" data-tab="modules">
-                <span class="icon">🧩</span> 项目模块
-            </li>
-            <li class="nav-item" data-tab="barchart">
-                <span class="icon">📊</span> 3D 柱状图
-            </li>
-            <li class="nav-item" data-tab="callchain">
-                <span class="icon">🔗</span> 调用链拓扑
-            </li>
-            <li class="nav-item" data-tab="trace">
-                <span class="icon">⚡</span> 动态调用链
-            </li>
+            <li class="nav-item active" data-tab="modules"><span class="icon">🧩</span> 项目模块</li>
+            <li class="nav-item" data-tab="barchart"><span class="icon">📊</span> 3D 柱状图</li>
+            <li class="nav-item" data-tab="callchain"><span class="icon">🔗</span> 调用链拓扑</li>
+            <li class="nav-item" data-tab="trace"><span class="icon">⚡</span> 动态调用链</li>
+            <li class="nav-item" data-tab="realtime"><span class="icon">📡</span> 实时监控</li>
             <!-- 新增 -->
-            <li class="nav-item" data-tab="realtime">
-                <span class="icon">📡</span> 实时监控
-            </li>
+            <li class="nav-item" data-tab="jstats"><span class="icon">🧬</span> JVM 监控</li>
         </ul>
     </aside>
-
-    <!-- 右侧内容区（iframe 容器） -->
     <main class="content">
         <div class="iframe-wrapper">
             <iframe id="sceneFrame" src="../modules/modules.html" frameborder="0"></iframe>
         </div>
     </main>
 </div>
-
 <script type="module" src="3d-scene.js"></script>
 </body>
 </html>

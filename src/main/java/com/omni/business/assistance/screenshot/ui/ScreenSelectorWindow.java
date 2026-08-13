@@ -1,3 +1,4 @@
+// 文件路径: src/main/java/com/omni/business/assistance/screenshot/ui/ScreenSelectorWindow.java
 package com.omni.business.assistance.screenshot.ui;
 
 import javax.swing.*;
@@ -10,16 +11,12 @@ public class ScreenSelectorWindow extends JWindow {
     private Point startPoint, endPoint;
     private Runnable onCapture;
 
-    public ScreenSelectorWindow(Runnable onCapture) {
-        this.onCapture = onCapture;
+    public ScreenSelectorWindow() {
         setSize(Toolkit.getDefaultToolkit().getScreenSize());
         setAlwaysOnTop(true);
         setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
-
-        // 半透明遮罩（类似全屏覆盖）
         setBackground(new Color(0, 0, 0, 80));
 
-        // 鼠标事件
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -33,7 +30,6 @@ public class ScreenSelectorWindow extends JWindow {
                     setVisible(false);
                     if (onCapture != null) onCapture.run();
                 } else {
-                    // 选区太小，取消
                     dispose();
                 }
             }
@@ -55,18 +51,20 @@ public class ScreenSelectorWindow extends JWindow {
         });
     }
 
+    public void setOnCapture(Runnable onCapture) {
+        this.onCapture = onCapture;
+    }
+
     @Override
     public void paint(Graphics g) {
         super.paint(g);
         if (selectionRect != null && selectionRect.width > 0 && selectionRect.height > 0) {
             Graphics2D g2d = (Graphics2D) g;
-            // 高亮选区（反色）
             g2d.setColor(new Color(0, 102, 255, 60));
             g2d.fill(selectionRect);
             g2d.setColor(Color.WHITE);
             g2d.setStroke(new BasicStroke(2));
             g2d.draw(selectionRect);
-            // 显示尺寸
             String sizeText = selectionRect.width + " x " + selectionRect.height;
             g2d.setColor(Color.WHITE);
             g2d.setFont(new Font("Inter", Font.BOLD, 14));

@@ -510,7 +510,7 @@ public class FloatingCaptureWindow extends JWindow {
 
     // ==================== 选区模式 ====================
 
-    private void startAreaSelection() {
+    public void startAreaSelection() {
         if (isSelecting.get()) return;
         isSelecting.set(true);
 

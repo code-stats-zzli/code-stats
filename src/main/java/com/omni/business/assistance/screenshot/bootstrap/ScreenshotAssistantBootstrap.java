@@ -1,33 +1,31 @@
+// 文件路径: src/main/java/com/omni/business/assistance/screenshot/bootstrap/ScreenshotAssistantBootstrap.java
 package com.omni.business.assistance.screenshot.bootstrap;
 
 import com.omni.business.assistance.directory.ui.DirectoryFloatingWindow;
 import com.omni.business.assistance.screenshot.service.ScreenshotService;
 import com.omni.business.assistance.screenshot.ui.FloatingCaptureWindow;
+import com.omni.business.assistance.screenshot.ui.FloatingScreenshotToolbar;
 import com.omni.business.assistance.screenshot.ui.MiniCaptureWindow;
-import com.omni.framework.spring.config.ConfigLoader;
+import com.omni.framework.log.LoggerFactory;
+import com.omni.framework.log.core.Logger;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 
-/**
- * 截图助手启动类（系统托盘 + 浮窗管理）
- * 默认不打开任何浮窗，右键托盘菜单选择模式
- */
 public class ScreenshotAssistantBootstrap {
-
+    private static final Logger log = LoggerFactory.getLogger(ScreenshotAssistantBootstrap.class);
     private static ScreenshotService screenshotService;
     private static MiniCaptureWindow miniWindow;
     private static FloatingCaptureWindow fullWindow;
+    private static FloatingScreenshotToolbar toolbar;
     private static TrayIcon trayIcon;
-    private static boolean fullModeActive = false;
 
     public static void start() {
         SwingUtilities.invokeLater(() -> {
             try {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-                // 设置默认字体支持中文
                 Font defaultFont = new Font("微软雅黑", Font.PLAIN, 12);
                 UIManager.put("Label.font", defaultFont);
                 UIManager.put("Button.font", defaultFont);
@@ -38,32 +36,43 @@ public class ScreenshotAssistantBootstrap {
             } catch (Exception ignored) {}
 
             screenshotService = new ScreenshotService();
+            toolbar = new FloatingScreenshotToolbar(screenshotService);
+            toolbar.setVisible(true);
 
-            // 默认不打开任何窗口（仅托盘）
-            // 但热键 Ctrl+Shift+S 可切换极简模式
-
-            // 系统托盘
             if (SystemTray.isSupported()) {
                 SystemTray tray = SystemTray.getSystemTray();
                 PopupMenu popup = new PopupMenu();
 
-                // 菜单项（设置字体避免乱码）
+                MenuItem toolbarItem = new MenuItem("📌 显示/隐藏工具栏");
+                MenuItem fullScreenItem = new MenuItem("📷 全屏截图");
+                MenuItem realtimeItem = new MenuItem("🎯 实时全屏");
+                MenuItem areaScreenItem = new MenuItem("✂️ 区域截图");
                 MenuItem showMiniItem = new MenuItem("📷 极简模式");
                 MenuItem showFullItem = new MenuItem("📷 完整模式");
                 MenuItem showDirItem = new MenuItem("📁 目录浏览");
                 MenuItem exitItem = new MenuItem("退出");
 
                 Font menuFont = new Font("微软雅黑", Font.PLAIN, 12);
-                showMiniItem.setFont(menuFont);
-                showFullItem.setFont(menuFont);
-                showDirItem.setFont(menuFont);
-                exitItem.setFont(menuFont);
+                for (MenuItem item : new MenuItem[]{toolbarItem, fullScreenItem, realtimeItem, areaScreenItem,
+                        showMiniItem, showFullItem, showDirItem, exitItem}) {
+                    item.setFont(menuFont);
+                }
 
+                toolbarItem.addActionListener(e -> toolbar.setVisible(!toolbar.isVisible()));
+                fullScreenItem.addActionListener(e -> toolbar.doFullScreenCapture());
+                realtimeItem.addActionListener(e -> toolbar.startRealtimeCapture());
+                areaScreenItem.addActionListener(e -> toolbar.doAreaCapture());
                 showMiniItem.addActionListener(e -> showMiniMode());
                 showFullItem.addActionListener(e -> showFullMode());
                 showDirItem.addActionListener(e -> new DirectoryFloatingWindow());
                 exitItem.addActionListener(e -> System.exit(0));
 
+                popup.add(toolbarItem);
+                popup.addSeparator();
+                popup.add(fullScreenItem);
+                popup.add(realtimeItem);
+                popup.add(areaScreenItem);
+                popup.addSeparator();
                 popup.add(showMiniItem);
                 popup.add(showFullItem);
                 popup.addSeparator();
@@ -74,78 +83,54 @@ public class ScreenshotAssistantBootstrap {
                 Image icon = createTrayIconImage();
                 trayIcon = new TrayIcon(icon, "截图助手", popup);
                 trayIcon.setImageAutoSize(true);
-                trayIcon.addActionListener(e -> {
-                    // 双击托盘切换极简模式（如果无窗口则打开，有则隐藏）
-                    if (miniWindow != null && miniWindow.isVisible()) {
-                        miniWindow.setVisible(false);
-                    } else if (fullWindow != null && fullWindow.isVisible()) {
-                        fullWindow.setVisible(false);
-                    } else {
-                        showMiniMode();
-                    }
-                });
+                trayIcon.addActionListener(e -> toolbar.setVisible(!toolbar.isVisible()));
                 try {
                     tray.add(trayIcon);
                 } catch (AWTException e) {
-                    e.printStackTrace();
+                    log.error("托盘添加失败", e);
                 }
             }
 
-            // 全局热键 Ctrl+Shift+S 显示/隐藏极简模式
             KeyboardFocusManager.getCurrentKeyboardFocusManager()
                     .addKeyEventDispatcher(e -> {
                         if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_S) {
-                            if (miniWindow != null && miniWindow.isVisible()) {
-                                miniWindow.setVisible(false);
-                            } else {
-                                showMiniMode();
-                            }
+                            toolbar.setVisible(!toolbar.isVisible());
                             return true;
                         }
                         return false;
                     });
 
-            // 应用退出时清理
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                if (trayIcon != null) {
-                    SystemTray.getSystemTray().remove(trayIcon);
-                }
+                if (trayIcon != null) SystemTray.getSystemTray().remove(trayIcon);
                 if (miniWindow != null) miniWindow.dispose();
                 if (fullWindow != null) fullWindow.dispose();
+                if (toolbar != null) toolbar.dispose();
             }));
         });
     }
 
     public static void showMiniMode() {
-        if (fullWindow != null && fullWindow.isVisible()) {
-            fullWindow.setVisible(false);
-        }
+        if (fullWindow != null && fullWindow.isVisible()) fullWindow.setVisible(false);
         if (miniWindow == null) {
             miniWindow = new MiniCaptureWindow(screenshotService);
-            // 定位到右下角
             Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
             int w = miniWindow.getWidth();
             int h = miniWindow.getHeight();
             miniWindow.setLocation(screen.width - w - 30, screen.height - h - 50);
         }
         miniWindow.setVisible(true);
-        fullModeActive = false;
     }
 
     private static void showFullMode() {
-        if (miniWindow != null && miniWindow.isVisible()) {
-            miniWindow.setVisible(false);
-        }
+        if (miniWindow != null && miniWindow.isVisible()) miniWindow.setVisible(false);
         if (fullWindow == null) {
             fullWindow = new FloatingCaptureWindow(screenshotService);
-            // 定位到右下角
             Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
             int w = fullWindow.getWidth();
             int h = fullWindow.getHeight();
             fullWindow.setLocation(screen.width - w - 30, screen.height - h - 50);
         }
         fullWindow.setVisible(true);
-        fullModeActive = true;
     }
 
     private static Image createTrayIconImage() {

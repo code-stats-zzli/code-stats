@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>项目管理</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <script src="../global.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: transparent; padding: 20px; margin: 0; }
+        .container { max-width: 1200px; margin: auto; background: var(--bg-card); border-radius: 16px; padding: 24px; }
+        h1 { color: var(--accent-primary); margin-bottom: 20px; }
+        .btn { padding: 6px 16px; border-radius: 20px; border: none; cursor: pointer; font-size: 14px; transition: 0.2s; }
+        .btn-primary { background: var(--accent-primary); color: white; }
+        .btn-primary:hover { background: #0050cc; transform: translateY(-1px); }
+        .btn-success { background: #22c55e; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-secondary { background: rgba(0,102,255,0.1); color: var(--accent-primary); }
+        .btn-secondary:hover { background: rgba(0,102,255,0.2); }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: var(--accent-primary); color: white; padding: 10px; text-align: left; }
+        td { padding: 10px; border-bottom: 1px solid rgba(0,102,255,0.2); }
+        tr:hover td { background: rgba(0,102,255,0.05); }
+        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; border-radius: 16px; padding: 24px; width: 500px; max-width: 90%; box-shadow: 0 20px 35px rgba(0,0,0,0.2); }
+        .modal-content label { display: block; margin: 12px 0 4px; font-weight: 600; color: var(--text-dark); }
+        .modal-content input, .modal-content textarea, .modal-content select { width: 100%; padding: 8px; border: 1px solid rgba(0,102,255,0.3); border-radius: 12px; font-size: 14px; }
+        .modal-content .btn-group { text-align: right; margin-top: 20px; gap: 8px; display: flex; justify-content: flex-end; }
+        .modal-content .btn-group .btn { margin-left: 8px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📁 项目管理</h1>
+    <button class="btn btn-primary" onclick="openModal(null)">+ 新建项目</button>
+    <table>
+        <thead><tr><th>项目名称</th><th>编码</th><th>描述</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody id="projectTableBody"></tbody>
+    </table>
+</div>
+
+<!-- 编辑弹窗 -->
+<div id="projectModal" class="modal">
+    <div class="modal-content">
+        <h2 id="modalTitle">项目信息</h2>
+        <input type="hidden" id="projectId">
+        <label>项目名称</label>
+        <input id="projectName" placeholder="请输入项目名称">
+        <label>项目编码</label>
+        <input id="projectCode" placeholder="唯一编码">
+        <label>描述</label>
+        <textarea id="description" rows="3"></textarea>
+        <label>状态</label>
+        <select id="status"><option value="1">启用</option><option value="0">禁用</option></select>
+        <div class="btn-group">
+            <button class="btn btn-primary" onclick="saveProject()">保存</button>
+            <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        // API 路径映射到 Controller
+        const API_LIST = window.apiUrl('/autotest/api/project/projects');
+        const API_GET = window.apiUrl('/autotest/api/project/get');
+        const API_SAVE = window.apiUrl('/autotest/api/project/save');
+        const API_DELETE = window.apiUrl('/autotest/api/project/delete');
+
+        async function loadProjects() {
+            const resp = await fetch(API_LIST);
+            const data = await resp.json();
+            const tbody = document.getElementById('projectTableBody');
+            tbody.innerHTML = data.map(p => `
+                <tr data-id="${p.id}">
+                    <td>${escapeHtml(p.projectName)}</td>
+                    <td>${escapeHtml(p.projectCode)}</td>
+                    <td>${escapeHtml(p.description || '')}</td>
+                    <td>${p.status === 1 ? '启用' : '禁用'}</td>
+                    <td>
+                        <button class="btn btn-secondary" onclick="editProject('${p.id}')">编辑</button>
+                        <button class="btn btn-danger" onclick="deleteProject('${p.id}')">删除</button>
+                        <button class="btn btn-primary" onclick="viewCases('${p.id}')">查看用例</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        window.openModal = function(project) {
+            document.getElementById('projectModal').style.display = 'flex';
+            document.getElementById('projectId').value = project?.id || '';
+            document.getElementById('projectName').value = project?.projectName || '';
+            document.getElementById('projectCode').value = project?.projectCode || '';
+            document.getElementById('description').value = project?.description || '';
+            document.getElementById('status').value = project?.status || 1;
+            document.getElementById('modalTitle').innerText = project?.id ? '编辑项目' : '新建项目';
+        };
+
+        window.closeModal = function() {
+            document.getElementById('projectModal').style.display = 'none';
+        };
+
+        window.saveProject = async function() {
+            const data = {
+                id: document.getElementById('projectId').value,
+                projectName: document.getElementById('projectName').value,
+                projectCode: document.getElementById('projectCode').value,
+                description: document.getElementById('description').value,
+                status: parseInt(document.getElementById('status').value)
+            };
+            await fetch(API_SAVE, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            closeModal();
+            loadProjects();
+        };
+
+        window.deleteProject = async function(id) {
+            if (!confirm('确定删除该项目吗？')) return;
+            await fetch(API_DELETE + '?id=' + id, { method: 'POST' });
+            loadProjects();
+        };
+
+        window.editProject = function(id) {
+            fetch(API_GET + '?id=' + id)
+                .then(res => res.json())
+                .then(project => openModal(project))
+                .catch(() => alert('获取项目信息失败'));
+        };
+
+        window.viewCases = function(projectId) {
+            if (window.parent && window.parent.document) {
+                const container = window.parent;
+                const targetTab = container.document.querySelector('#subTabContainer .topbar-tab[data-tab="cases"]');
+                if (targetTab) targetTab.click();
+                const iframe = container.document.getElementById('panel-cases').querySelector('iframe');
+                iframe.src = 'cases.html?projectId=' + projectId;
+            } else {
+                window.location.href = 'cases.html?projectId=' + projectId;
+            }
+        };
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+        }
+
+        document.getElementById('projectModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        loadProjects();
+    })();
+</script>
+</body>
+</html>

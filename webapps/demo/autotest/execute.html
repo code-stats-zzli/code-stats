@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>执行中心</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <script src="../global.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: transparent; padding: 20px; margin: 0; }
+        .container { max-width: 1200px; margin: auto; background: var(--bg-card); border-radius: 16px; padding: 24px; }
+        h1 { color: var(--accent-primary); }
+        .control-bar { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+        .control-bar label { font-weight: 600; }
+        .control-bar select { padding: 8px 16px; border-radius: 20px; border: 1px solid rgba(0,102,255,0.3); background: white; flex: 1; min-width: 200px; }
+        .btn { padding: 8px 24px; border-radius: 40px; border: none; cursor: pointer; font-size: 14px; transition: 0.2s; }
+        .btn-primary { background: var(--accent-primary); color: white; }
+        .btn-primary:hover { background: #0050cc; transform: translateY(-1px); }
+        .status-badge { display: inline-block; padding: 4px 16px; border-radius: 20px; font-weight: bold; }
+        .status-ready { background: #94a3b8; color: white; }
+        .status-running { background: #f59e0b; color: white; }
+        .status-pass { background: #22c55e; color: white; }
+        .status-fail { background: #ef4444; color: white; }
+        .log-area { background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 12px; font-family: monospace; max-height: 400px; overflow-y: auto; white-space: pre-wrap; margin-top: 16px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🚀 执行中心</h1>
+    <div class="control-bar">
+        <label for="caseSelect">选择用例：</label>
+        <select id="caseSelect"></select>
+        <button class="btn btn-primary" onclick="executeCase()">执行</button>
+        <span id="statusBadge" class="status-badge status-ready">就绪</span>
+    </div>
+    <h3>执行日志</h3>
+    <div id="execLog" class="log-area">等待执行...</div>
+</div>
+
+<script>
+    (function() {
+        // API 路径映射到 Controller
+        const API_CASES = window.apiUrl('/autotest/api/case/cases');
+        const API_EXECUTE = window.apiUrl('/autotest/api/execute/execute');
+
+        async function loadCases() {
+            const resp = await fetch(API_CASES + '?projectId=');
+            const data = await resp.json();
+            const select = document.getElementById('caseSelect');
+            select.innerHTML = data.map(c => `<option value="${c.id}">${escapeHtml(c.caseName)}</option>`).join('');
+        }
+
+        window.executeCase = async function() {
+            const caseId = document.getElementById('caseSelect').value;
+            if (!caseId) { alert('请选择用例'); return; }
+            const logDiv = document.getElementById('execLog');
+            const badge = document.getElementById('statusBadge');
+            badge.className = 'status-badge status-running';
+            badge.innerText = '执行中';
+            logDiv.innerText = '⏳ 正在执行...\n';
+            try {
+                const resp = await fetch(API_EXECUTE, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ caseId, triggerUser: 'admin' })
+                });
+                const result = await resp.json();
+                if (result.status === 1) {
+                    badge.className = 'status-badge status-pass';
+                    badge.innerText = '通过';
+                } else {
+                    badge.className = 'status-badge status-fail';
+                    badge.innerText = '失败';
+                }
+                logDiv.innerText += `\n✅ 执行完成\n状态：${result.status === 1 ? '通过' : '失败'}\n通过率：${result.passRate}%\n执行ID：${result.executionId || 'N/A'}`;
+            } catch (err) {
+                badge.className = 'status-badge status-fail';
+                badge.innerText = '异常';
+                logDiv.innerText += `\n❌ 执行异常：${err.message}`;
+            }
+        };
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+        }
+
+        loadCases();
+    })();
+</script>
+</body>
+</html>

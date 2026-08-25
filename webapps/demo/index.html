@@ -7,32 +7,37 @@
     <link rel="stylesheet" href="global-tech.css">
     <link rel="stylesheet" href="project-assistant.css">
     <link rel="stylesheet" href="index.css">
-    <script src="global.js"></script>
-    <script src="project-assistant.js" defer></script>
     <style>
-        /* 使导航栏支持滚动 */
+        /* ---------- 隐藏顶部导航滚动条 ---------- */
         .topbar-tabs {
-            display: flex;
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
-            flex-wrap: nowrap;
-            gap: 8px;
-            padding: 4px 0;
-            scrollbar-width: thin;
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;      /* Firefox */
         }
         .topbar-tabs::-webkit-scrollbar {
-            height: 4px;
+            display: none;              /* Chrome, Safari, Opera */
         }
-        .topbar-tabs::-webkit-scrollbar-thumb {
-            background: var(--accent-primary);
-            border-radius: 4px;
+        /* 让按钮不换行 */
+        .topbar-tabs .topbar-tab {
+            flex-shrink: 0;
+            display: inline-flex;
         }
-        .topbar-tab {
-            flex: 0 0 auto;
-            white-space: nowrap;
+        .topbar-tabs {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 8px;
+            padding-bottom: 4px;
+            scroll-behavior: smooth;   /* 平滑滚动 */
+        }
+        /* 调整父容器确保滚动区域可滚动 */
+        .topbar {
+            overflow: visible;          /* 保证下拉菜单不受影响 */
         }
     </style>
+    <script src="global.js"></script>
+    <script src="project-assistant.js" defer></script>
 </head>
 <body>
 <header class="topbar">
@@ -65,10 +70,11 @@
         <button class="topbar-tab" data-tab="3d">
             <span class="tab-icon">🌐</span> 3D 依赖图
         </button>
-        <!-- 新增脚本引擎 -->
+        <!-- ======== 新增 脚本引擎 页签 ======== -->
         <button class="topbar-tab" data-tab="scriptengine">
             <span class="tab-icon">⚙️</span> 脚本引擎
         </button>
+        <!-- ================================= -->
     </nav>
     <div class="topbar-status" id="topbarStatus">
         <span class="status-dot"></span>
@@ -101,13 +107,78 @@
     <div class="tab-panel" id="panel-3d">
         <iframe src="three/scene/3d-scene.html" class="panel-iframe" title="3D场景"></iframe>
     </div>
-    <!-- 新增脚本引擎面板 -->
+    <!-- ======== 新增 脚本引擎 面板 ======== -->
     <div class="tab-panel" id="panel-scriptengine">
         <iframe src="scriptengine/scriptengine.html" class="panel-iframe" title="脚本引擎"></iframe>
     </div>
+    <!-- ================================= -->
 </main>
 
 <div class="toast-container" id="toastContainer"></div>
+
+<!-- 页签自动滚动逻辑（兼容原有 switchTab） -->
+<script>
+    (function() {
+        // 获取所有页签按钮和容器
+        const tabContainer = document.getElementById('topbarTabs');
+        const tabButtons = tabContainer.querySelectorAll('.topbar-tab');
+
+        // 在点击页签时自动滚动到可见区域
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                // 使用 requestAnimationFrame 确保 DOM 更新后再滚动
+                requestAnimationFrame(() => {
+                    // 滚动到当前按钮，使其在容器中居中显示（或尽可能显示）
+                    this.scrollIntoView({
+                        behavior: 'smooth',
+                        inline: 'center',
+                        block: 'nearest'
+                    });
+                });
+            });
+        });
+
+        // 监听 hash 变化，用于初始激活时滚动（但 switchTab 已处理激活，我们只需在激活后滚动）
+        // 由于原有 switchTab 在 index.js 中，我们通过 MutationObserver 或直接修改 switchTab？
+        // 更可靠：重写 switchTab 并扩展，但为了不破坏原有逻辑，我们使用 MutationObserver 监听 active 类变化
+        // 但更简单：在原有 switchTab 执行后手动滚动，但 switchTab 是外部函数，我们可覆盖它。
+        // 安全做法：保留原有 switchTab，在其之后执行滚动。
+        // 由于 index.js 先加载，我们可在 window 上保存原始 switchTab，然后替换。
+        // 这里我们采用监听点击事件（已实现），但如果是通过 hash 或程序化切换，也需要滚动。
+        // 我们可以监听 topbarTabs 的 click 事件已经覆盖了手动点击，但若通过 hash 或外部调用，需要额外处理。
+        // 为此，我们可以观察 active 类的添加，当某个按钮获得 active 类时滚动。
+        const observer = new MutationObserver(() => {
+            const activeBtn = tabContainer.querySelector('.topbar-tab.active');
+            if (activeBtn) {
+                activeBtn.scrollIntoView({
+                    behavior: 'smooth',
+                    inline: 'center',
+                    block: 'nearest'
+                });
+            }
+        });
+        // 观察所有按钮的 class 变化
+        tabButtons.forEach(btn => {
+            observer.observe(btn, { attributes: true, attributeFilter: ['class'] });
+        });
+        // 页面加载后立即滚动到当前激活项（首次加载）
+        window.addEventListener('load', () => {
+            const activeBtn = tabContainer.querySelector('.topbar-tab.active');
+            if (activeBtn) {
+                // 延迟一下确保布局完成
+                setTimeout(() => {
+                    activeBtn.scrollIntoView({
+                        behavior: 'smooth',
+                        inline: 'center',
+                        block: 'nearest'
+                    });
+                }, 100);
+            }
+        });
+    })();
+</script>
+
+<!-- 原有 index.js 保持不变，但注意加载顺序 -->
 <script src="index.js"></script>
 </body>
 </html>

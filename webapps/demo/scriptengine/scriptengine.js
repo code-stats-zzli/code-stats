@@ -1,151 +1,148 @@
 (function() {
-    const API_BASE = window.apiUrl('/script/api');
+    var tabBtns = document.querySelectorAll('.sidebar-tabs .tab-btn');
+    var iframe = document.getElementById('contentFrame');
+    var executeBtn = document.getElementById('executeBtn');
+    var resultArea = document.getElementById('resultArea');
+    var copyBtn = document.getElementById('copyResultBtn');
 
-    const languageSelect = document.getElementById('languageSelect');
-    const executionMode = document.getElementById('executionMode');
-    const javaOptions = document.getElementById('javaOptions');
-    const classNameInput = document.getElementById('className');
-    const methodNameInput = document.getElementById('methodName');
-    const paramsInput = document.getElementById('paramsInput');
-    const scriptEditor = document.getElementById('scriptEditor');
-    const fileInput = document.getElementById('fileInput');
-    const uploadBtn = document.getElementById('uploadBtn');
-    const executeBtn = document.getElementById('executeBtn');
-    const clearBtn = document.getElementById('clearBtn');
-    const exampleBtn = document.getElementById('exampleBtn');
-    const resultArea = document.getElementById('resultArea');
+    var configState = {};
+    var editorState = { content: '' };
+    var isExecuting = false;
 
-    // 切换语言显示 Java 特定选项
-    languageSelect.addEventListener('change', function() {
-        javaOptions.style.display = this.value === 'java' ? 'flex' : 'none';
-        // 自动切换示例
-        if (this.value === 'rest') {
-            paramsInput.value = JSON.stringify({ method: 'GET' }, null, 2);
-        } else {
-            paramsInput.value = JSON.stringify({ scriptParam: { key: 'value' } }, null, 2);
-        }
-    });
-    // 手动触发一次，初始化显示
-    languageSelect.dispatchEvent(new Event('change'));
-
-    // 示例脚本
-    const examples = {
-        python: `# Python 示例\n# 接收参数（通过 sys.argv[1] 获取 JSON）\nimport sys, json\n\nparams = json.loads(sys.argv[1])\nprint("Hello, CodeStats!")\nprint("参数:", params)\n# 如果有数字参数可以计算\nif 'a' in params and 'b' in params:\n    result = params['a'] + params['b']\n    print(f"a + b = {result}")`,
-        java: `public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, CodeStats!");\n        // 参数可从 args 获取\n        for (String arg : args) {\n            System.out.println("arg: " + arg);\n        }\n    }\n}`,
-        c: `#include <stdio.h>\nint main(int argc, char *argv[]) {\n    printf("Hello, CodeStats!\\n");\n    for (int i = 0; i < argc; i++) {\n        printf("arg[%d] = %s\\n", i, argv[i]);\n    }\n    return 0;\n}`,
-        cpp: `#include <iostream>\nusing namespace std;\nint main(int argc, char *argv[]) {\n    cout << "Hello, CodeStats!" << endl;\n    for (int i = 0; i < argc; i++) {\n        cout << "arg[" << i << "] = " << argv[i] << endl;\n    }\n    return 0;\n}`,
-        rest: `https://httpbin.org/get`
-    };
-
-    function setExample() {
-        const lang = languageSelect.value;
-        scriptEditor.value = examples[lang] || '';
-        if (lang === 'rest') {
-            paramsInput.value = JSON.stringify({ method: 'GET' }, null, 2);
-        } else {
-            paramsInput.value = JSON.stringify({ scriptParam: { key: 'value' } }, null, 2);
+    function switchTab(tab) {
+        tabBtns.forEach(function(b) {
+            b.classList.toggle('active', b.dataset.tab === tab);
+        });
+        var src = tab === 'config' ? 'scriptengine-config.html' : 'scriptengine-editor.html';
+        var currentSrc = iframe.src.split('/').pop().split('?')[0];
+        if (currentSrc !== src) {
+            iframe.src = src;
         }
     }
+    tabBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            switchTab(btn.dataset.tab);
+        });
+    });
 
-    exampleBtn.addEventListener('click', setExample);
+    window.addEventListener('message', function(e) {
+        var data = e.data;
+        if (!data || typeof data !== 'object') return;
 
-    // 执行脚本（直接发送内容）
-    async function executeScript(scriptContent, extraParams) {
-        const payload = {
-            scriptContent: scriptContent,
-            language: languageSelect.value,
-            executionMode: executionMode.value,
-            params: extraParams || {}
-        };
-
-        // 如果是 Java 且为 jar 模式，传递类名/方法名
-        if (languageSelect.value === 'java') {
-            if (classNameInput.value) payload.className = classNameInput.value;
-            if (methodNameInput.value) payload.methodName = methodNameInput.value;
-        }
-
-        // 合并用户参数 JSON
-        try {
-            const userParams = JSON.parse(paramsInput.value || '{}');
-            // 如果用户有 scriptParam，则放到 params 中（覆盖）
-            if (userParams.scriptParam) {
-                payload.params = userParams.scriptParam;
-            } else {
-                Object.assign(payload.params, userParams);
+        if (data.type === 'configState') {
+            configState = data.data || {};
+            if (configState._uploadExecute) {
+                delete configState._uploadExecute;
+                doExecute();
             }
-        } catch (e) {
-            // 忽略 JSON 解析错误
+        } else if (data.type === 'editorState') {
+            editorState = data.data || { content: '' };
+        } else if (data.type === 'uploadFileContent') {
+            editorState.content = data.content || '';
+            forwardToEditor({ type: 'setEditorContent', content: data.content || '' });
+            doExecute();
+        } else if (data.type === 'setEditorContent') {
+            forwardToEditor(data);
+        } else if (data.type === 'executeRequest') {
+            doExecute();
+        } else if (data.type === 'requestExample') {
+            // 转发给配置子页面
+            var configFrame = document.getElementById('contentFrame');
+            if (configFrame && configFrame.src.indexOf('config') > -1) {
+                configFrame.contentWindow.postMessage({ type: 'requestExample' }, '*');
+            }
+        }
+    });
+
+    function forwardToEditor(data) {
+        try {
+            var editorFrame = document.getElementById('contentFrame');
+            if (editorFrame && editorFrame.src.indexOf('editor') > -1) {
+                editorFrame.contentWindow.postMessage(data, '*');
+            }
+        } catch (e) {}
+    }
+
+    async function doExecute() {
+        if (isExecuting) return;
+        var scriptContent = editorState.content || '';
+        if (!scriptContent.trim()) {
+            resultArea.innerHTML = '<div class="error-output">❌ 请先在「源码编辑」页签中输入或上传脚本</div>';
+            return;
         }
 
+        isExecuting = true;
         resultArea.innerHTML = '<div class="loading">⏳ 执行中...</div>';
+
+        var payload = {
+            scriptContent: scriptContent,
+            language: configState.language || 'python',
+            executionMode: configState.mode || 'source',
+            params: configState.params || {}
+        };
+        if (configState.language === 'java') {
+            if (configState.className) payload.className = configState.className;
+            if (configState.methodName) payload.methodName = configState.methodName;
+        }
+
         try {
-            const resp = await fetch(API_BASE + '/execute', {
+            var resp = await fetch(window.apiUrl('/script/api/execute'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            const data = await resp.json();
+            var data = await resp.json();
             if (data.success) {
-                resultArea.innerHTML = `<div class="success-output">✅ 执行成功\n\n${escapeHtml(data.output)}</div>`;
+                resultArea.innerHTML = '<div class="success-output">✅ 执行成功\n\n' + escapeHtml(data.output) + '</div>';
             } else {
-                resultArea.innerHTML = `<div class="error-output">❌ 执行失败\n\n${escapeHtml(data.error)}</div>`;
+                resultArea.innerHTML = '<div class="error-output">❌ 执行失败\n\n' + escapeHtml(data.error) + '</div>';
             }
         } catch (err) {
-            resultArea.innerHTML = `<div class="error-output">❌ 请求异常: ${escapeHtml(err.message)}</div>`;
+            resultArea.innerHTML = '<div class="error-output">❌ 请求异常: ' + escapeHtml(err.message) + '</div>';
+        } finally {
+            isExecuting = false;
         }
     }
 
-    // 上传文件并执行
-    async function uploadAndExecute() {
-        const file = fileInput.files[0];
-        if (!file) {
-            alert('请先选择文件');
+    copyBtn.addEventListener('click', function() {
+        var text = resultArea.textContent || '';
+        if (!text || text.includes('点击「执行脚本」')) {
+            alert('没有可复制的内容');
             return;
         }
-        const formData = new FormData();
-        formData.append('scriptFile', file);
-        formData.append('language', languageSelect.value);
-        formData.append('executionMode', executionMode.value);
-        formData.append('params', paramsInput.value || '{}');
-
-        resultArea.innerHTML = '<div class="loading">⏳ 上传并执行中...</div>';
-        try {
-            const resp = await fetch(API_BASE + '/upload', {
-                method: 'POST',
-                body: formData
-            });
-            const data = await resp.json();
-            if (data.success) {
-                resultArea.innerHTML = `<div class="success-output">✅ 执行成功\n\n${escapeHtml(data.output)}</div>`;
-            } else {
-                resultArea.innerHTML = `<div class="error-output">❌ 执行失败\n\n${escapeHtml(data.error)}</div>`;
-            }
-        } catch (err) {
-            resultArea.innerHTML = `<div class="error-output">❌ 请求异常: ${escapeHtml(err.message)}</div>`;
-        }
-    }
-
-    executeBtn.addEventListener('click', () => {
-        const content = scriptEditor.value;
-        if (!content.trim()) {
-            alert('请输入脚本内容');
-            return;
-        }
-        executeScript(content, {});
+        navigator.clipboard.writeText(text).then(function() {
+            alert('结果已复制到剪贴板');
+        }).catch(function() {
+            var range = document.createRange();
+            range.selectNode(resultArea);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            document.execCommand('copy');
+            alert('结果已复制到剪贴板');
+        });
     });
 
-    uploadBtn.addEventListener('click', uploadAndExecute);
-
-    clearBtn.addEventListener('click', () => {
-        scriptEditor.value = '';
-        resultArea.innerHTML = '<div class="empty-tip">已清空，重新输入脚本</div>';
-    });
+    executeBtn.addEventListener('click', doExecute);
 
     function escapeHtml(str) {
         if (!str) return '';
-        return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
     }
 
-    // 初始化示例
-    setExample();
+    switchTab('config');
+
+    iframe.addEventListener('load', function() {
+        try {
+            iframe.contentWindow.postMessage({ type: 'ping' }, '*');
+        } catch (e) {}
+    });
+
+    window.reloadScriptEngine = function() {
+        iframe.src = iframe.src;
+    };
 })();

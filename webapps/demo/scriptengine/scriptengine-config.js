@@ -62,6 +62,7 @@
     languageSelect.addEventListener('change', function() {
         javaOptions.style.display = this.value === 'java' ? 'flex' : 'none';
         loadExample();
+        sendState(); // 通知父页面语言已变更
     });
 
     executionMode.addEventListener('change', sendState);
@@ -113,8 +114,8 @@
         }
     });
 
+    // 初始化：触发一次 change 加载默认语言示例
     setTimeout(function() {
         languageSelect.dispatchEvent(new Event('change'));
-        // loadExample 会在 change 事件中被调用，无需再次调用
     }, 100);
 })();

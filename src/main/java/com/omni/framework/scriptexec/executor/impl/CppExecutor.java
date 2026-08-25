@@ -65,10 +65,7 @@ public class CppExecutor extends BaseScriptExecutor {
         Path exe = source.getCompiledArtifact();
         if (exe == null) throw new ScriptExecutionException("No executable prepared");
         ProcessBuilder pb = new ProcessBuilder(exe.toString());
-        Object argsObj = params.get("args");
-        if (argsObj instanceof String[]) {
-            for (String arg : (String[]) argsObj) pb.command().add(arg);
-        }
+        addArgs(pb,params);
         return runProcess(pb, 30);
     }
 }

@@ -324,14 +324,7 @@ public class JavaExecutor extends BaseScriptExecutor {
         return runProcess(pb, 30);
     }
 
-    private void addArgs(ProcessBuilder pb, Map<String, Object> params) {
-        Object argsObj = params.get("args");
-        if (argsObj instanceof String[]) {
-            for (String arg : (String[]) argsObj) pb.command().add(arg);
-        } else if (argsObj instanceof String) {
-            pb.command().add((String) argsObj);
-        }
-    }
+
 
     private String extractClassName(String code) {
         java.util.regex.Pattern p = java.util.regex.Pattern.compile("public\\s+class\\s+(\\w+)");

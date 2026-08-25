@@ -5,6 +5,7 @@ import com.omni.framework.log.core.Logger;
 
 import com.omni.framework.scriptexec.exception.ScriptExecutionException;
 import com.omni.framework.scriptexec.executor.model.ScriptSource;
+import com.omni.framework.util.JsonUtil;
 
 
 import java.io.*;
@@ -42,6 +43,7 @@ public abstract class BaseScriptExecutor implements ScriptExecutor {
             throw new ScriptExecutionException("Invalid executionMode: " + mode);
         }
         params.put("executionMode", mode);
+        if("source".equals(mode))params.put("needCompile", true);
         String content = (String) params.get("scriptContent");
         if (content != null && isBase64(content)) {
             byte[] decoded = java.util.Base64.getDecoder().decode(content);
@@ -104,8 +106,8 @@ public abstract class BaseScriptExecutor implements ScriptExecutor {
     protected abstract String getDefaultLanguage();
 
     protected Map<String, Object> parseExecutionParam(Map<String, Object> params) {
-        if (params.containsKey("scriptParam")) return (Map<String, Object>) params.get("scriptParam");
-        if (params.containsKey("params")) return (Map<String, Object>) params.get("params");
+        //if (params.containsKey("scriptParam")) return (Map<String, Object>) params.get("scriptParam");
+        //if (params.containsKey("params")) return (Map<String, Object>) params.get("params");
         return params;
     }
 
@@ -170,5 +172,19 @@ public abstract class BaseScriptExecutor implements ScriptExecutor {
         Path temp = Files.createTempFile("script_", suffix);
         Files.write(temp, content.getBytes(StandardCharsets.UTF_8));
         return temp;
+    }
+
+    protected void addArgs(ProcessBuilder pb, Map<String, Object> params) {
+        Object argsObj = params.get("params");
+        if(argsObj == null)argsObj = params.get("scriptParam");
+        if(argsObj == null)argsObj = params.get("args");
+        if(argsObj == null)argsObj = params;
+        if (argsObj instanceof String[]) {
+            for (String arg : (String[]) argsObj) pb.command().add(arg);
+        } else if (argsObj instanceof String) {
+            pb.command().add((String) argsObj);
+        }else {
+            pb.command().add(JsonUtil.toJson(argsObj));
+        }
     }
 }

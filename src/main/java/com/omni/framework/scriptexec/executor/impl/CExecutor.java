@@ -72,10 +72,5 @@ public class CExecutor extends BaseScriptExecutor {
         return runProcess(pb, 30);
     }
 
-    private void addArgs(ProcessBuilder pb, Map<String, Object> params) {
-        Object argsObj = params.get("args");
-        if (argsObj instanceof String[]) {
-            for (String arg : (String[]) argsObj) pb.command().add(arg);
-        }
-    }
+
 }

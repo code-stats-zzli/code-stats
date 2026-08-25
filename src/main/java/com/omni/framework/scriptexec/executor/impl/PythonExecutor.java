@@ -60,8 +60,7 @@ public class PythonExecutor extends BaseScriptExecutor {
         // 构建命令：python3 <script> [参数JSON]
         ProcessBuilder pb = new ProcessBuilder("python", scriptFile.toString());
         // 将业务参数转为 JSON 作为最后一个参数
-        String paramJson = JsonUtil.toJson(params);
-        pb.command().add(paramJson);
+        addArgs(pb,params);
         return runProcess(pb, 30);
     }
 }

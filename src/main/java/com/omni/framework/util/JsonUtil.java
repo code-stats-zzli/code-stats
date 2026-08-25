@@ -1,5 +1,6 @@
 package com.omni.framework.util;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.lang.reflect.Array;
@@ -21,10 +22,13 @@ public class JsonUtil {
      * @param obj 要序列化的对象
      * @return JSON 字符串
      */
-    public static String toJson(Object obj) {
-        StringBuilder sb = new StringBuilder();
-        serialize(obj, sb, new IdentityHashMap<>());
-        return sb.toString();
+    public static String toJson(Object obj)  {
+        if(obj == null)return null;
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**

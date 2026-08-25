@@ -184,7 +184,11 @@ public abstract class BaseScriptExecutor implements ScriptExecutor {
         } else if (argsObj instanceof String) {
             pb.command().add((String) argsObj);
         }else {
-            pb.command().add(JsonUtil.toJson(argsObj));
+            String paramJson = JsonUtil.toJson(argsObj);
+            if (System.getProperty("os.name").toLowerCase().contains("win")) {
+                paramJson = paramJson.replace("\"", "\\\"");
+            }
+            pb.command().add(paramJson);
         }
     }
 

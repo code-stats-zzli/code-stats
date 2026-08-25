@@ -9,6 +9,30 @@
     <link rel="stylesheet" href="index.css">
     <script src="global.js"></script>
     <script src="project-assistant.js" defer></script>
+    <style>
+        /* 使导航栏支持滚动 */
+        .topbar-tabs {
+            display: flex;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+            flex-wrap: nowrap;
+            gap: 8px;
+            padding: 4px 0;
+            scrollbar-width: thin;
+        }
+        .topbar-tabs::-webkit-scrollbar {
+            height: 4px;
+        }
+        .topbar-tabs::-webkit-scrollbar-thumb {
+            background: var(--accent-primary);
+            border-radius: 4px;
+        }
+        .topbar-tab {
+            flex: 0 0 auto;
+            white-space: nowrap;
+        }
+    </style>
 </head>
 <body>
 <header class="topbar">
@@ -38,11 +62,13 @@
         <button class="topbar-tab" data-tab="apiexplorer">
             <span class="tab-icon">🔌</span> API 调试
         </button>
-        <!-- ======== 新增 3D 依赖图选项卡 ======== -->
         <button class="topbar-tab" data-tab="3d">
             <span class="tab-icon">🌐</span> 3D 依赖图
         </button>
-        <!-- ======================================= -->
+        <!-- 新增脚本引擎 -->
+        <button class="topbar-tab" data-tab="scriptengine">
+            <span class="tab-icon">⚙️</span> 脚本引擎
+        </button>
     </nav>
     <div class="topbar-status" id="topbarStatus">
         <span class="status-dot"></span>
@@ -72,12 +98,13 @@
     <div class="tab-panel" id="panel-apiexplorer">
         <iframe src="apiexplorer/index.html" class="panel-iframe" title="API调试"></iframe>
     </div>
-    <!-- ======== 新增 3D 依赖图面板 ======== -->
-    <!-- 对应的 panel -->
     <div class="tab-panel" id="panel-3d">
         <iframe src="three/scene/3d-scene.html" class="panel-iframe" title="3D场景"></iframe>
     </div>
-    <!-- =================================== -->
+    <!-- 新增脚本引擎面板 -->
+    <div class="tab-panel" id="panel-scriptengine">
+        <iframe src="scriptengine/scriptengine.html" class="panel-iframe" title="脚本引擎"></iframe>
+    </div>
 </main>
 
 <div class="toast-container" id="toastContainer"></div>

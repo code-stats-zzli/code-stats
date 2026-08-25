@@ -44,13 +44,13 @@
         });
         activeTab = tabName;
 
-        // 特殊面板的初始化（新增 3D 面板无需额外逻辑）
+        // 特殊面板的初始化
         if (tabName === 'database') {
             initDatabasePanel();
         } else if (tabName === 'codestats') {
             initCodeStatsPanel();
         }
-        // 3D 面板不需要特殊初始化
+        // 脚本引擎不需要特殊初始化
     }
 
     function initDatabasePanel() {

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>脚本引擎 - CodeStats</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="scriptengine.css">
+    <script src="../global.js"></script>
+</head>
+<body>
+<div class="engine-container">
+    <div class="engine-header">
+        <h2>⚙️ 脚本引擎</h2>
+        <p>支持 Python / Java / C / C++ / REST 脚本执行，在线编辑与上传</p>
+    </div>
+
+    <div class="engine-config card">
+        <div class="config-row">
+            <label>语言：</label>
+            <select id="languageSelect">
+                <option value="python">Python</option>
+                <option value="java">Java</option>
+                <option value="c">C</option>
+                <option value="cpp">C++</option>
+                <option value="rest">REST</option>
+            </select>
+        </div>
+        <div class="config-row">
+            <label>执行模式：</label>
+            <select id="executionMode">
+                <option value="source">源码（需编译）</option>
+                <option value="binary">二进制/Class</option>
+                <option value="jar">JAR</option>
+                <option value="directory">目录</option>
+            </select>
+        </div>
+        <div class="config-row" id="javaOptions" style="display:none;">
+            <label>Java 类名：</label>
+            <input type="text" id="className" placeholder="com.example.Main">
+            <label>方法名：</label>
+            <input type="text" id="methodName" placeholder="main">
+        </div>
+        <div class="config-row">
+            <label>参数 (JSON)：</label>
+            <textarea id="paramsInput" rows="2" placeholder='{"arg1": "value1"}'></textarea>
+        </div>
+        <div class="config-row">
+            <label>上传脚本：</label>
+            <input type="file" id="fileInput" accept=".py,.java,.c,.cpp,.jar,.txt">
+            <button id="uploadBtn" class="btn-secondary">📤 上传并执行</button>
+        </div>
+        <div class="config-row editor-row">
+            <label>脚本源码：</label>
+            <textarea id="scriptEditor" rows="12" spellcheck="false"></textarea>
+        </div>
+        <div class="action-bar">
+            <button id="executeBtn" class="btn-primary">🚀 执行</button>
+            <button id="clearBtn" class="btn-secondary">🗑️ 清空</button>
+            <button id="exampleBtn" class="btn-secondary">📋 示例</button>
+        </div>
+    </div>
+
+    <div class="result-card card">
+        <h3>📄 执行结果</h3>
+        <div id="resultArea" class="result-content">
+            <div class="empty-tip">点击“执行”或“上传并执行”查看输出</div>
+        </div>
+    </div>
+</div>
+
+<script src="scriptengine.js"></script>
+</body>
+</html>

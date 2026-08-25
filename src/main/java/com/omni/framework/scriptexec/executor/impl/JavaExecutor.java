@@ -1,23 +1,19 @@
 package com.omni.framework.scriptexec.executor.impl;
 
-
-
 import com.omni.framework.scriptexec.exception.ScriptExecutionException;
 import com.omni.framework.scriptexec.executor.BaseScriptExecutor;
 import com.omni.framework.scriptexec.executor.model.ScriptSource;
 
-import javax.tools.JavaCompiler;
-import javax.tools.ToolProvider;
+import javax.tools.*;
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class JavaExecutor extends BaseScriptExecutor {
@@ -47,54 +43,84 @@ public class JavaExecutor extends BaseScriptExecutor {
                 throw new ScriptExecutionException("Java source mode requires needCompile=true");
             }
 
-            // ★ 提取完整类名（含包名）
+            // 提取完整类名（含包名）
             String className = extractClassName(content);
             if (className == null) {
                 throw new ScriptExecutionException("Cannot determine class name from source");
             }
-            // 简单类名（不含包）
             String simpleName = className.contains(".") ? className.substring(className.lastIndexOf('.') + 1) : className;
 
-            // 创建临时目录存放 .java 源文件
+            // 创建临时源文件目录
             Path srcDir = Files.createTempDirectory("javasrc_");
             Path javaFile = srcDir.resolve(simpleName + ".java");
             Files.write(javaFile, content.getBytes());
 
-            // ★ 创建独立的输出目录（用于存放 .class，自动保留包结构）
+            // 创建独立的输出目录（用于存放 .class，保留包结构）
             Path outputDir = Files.createTempDirectory("javaclass_");
 
-            // 编译：使用 javac -d 指定输出目录
+            // ====== 编译：优先使用 JavaCompiler API ======
             JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
             if (compiler == null) {
-                // 降级使用命令行 javac
-                ProcessBuilder pb = new ProcessBuilder("javac", "-d", outputDir.toString(), javaFile.toString());
-                pb.redirectErrorStream(true);
-                int code = pb.start().waitFor();
-                if (code != 0) {
-                    throw new ScriptExecutionException("javac compilation failed with exit code " + code);
+                // 降级：尝试使用命令行 javac（可能因权限问题失败）
+                try {
+                    ProcessBuilder pb = new ProcessBuilder("javac", "-d", outputDir.toString(), javaFile.toString());
+                    pb.redirectErrorStream(true);
+                    Process process = pb.start();
+                    String compileOutput = readStream(process.getInputStream());
+                    int exitCode = process.waitFor();
+                    if (exitCode != 0) {
+                        throw new ScriptExecutionException(
+                                "Compilation failed with exit code " + exitCode +
+                                        "\n=== Compiler output ===\n" + compileOutput
+                        );
+                    }
+                } catch (IOException e) {
+                    throw new ScriptExecutionException(
+                            "Cannot execute javac. Please ensure JDK is installed and javac is in PATH, " +
+                                    "or use a JRE with tools.jar available. Error: " + e.getMessage(), e
+                    );
                 }
             } else {
-                int result = compiler.run(null, null, null, "-d", outputDir.toString(), javaFile.toString());
-                if (result != 0) {
-                    throw new ScriptExecutionException("Compilation failed");
+                // 使用 JavaCompiler API 编译
+                DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+                StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8);
+                Iterable<? extends JavaFileObject> compilationUnits = fileManager.getJavaFileObjects(javaFile.toFile());
+
+                // 设置编译选项：输出目录
+                List<String> options = new ArrayList<>();
+                options.add("-d");
+                options.add(outputDir.toString());
+
+                JavaCompiler.CompilationTask task = compiler.getTask(
+                        null, fileManager, diagnostics, options, null, compilationUnits
+                );
+
+                boolean success = task.call();
+                fileManager.close();
+
+                if (!success) {
+                    // 收集诊断信息
+                    StringBuilder errorMsg = new StringBuilder("Compilation failed:\n");
+                    for (Diagnostic<?> diagnostic : diagnostics.getDiagnostics()) {
+                        errorMsg.append(diagnostic.toString()).append("\n");
+                    }
+                    throw new ScriptExecutionException(errorMsg.toString());
                 }
             }
 
-            // ★ 存储编译产物（输出目录）和类名
+            // 保存编译产物
             source.setCompiledArtifact(outputDir);
             source.setCompiled(true);
-            params.put("_className", className);   // 完整类名，用于运行时
-
-            // 可选：清理源文件目录（但保留 outputDir 供后续执行）
-            // Files.deleteIfExists(srcDir); // 可自行决定是否删除
+            params.put("_className", className);
 
         } else if ("binary".equals(mode) || "jar".equals(mode)) {
-            // 原有 binary/jar 逻辑保持不变
+            // 优先使用路径
             if (source.getPath() != null && Files.exists(source.getPath())) {
                 source.setCompiledArtifact(source.getPath());
                 source.setCompiled(true);
                 return;
             }
+            // 无路径，从内容写入临时文件
             String content = source.getContent();
             if (content == null) {
                 throw new ScriptExecutionException("No content for " + mode);
@@ -105,18 +131,67 @@ public class JavaExecutor extends BaseScriptExecutor {
             source.setCompiled(true);
 
         } else if ("directory".equals(mode)) {
-            // 原有 directory 逻辑保持不变
+            // 目录模式已在 resolve 中处理路径，这里直接使用
             Path dir = source.getPath();
             if (dir == null) {
                 throw new ScriptExecutionException("Directory path missing");
             }
+            // 若 needCompile=true，编译目录下所有 .java
             Boolean needCompile = (Boolean) params.getOrDefault("needCompile", false);
             if (needCompile) {
-                ProcessBuilder pb = new ProcessBuilder("javac", "-d", dir.toString());
-                Files.walk(dir).filter(p -> p.toString().endsWith(".java")).forEach(p -> pb.command().add(p.toString()));
-                pb.redirectErrorStream(true);
-                int code = pb.start().waitFor();
-                if (code != 0) throw new ScriptExecutionException("Directory compilation failed");
+                // 使用 JavaCompiler API 编译整个目录
+                JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+                if (compiler == null) {
+                    // 降级命令行
+                    try {
+                        ProcessBuilder pb = new ProcessBuilder("javac", "-d", dir.toString());
+                        Files.walk(dir).filter(p -> p.toString().endsWith(".java")).forEach(p -> pb.command().add(p.toString()));
+                        pb.redirectErrorStream(true);
+                        Process process = pb.start();
+                        String compileOutput = readStream(process.getInputStream());
+                        int exitCode = process.waitFor();
+                        if (exitCode != 0) {
+                            throw new ScriptExecutionException(
+                                    "Directory compilation failed with exit code " + exitCode +
+                                            "\n=== Compiler output ===\n" + compileOutput
+                            );
+                        }
+                    } catch (IOException e) {
+                        throw new ScriptExecutionException(
+                                "Cannot execute javac. Please ensure JDK is installed and javac is in PATH. Error: " + e.getMessage(), e
+                        );
+                    }
+                } else {
+                    // 收集所有 .java 文件
+                    List<File> javaFiles = Files.walk(dir)
+                            .filter(p -> p.toString().endsWith(".java"))
+                            .map(Path::toFile)
+                            .collect(Collectors.toList());
+                    if (!javaFiles.isEmpty()) {
+                        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+                        StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8);
+                        Iterable<? extends JavaFileObject> compilationUnits = fileManager.getJavaFileObjectsFromFiles(javaFiles);
+
+                        List<String> options = new ArrayList<>();
+                        options.add("-d");
+                        options.add(dir.toString());
+
+                        JavaCompiler.CompilationTask task = compiler.getTask(
+                                null, fileManager, diagnostics, options, null, compilationUnits
+                        );
+
+                        boolean success = task.call();
+                        fileManager.close();
+
+                        if (!success) {
+                            StringBuilder errorMsg = new StringBuilder("Directory compilation failed:\n");
+                            for (Diagnostic<?> diagnostic : diagnostics.getDiagnostics()) {
+                                errorMsg.append(diagnostic.toString()).append("\n");
+                            }
+                            throw new ScriptExecutionException(errorMsg.toString());
+                        }
+                    }
+                }
             }
             source.setCompiledArtifact(dir);
             source.setCompiled(true);
@@ -125,6 +200,24 @@ public class JavaExecutor extends BaseScriptExecutor {
             throw new ScriptExecutionException("Unsupported execution mode: " + mode);
         }
     }
+
+    // 如果父类 BaseScriptExecutor 没有 readStream 方法，可以在这里添加
+    // 实际上 BaseScriptExecutor 已有，但为了安全，我们在这里声明，以防父类未定义
+    // 我们直接使用父类的方法，因为 BaseScriptExecutor 有 protected String readStream(InputStream) 方法
+    // 如果确实没有，可以在这里实现，但为了代码简洁，我们假设父类有。
+    // 如果报错，请检查 BaseScriptExecutor 中是否有 readStream 方法，如果没有，请添加下面注释的代码。
+    /*
+    protected String readStream(InputStream inputStream) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+    */
 
     @Override
     protected String doExecute(ScriptSource source, Map<String, Object> params) throws Exception {
@@ -163,20 +256,10 @@ public class JavaExecutor extends BaseScriptExecutor {
         return runProcess(pb, 30);
     }
 
-    /**
-     * 改进后的反射调用 JAR 中的方法：
-     * - 根据方法名查找所有公共方法
-     * - 如果只有一个方法，直接使用，并尝试转换参数
-     * - 如果有多个重载，先按参数个数匹配，再按类型兼容性匹配
-     * - 参数从 params 的 "args" 键获取（支持 Object[] 或 List）
-     * - 若 "args" 不存在，但存在 "arg"，则作为单参数向后兼容
-     * - 在调用前对参数个数和类型进行校验，确保抛出清晰异常
-     */
     private String executeJarMethod(String jarPath, String className, String methodName, Map<String, Object> params) throws Exception {
         URL jarUrl = new File(jarPath).toURI().toURL();
         try (URLClassLoader loader = new URLClassLoader(new URL[]{jarUrl})) {
             Class<?> clazz = loader.loadClass(className);
-            // 获取所有公共方法
             Method[] methods = clazz.getMethods();
             List<Method> candidates = Arrays.stream(methods)
                     .filter(m -> m.getName().equals(methodName))
@@ -185,7 +268,6 @@ public class JavaExecutor extends BaseScriptExecutor {
                 throw new ScriptExecutionException("No method found with name: " + methodName);
             }
 
-            // 提取参数列表
             Object argsObj = params.get("args");
             List<Object> argList = new ArrayList<>();
             if (argsObj instanceof Object[]) {
@@ -195,17 +277,14 @@ public class JavaExecutor extends BaseScriptExecutor {
             } else if (argsObj != null) {
                 argList.add(argsObj);
             }
-            // 向后兼容：如果没有 args 但有 arg，则使用单参数
             if (argList.isEmpty() && params.containsKey("arg")) {
                 argList.add(params.get("arg"));
             }
 
             Method selectedMethod = null;
-            // 如果只有一个候选，直接使用
             if (candidates.size() == 1) {
                 selectedMethod = candidates.get(0);
             } else {
-                // 多个候选，先按参数个数匹配
                 List<Method> matchedByCount = candidates.stream()
                         .filter(m -> m.getParameterCount() == argList.size())
                         .collect(Collectors.toList());
@@ -215,7 +294,6 @@ public class JavaExecutor extends BaseScriptExecutor {
                 if (matchedByCount.size() == 1) {
                     selectedMethod = matchedByCount.get(0);
                 } else {
-                    // 多个方法参数个数相同，尝试类型兼容匹配
                     for (Method m : matchedByCount) {
                         if (canConvertArguments(argList, m.getParameterTypes())) {
                             if (selectedMethod == null) {
@@ -231,12 +309,10 @@ public class JavaExecutor extends BaseScriptExecutor {
                 }
             }
 
-            // ---------- 统一校验选中的方法 ----------
             if (selectedMethod == null) {
                 throw new ScriptExecutionException("No suitable method found: " + methodName);
             }
 
-            // 1. 校验参数个数
             if (selectedMethod.getParameterCount() != argList.size()) {
                 throw new ScriptExecutionException(
                         String.format("Parameter count mismatch for method '%s': expected %d, got %d",
@@ -244,7 +320,6 @@ public class JavaExecutor extends BaseScriptExecutor {
                 );
             }
 
-            // 2. 校验参数类型兼容性（提前校验，避免转换时抛出模糊异常）
             if (!canConvertArguments(argList, selectedMethod.getParameterTypes())) {
                 throw new ScriptExecutionException(
                         String.format("Parameter types incompatible for method '%s'. Expected types: %s, provided args: %s",
@@ -255,7 +330,6 @@ public class JavaExecutor extends BaseScriptExecutor {
                 );
             }
 
-            // 3. 转换参数并调用（此时保证数量和类型都匹配）
             Class<?>[] paramTypes = selectedMethod.getParameterTypes();
             Object[] convertedArgs = new Object[paramTypes.length];
             for (int i = 0; i < paramTypes.length; i++) {
@@ -267,9 +341,6 @@ public class JavaExecutor extends BaseScriptExecutor {
         }
     }
 
-    /**
-     * 检查参数列表是否能转换为目标类型数组（仅做简单检查，不实际转换）
-     */
     private boolean canConvertArguments(List<Object> args, Class<?>[] targetTypes) {
         if (args.size() != targetTypes.length) return false;
         for (int i = 0; i < args.size(); i++) {
@@ -282,27 +353,20 @@ public class JavaExecutor extends BaseScriptExecutor {
         return true;
     }
 
-    /**
-     * 将任意值转换为目标类型（支持基本类型及常见包装类、String）
-     */
     private Object convertToType(Object value, Class<?> targetType) throws ScriptExecutionException {
         if (value == null) {
-            // 基本类型不允许 null
             if (targetType.isPrimitive()) {
                 throw new ScriptExecutionException("Cannot convert null to primitive type: " + targetType);
             }
             return null;
         }
-        // 如果已经是目标类型或可赋值
         if (targetType.isInstance(value)) {
             return value;
         }
-        // 转换为字符串
         String str = value.toString();
         if (targetType == String.class) {
             return str;
         }
-        // 基本类型和包装类型
         if (targetType == int.class || targetType == Integer.class) {
             return Integer.parseInt(str);
         }
@@ -330,7 +394,6 @@ public class JavaExecutor extends BaseScriptExecutor {
             }
             throw new ScriptExecutionException("Cannot convert '" + str + "' to char");
         }
-        // 其他类型：尝试使用 String 参数构造
         try {
             return targetType.getConstructor(String.class).newInstance(str);
         } catch (Exception e) {
@@ -347,7 +410,6 @@ public class JavaExecutor extends BaseScriptExecutor {
 
 
     private String extractClassName(String code) {
-        // 1. 提取包名（如果有）
         String packageName = "";
         java.util.regex.Pattern pkgPattern = java.util.regex.Pattern.compile("package\\s+([\\w.]+);");
         java.util.regex.Matcher pkgMatcher = pkgPattern.matcher(code);
@@ -355,7 +417,6 @@ public class JavaExecutor extends BaseScriptExecutor {
             packageName = pkgMatcher.group(1);
         }
 
-        // 2. 提取类名（优先 public class，其次 class）
         String className = null;
         java.util.regex.Pattern p = java.util.regex.Pattern.compile("public\\s+class\\s+(\\w+)");
         java.util.regex.Matcher m = p.matcher(code);
@@ -370,13 +431,9 @@ public class JavaExecutor extends BaseScriptExecutor {
         }
 
         if (className == null) {
-            return null; // 未找到类名
+            return null;
         }
 
-        // 3. 组合完整类名
-        if (!packageName.isEmpty()) {
-            return packageName + "." + className;
-        }
-        return className;
+        return packageName.isEmpty() ? className : packageName + "." + className;
     }
 }

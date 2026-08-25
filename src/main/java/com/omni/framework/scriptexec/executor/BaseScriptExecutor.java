@@ -187,4 +187,18 @@ public abstract class BaseScriptExecutor implements ScriptExecutor {
             pb.command().add(JsonUtil.toJson(argsObj));
         }
     }
+
+    /**
+     * 读取进程输出流（用于捕获编译错误信息）
+     */
+    public String readStream(InputStream inputStream) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+        }
+        return sb.toString();
+    }
 }

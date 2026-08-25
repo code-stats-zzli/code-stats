@@ -11,6 +11,9 @@
     var clearBtn = document.getElementById('clearBtn');
     var formatJsonBtn = document.getElementById('formatJsonBtn');
 
+    // 设置默认语言为 java
+    languageSelect.value = 'java';
+
     function sendState(extra) {
         var state = {
             language: languageSelect.value,
@@ -61,8 +64,10 @@
 
     languageSelect.addEventListener('change', function() {
         javaOptions.style.display = this.value === 'java' ? 'flex' : 'none';
-        loadExample();
-        sendState(); // 通知父页面语言已变更
+        // 切换语言时，发送语言变更，由父页面决定是否更新编辑器
+        sendState();
+        // 同时，如果父页面允许，会更新编辑器内容（根据编辑器是否为空等逻辑）
+        // 但这里我们也可以主动推送示例（但父页面有判断逻辑，我们仅发送状态）
     });
 
     executionMode.addEventListener('change', sendState);
@@ -80,7 +85,9 @@
         }
     });
 
-    exampleBtn.addEventListener('click', loadExample);
+    exampleBtn.addEventListener('click', function() {
+        loadExample();
+    });
 
     clearBtn.addEventListener('click', function() {
         paramsInput.value = '';
@@ -114,8 +121,10 @@
         }
     });
 
-    // 初始化：触发一次 change 加载默认语言示例
+    // 初始化时触发一次 change，发送默认状态
     setTimeout(function() {
         languageSelect.dispatchEvent(new Event('change'));
+        // 并发送一次示例到编辑器（如果编辑器已加载）
+        loadExample();
     }, 100);
 })();

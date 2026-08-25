@@ -34,7 +34,6 @@
         updateStats();
     });
 
-    // 监听父页面消息
     window.addEventListener('message', function(e) {
         var data = e.data;
         if (data && data.type === 'setEditorContent') {
@@ -47,10 +46,8 @@
         }
     });
 
-    // 通知父页面已就绪
     function notifyReady() {
         window.parent.postMessage({ type: 'editorReady' }, '*');
-        // 主动请求内容（以防父页面未及时发送）
         setTimeout(function() {
             window.parent.postMessage({ type: 'requestEditorContent' }, '*');
         }, 100);

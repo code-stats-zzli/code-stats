@@ -32,7 +32,7 @@ public class JavaExecutor extends BaseScriptExecutor {
         String mode = source.getExecutionMode();
         if ("source".equals(mode)) {
             boolean needCompile = (Boolean) params.getOrDefault("needCompile", true);
-            // 如果有路径且是 .java 文件，读取内容；否则使用 content
+            // 获取源码内容
             String content;
             if (source.getPath() != null && Files.exists(source.getPath())) {
                 content = new String(Files.readAllBytes(source.getPath()));
@@ -46,36 +46,55 @@ public class JavaExecutor extends BaseScriptExecutor {
             if (!needCompile) {
                 throw new ScriptExecutionException("Java source mode requires needCompile=true");
             }
+
+            // ★ 提取完整类名（含包名）
             String className = extractClassName(content);
             if (className == null) {
                 throw new ScriptExecutionException("Cannot determine class name from source");
             }
-            // 创建临时目录存放 .java 和 .class
+            // 简单类名（不含包）
+            String simpleName = className.contains(".") ? className.substring(className.lastIndexOf('.') + 1) : className;
+
+            // 创建临时目录存放 .java 源文件
             Path srcDir = Files.createTempDirectory("javasrc_");
-            Path javaFile = srcDir.resolve(className + ".java");
+            Path javaFile = srcDir.resolve(simpleName + ".java");
             Files.write(javaFile, content.getBytes());
-            // 编译
+
+            // ★ 创建独立的输出目录（用于存放 .class，自动保留包结构）
+            Path outputDir = Files.createTempDirectory("javaclass_");
+
+            // 编译：使用 javac -d 指定输出目录
             JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
             if (compiler == null) {
-                ProcessBuilder pb = new ProcessBuilder("javac", javaFile.toString());
+                // 降级使用命令行 javac
+                ProcessBuilder pb = new ProcessBuilder("javac", "-d", outputDir.toString(), javaFile.toString());
                 pb.redirectErrorStream(true);
                 int code = pb.start().waitFor();
-                if (code != 0) throw new ScriptExecutionException("javac failed");
+                if (code != 0) {
+                    throw new ScriptExecutionException("javac compilation failed with exit code " + code);
+                }
             } else {
-                int result = compiler.run(null, null, null, javaFile.toString());
-                if (result != 0) throw new ScriptExecutionException("Compilation failed");
+                int result = compiler.run(null, null, null, "-d", outputDir.toString(), javaFile.toString());
+                if (result != 0) {
+                    throw new ScriptExecutionException("Compilation failed");
+                }
             }
-            source.setCompiledArtifact(srcDir);
+
+            // ★ 存储编译产物（输出目录）和类名
+            source.setCompiledArtifact(outputDir);
             source.setCompiled(true);
-            params.put("_className", className);
+            params.put("_className", className);   // 完整类名，用于运行时
+
+            // 可选：清理源文件目录（但保留 outputDir 供后续执行）
+            // Files.deleteIfExists(srcDir); // 可自行决定是否删除
+
         } else if ("binary".equals(mode) || "jar".equals(mode)) {
-            // 优先使用路径
+            // 原有 binary/jar 逻辑保持不变
             if (source.getPath() != null && Files.exists(source.getPath())) {
                 source.setCompiledArtifact(source.getPath());
                 source.setCompiled(true);
                 return;
             }
-            // 无路径，从内容写入临时文件
             String content = source.getContent();
             if (content == null) {
                 throw new ScriptExecutionException("No content for " + mode);
@@ -84,13 +103,13 @@ public class JavaExecutor extends BaseScriptExecutor {
             Path tempFile = createTempFile(content, suffix);
             source.setCompiledArtifact(tempFile);
             source.setCompiled(true);
+
         } else if ("directory".equals(mode)) {
-            // 目录模式已在 resolve 中处理路径，这里直接使用
+            // 原有 directory 逻辑保持不变
             Path dir = source.getPath();
             if (dir == null) {
                 throw new ScriptExecutionException("Directory path missing");
             }
-            // 若 needCompile=true，编译目录下所有 .java
             Boolean needCompile = (Boolean) params.getOrDefault("needCompile", false);
             if (needCompile) {
                 ProcessBuilder pb = new ProcessBuilder("javac", "-d", dir.toString());
@@ -101,6 +120,7 @@ public class JavaExecutor extends BaseScriptExecutor {
             }
             source.setCompiledArtifact(dir);
             source.setCompiled(true);
+
         } else {
             throw new ScriptExecutionException("Unsupported execution mode: " + mode);
         }
@@ -327,11 +347,36 @@ public class JavaExecutor extends BaseScriptExecutor {
 
 
     private String extractClassName(String code) {
+        // 1. 提取包名（如果有）
+        String packageName = "";
+        java.util.regex.Pattern pkgPattern = java.util.regex.Pattern.compile("package\\s+([\\w.]+);");
+        java.util.regex.Matcher pkgMatcher = pkgPattern.matcher(code);
+        if (pkgMatcher.find()) {
+            packageName = pkgMatcher.group(1);
+        }
+
+        // 2. 提取类名（优先 public class，其次 class）
+        String className = null;
         java.util.regex.Pattern p = java.util.regex.Pattern.compile("public\\s+class\\s+(\\w+)");
         java.util.regex.Matcher m = p.matcher(code);
-        if (m.find()) return m.group(1);
-        p = java.util.regex.Pattern.compile("class\\s+(\\w+)");
-        m = p.matcher(code);
-        return m.find() ? m.group(1) : null;
+        if (m.find()) {
+            className = m.group(1);
+        } else {
+            p = java.util.regex.Pattern.compile("class\\s+(\\w+)");
+            m = p.matcher(code);
+            if (m.find()) {
+                className = m.group(1);
+            }
+        }
+
+        if (className == null) {
+            return null; // 未找到类名
+        }
+
+        // 3. 组合完整类名
+        if (!packageName.isEmpty()) {
+            return packageName + "." + className;
+        }
+        return className;
     }
 }

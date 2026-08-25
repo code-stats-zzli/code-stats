@@ -1,18 +1,16 @@
 (function() {
-    // DOM 元素
     var tabBtns = document.querySelectorAll('.sidebar-tabs .tab-btn');
     var iframe = document.getElementById('contentFrame');
     var executeBtn = document.getElementById('executeBtn');
     var resultArea = document.getElementById('resultArea');
     var copyBtn = document.getElementById('copyResultBtn');
 
-    // 状态
     var currentTab = 'config';
-    var configState = { language: 'python', mode: 'source', params: {} };
+    var configState = { language: 'java', mode: 'source', params: {} }; // 默认 java
     var editorContent = '';
     var isExecuting = false;
+    var isEditorLoaded = false; // 标记编辑器是否已加载
 
-    // 语言示例映射
     var examples = {
         python: '# Python 示例\nimport sys, json\nparams = json.loads(sys.argv[1])\nprint("Hello, CodeStats!")\nprint("参数:", params)\nif \'a\' in params and \'b\' in params:\n    print(f"a + b = {params[\'a\'] + params[\'b\']}")',
         java: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, CodeStats!");\n        for (String arg : args) System.out.println("arg: " + arg);\n    }\n}',
@@ -21,41 +19,65 @@
         rest: 'https://httpbin.org/get'
     };
 
-    function getExample(lang) { return examples[lang] || examples.python; }
+    function getExample(lang) { return examples[lang] || examples.java; }
 
-    // ---------- 切换标签 ----------
-    function switchTab(tab) {
-        if (currentTab === tab) return;
-        currentTab = tab;
-        // 更新按钮激活状态
-        tabBtns.forEach(function(btn) {
-            btn.classList.toggle('active', btn.dataset.tab === tab);
-        });
-        // 切换 iframe src
-        var src = tab === 'config' ? 'scriptengine-config.html' : 'scriptengine-editor.html';
-        iframe.src = src;
-        // 注意：iframe 加载完成后会触发 load 事件，在那里发送初始化消息
-    }
-
-    // ---------- 向 iframe 发送消息 ----------
     function sendToFrame(data) {
         try {
             iframe.contentWindow.postMessage(data, '*');
         } catch (e) {
-            console.warn('发送消息失败', e);
+            console.warn('sendToFrame error', e);
         }
     }
 
-    // ---------- 处理 from 子页面的消息 ----------
+    // 切换标签
+    function switchTab(tab) {
+        if (currentTab === tab) return;
+        currentTab = tab;
+        tabBtns.forEach(function(btn) {
+            btn.classList.toggle('active', btn.dataset.tab === tab);
+        });
+        var src = tab === 'config' ? 'scriptengine-config.html' : 'scriptengine-editor.html';
+        iframe.src = src;
+        // 当加载完成后，会触发 load 事件
+    }
+
+    // iframe 加载完成
+    iframe.addEventListener('load', function() {
+        if (currentTab === 'editor') {
+            isEditorLoaded = true;
+            // 如果编辑器内容为空，则发送默认示例；否则发送当前内容（保留用户修改）
+            if (!editorContent.trim()) {
+                var defaultContent = getExample(configState.language);
+                editorContent = defaultContent;
+                sendToFrame({ type: 'setEditorContent', content: defaultContent });
+            } else {
+                sendToFrame({ type: 'setEditorContent', content: editorContent });
+            }
+        } else {
+            // 配置页加载完成，无需操作
+        }
+    });
+
+    // 接收子页面消息
     window.addEventListener('message', function(e) {
         var data = e.data;
         if (!data || typeof data !== 'object') return;
 
         if (data.type === 'configState') {
+            var oldLang = configState.language;
             configState = data.data || {};
-            // 如果当前是编辑器标签且已加载，则更新内容
-            if (currentTab === 'editor' && iframe.contentWindow) {
-                sendToFrame({ type: 'setEditorContent', content: getExample(configState.language) });
+            // 如果语言变化且编辑器已加载，且编辑器内容为空或是当前语言的示例（可简单判断内容是否等于旧语言的示例），则更新
+            // 更稳妥：如果编辑器内容等于旧语言的示例，则更新为新语言示例
+            if (configState.language !== oldLang && isEditorLoaded) {
+                var currentEditorContent = editorContent;
+                var oldExample = getExample(oldLang);
+                var newExample = getExample(configState.language);
+                // 如果编辑器内容等于旧示例，则更新为新示例
+                if (currentEditorContent === oldExample || !currentEditorContent.trim()) {
+                    editorContent = newExample;
+                    sendToFrame({ type: 'setEditorContent', content: newExample });
+                }
+                // 否则不覆盖用户修改
             }
         } else if (data.type === 'editorState') {
             editorContent = data.data.content || '';
@@ -66,28 +88,33 @@
         } else if (data.type === 'executeRequest') {
             doExecute();
         } else if (data.type === 'requestExample') {
-            // 配置页面请求示例
-            sendToFrame({ type: 'setEditorContent', content: getExample(configState.language) });
+            // 编辑器请求示例（点击示例按钮）
+            var example = getExample(configState.language);
+            editorContent = example;
+            sendToFrame({ type: 'setEditorContent', content: example });
         } else if (data.type === 'editorReady') {
-            // 编辑器就绪，发送当前语言的示例
-            sendToFrame({ type: 'setEditorContent', content: getExample(configState.language) });
+            isEditorLoaded = true;
+            // 如果编辑器内容为空，发送默认示例；否则保留
+            if (!editorContent.trim()) {
+                var def = getExample(configState.language);
+                editorContent = def;
+                sendToFrame({ type: 'setEditorContent', content: def });
+            } else {
+                sendToFrame({ type: 'setEditorContent', content: editorContent });
+            }
         } else if (data.type === 'requestEditorContent') {
-            // 编辑器主动请求内容
-            sendToFrame({ type: 'setEditorContent', content: getExample(configState.language) });
+            // 编辑器主动请求内容，发送当前内容
+            if (editorContent.trim()) {
+                sendToFrame({ type: 'setEditorContent', content: editorContent });
+            } else {
+                var def = getExample(configState.language);
+                editorContent = def;
+                sendToFrame({ type: 'setEditorContent', content: def });
+            }
         }
     });
 
-    // ---------- iframe 加载完成事件 ----------
-    iframe.addEventListener('load', function() {
-        // 如果当前是编辑器标签，且尚未发送内容，则发送
-        if (currentTab === 'editor') {
-            sendToFrame({ type: 'setEditorContent', content: getExample(configState.language) });
-        } else {
-            // 配置标签，不需要额外操作，配置页面自己会请求示例
-        }
-    });
-
-    // ---------- 执行脚本 ----------
+    // 执行脚本（同上）
     async function doExecute() {
         if (isExecuting) return;
         var script = editorContent || '';
@@ -97,10 +124,9 @@
         }
         isExecuting = true;
         resultArea.innerHTML = '<div class="loading">⏳ 执行中...</div>';
-
         var payload = {
             scriptContent: script,
-            language: configState.language || 'python',
+            language: configState.language || 'java',
             executionMode: configState.mode || 'source',
             params: configState.params || {}
         };
@@ -108,7 +134,6 @@
             if (configState.className) payload.className = configState.className;
             if (configState.methodName) payload.methodName = configState.methodName;
         }
-
         try {
             var resp = await fetch(window.apiUrl('/script/api/execute'), {
                 method: 'POST',
@@ -128,7 +153,7 @@
         }
     }
 
-    // ---------- 复制结果 ----------
+    // 复制结果等...
     copyBtn.addEventListener('click', function() {
         var text = resultArea.textContent || '';
         if (!text || text.includes('点击「执行脚本」')) {
@@ -147,10 +172,8 @@
         });
     });
 
-    // ---------- 执行按钮 ----------
     executeBtn.addEventListener('click', doExecute);
 
-    // ---------- 辅助 ----------
     function escapeHtml(str) {
         if (!str) return '';
         return str.replace(/[&<>]/g, function(m) {
@@ -161,7 +184,6 @@
         });
     }
 
-    // ---------- 绑定标签点击 ----------
     tabBtns.forEach(function(btn) {
         btn.addEventListener('click', function() {
             var tab = this.dataset.tab;
@@ -169,6 +191,5 @@
         });
     });
 
-    // ---------- 初始启动 ----------
-    // 默认显示配置页，无需额外操作
+    // 初始默认显示配置页，编辑器未加载
 })();

@@ -14,6 +14,9 @@ public interface EvaluationContext {
 
     void registerFunction(String name, FunctionResolver resolver);
 
+    /** 判断是否注册了指定名称的函数 */
+    boolean containsFunction(String name);
+
     Object callFunction(String name, Object... args) throws ExpressionException;
 
     Object getProperty(Object target, String property) throws ExpressionException;

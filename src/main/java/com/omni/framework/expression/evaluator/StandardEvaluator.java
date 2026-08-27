@@ -19,11 +19,8 @@ public class StandardEvaluator implements Evaluator {
 
     @Override
     public Object visitVariable(VariableNode node, EvaluationContext context) {
-        Object val = context.getVariable(node.getName());
-        if (val == null) {
-            throw new ExpressionException("Variable not found: " + node.getName());
-        }
-        return val;
+        // ★ 优化：变量不存在返回null，允许参与 == null 比较
+        return context.getVariable(node.getName());
     }
 
     @Override
@@ -84,15 +81,15 @@ public class StandardEvaluator implements Evaluator {
                 .map(arg -> evaluate(arg, context))
                 .toArray();
 
-        // 如果有 target，优先调用实例方法
+        // 有 target：实例方法
         if (target != null) {
             return ReflectUtils.invokeMethod(target, node.getName(), args);
         }
 
-        // 无 target，尝试上下文函数，再尝试静态方法
-        try {
+        // ★ 优化：先判断是否注册了函数，避免业务异常被错误回退
+        if (context.containsFunction(node.getName())) {
             return context.callFunction(node.getName(), args);
-        } catch (ExpressionException e) {
+        } else {
             return ReflectUtils.invokeStaticMethod(node.getName(), args);
         }
     }

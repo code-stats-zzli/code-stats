@@ -43,16 +43,20 @@ public class StandardEvaluationContext implements EvaluationContext {
     }
 
     @Override
+    public boolean containsFunction(String name) {
+        return functions.containsKey(name);
+    }
+
+    @Override
     public Object callFunction(String name, Object... args) throws ExpressionException {
         FunctionResolver resolver = functions.get(name);
         if (resolver != null) {
             try {
                 return resolver.resolve(args);
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                throw new ExpressionException("Function execution failed: " + name, e);
             }
         }
-        // 尝试静态方法
         return ReflectUtils.invokeStaticMethod(name, args);
     }
 

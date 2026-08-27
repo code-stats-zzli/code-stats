@@ -12,17 +12,6 @@ import java.util.Map;
 
 public class ExpressionDemo {
     public static void main(String[] args) {
-        EvaluationContext ctx = new StandardEvaluationContext();
-        ctx.setVariable("user", new User("张三", 25));
-        ctx.setVariable("list", java.util.Arrays.asList(10, 20, 30));
-        BuiltinFunctions.registerAll(ctx);
-
-        ExpressionParser parser = new StandardExpressionParser();// ============ 1. 显式变量（直接放数据包顶层） ============
-        Map<String, Object> data = new HashMap<>();
-        data.put("price", 99.9);          // ← 显式变量
-        data.put("qty", 5);               // ← 显式变量
-        Object result = ExpressionFactory.eval("price * qty", data);
-// 输出：499.5
 
 
 // ============ 2. Map 数据源（使用 __resolvers.map） ============
@@ -37,7 +26,7 @@ public class ExpressionDemo {
                 "map", rowMap                 // ★ Map 数据源
         ));
 
-        Object result2 = ExpressionFactory.eval("name + '年龄' + age + '，税后：' + salary*(1-taxRate)", data2);
+        Object result2 = ExpressionEngine.eval("name + '年龄' + age + '，税后：' + salary*(1-taxRate)", data2);
 // 输出：张三年龄25，税后：13500.0
 
 
@@ -55,7 +44,7 @@ public class ExpressionDemo {
         ));
 
 // 优先级：显式变量 > root > map
-        Object result3 = ExpressionFactory.eval("name + '年龄' + age + '，薪资' + salary + '，奖金' + bonus", data3);
+        Object result3 = ExpressionEngine.eval("name + '年龄' + age + '，薪资' + salary + '，奖金' + bonus", data3);
 // 输出：李四年龄30，薪资20000，奖金5000
 
 
@@ -77,7 +66,7 @@ public class ExpressionDemo {
 
 // 查找顺序：显式变量(taxRate) → custom(列映射) → root → map → table
         String expr = "n + '年龄' + age + '，薪资' + s + '，奖金' + bonus + '，双倍奖金：' + double(bonus)";
-        Object result4 = ExpressionFactory.eval(expr, data4);
+        Object result4 = ExpressionEngine.eval(expr, data4);
 // 输出：赵六年龄28，薪资12000，奖金8000，双倍奖金：16000.0
     }
 

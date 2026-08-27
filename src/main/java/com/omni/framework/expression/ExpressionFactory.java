@@ -63,9 +63,7 @@ public final class ExpressionFactory {
         return eval(expression, data);
     }
 
-    public static Object eval(String expression, Map<String, Object> variables) {
-        return eval(expression, (Map<String, Object>) variables);
-    }
+
 
     public static Object eval(String expression, Map<String, Object> variables, Object rootObject) {
         Map<String, Object> data = new HashMap<>(variables);

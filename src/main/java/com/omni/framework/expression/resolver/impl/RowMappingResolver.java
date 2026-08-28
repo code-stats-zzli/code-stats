@@ -5,9 +5,13 @@ import com.omni.framework.expression.resolver.VariableResolver;
 
 import java.util.Map;
 
+/**
+ * Map 数据源解析器（直接键值映射）。
+ * 优先级：2
+ */
 public class RowMappingResolver implements VariableResolver {
 
-    private final Map<String, Object> rowMapping;  // 表达式名 -> 实际列名
+    private final Map<String, Object> rowMapping;
 
     public RowMappingResolver(Map<String, Object> rowMapping) {
         this.rowMapping = rowMapping;
@@ -18,7 +22,11 @@ public class RowMappingResolver implements VariableResolver {
         if (rowMapping == null || !rowMapping.containsKey(name)) {
             return null;
         }
-        // 拿到映射后的实际列名，然后从上下文中查找
         return rowMapping.get(name);
+    }
+
+    @Override
+    public int getPriority() {
+        return 2;
     }
 }

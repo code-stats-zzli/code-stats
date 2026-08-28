@@ -13,6 +13,7 @@ import com.omni.framework.expression.util.ReflectivePropertyAccessor;
  *   <li>若根对象实现了 {@link RootObject} 接口，则调用 {@code getProperty(name)}</li>
  *   <li>否则通过反射（getter/字段）获取</li>
  * </ul>
+ * 优先级：4（中等）
  */
 public class RootObjectResolver implements VariableResolver {
 
@@ -30,16 +31,19 @@ public class RootObjectResolver implements VariableResolver {
             return null;
         }
 
-        // ★ 优先使用 RootObject 接口
         if (rootObject instanceof RootObject) {
             return ((RootObject) rootObject).getProperty(name);
         }
 
-        // 回退到反射
         try {
             return propertyAccessor.getProperty(rootObject, name);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    @Override
+    public int getPriority() {
+        return 4; // 内置优先级：4（根对象）
     }
 }

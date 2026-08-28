@@ -22,4 +22,9 @@ public class ExplicitVariableResolver implements VariableResolver {
         }
         return null;
     }
+
+    @Override
+    public int getPriority() {
+        return 10; // 内置优先级：10
+    }
 }

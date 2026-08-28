@@ -1,4 +1,5 @@
 package com.omni.framework.expression.resolver.impl;
+
 import com.omni.framework.expression.EvaluationContext;
 import com.omni.framework.expression.resolver.VariableResolver;
 
@@ -6,6 +7,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 单行表格数据解析器。
+ * 优先级：3
+ */
 public class TabularDataResolver implements VariableResolver {
     private final Map<String, Integer> columnIndexMap = new HashMap<>();
     private final Object[] rowData;
@@ -24,5 +29,10 @@ public class TabularDataResolver implements VariableResolver {
             return rowData[idx];
         }
         return null;
+    }
+
+    @Override
+    public int getPriority() {
+        return 3;
     }
 }

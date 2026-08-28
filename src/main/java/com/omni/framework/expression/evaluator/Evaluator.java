@@ -17,4 +17,7 @@ public interface Evaluator {
     Object visitPropertyAccess(PropertyAccessNode node, EvaluationContext context);
     Object visitAssignment(AssignmentNode node, EvaluationContext context);
     Object visitArrayAccess(ArrayAccessNode node, EvaluationContext context);
+
+    // ★★★★★ 新增：数组常量求值 ★★★★★
+    Object visitArrayLiteral(ArrayLiteralNode node, EvaluationContext context);
 }

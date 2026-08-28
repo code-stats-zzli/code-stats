@@ -12,7 +12,17 @@ import java.util.Map;
 
 public class ExpressionDemo {
     public static void main(String[] args) {
+      /*  // 1. 数字运算（不再是字符串拼接）
+        System.out.println(ExpressionEngine.eval("1 + 2 * 3"));          // 7.0
+        System.out.println(ExpressionEngine.eval("10 / 3"));             // 3.3333333333333335
+        System.out.println(ExpressionEngine.eval("'a' + 1"));            // "a1"（字符串拼接保留）
 
+        // 2. 数组常量
+        System.out.println(ExpressionEngine.eval("[1, 2, 3][1]"));       // 2
+        System.out.println(ExpressionEngine.eval("[[1,2], [3,4]][1][0]")); // 3
+
+        // 3. 混合数组
+        System.out.println(ExpressionEngine.eval("[\"hello\", 123, true][2]")); // true
 
 // ============ 2. Map 数据源（使用 __resolvers.map） ============
         Map<String, Object> rowMap = new HashMap<>();
@@ -28,6 +38,7 @@ public class ExpressionDemo {
 
         Object result2 = ExpressionEngine.eval("name + '年龄' + age + '，税后：' + salary*(1-taxRate)", data2);
 // 输出：张三年龄25，税后：13500.0
+        System.out.println("result2:"+result2);
 
 
 // ============ 3. 混合使用：显式变量 + Map + 根对象 ============
@@ -47,7 +58,7 @@ public class ExpressionDemo {
         Object result3 = ExpressionEngine.eval("name + '年龄' + age + '，薪资' + salary + '，奖金' + bonus", data3);
 // 输出：李四年龄30，薪资20000，奖金5000
 
-
+*/
 // ============ 4. 列映射 + Map + 表格 全量混合 ============
         Map<String, String> mapping = Map.of("n", "name", "s", "salary");
         Map<String, Object> rowMap3 = Map.of("bonus", 8000);

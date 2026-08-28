@@ -9,17 +9,17 @@ import com.omni.framework.expression.util.TypeUtils;
 import java.lang.reflect.Array;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class StandardEvaluator implements Evaluator {
 
     @Override
     public Object visitLiteral(LiteralNode node, EvaluationContext context) {
-        return node.getValue();
+        return node.getValue();  // 现在已经是强类型对象了
     }
 
     @Override
     public Object visitVariable(VariableNode node, EvaluationContext context) {
-        // ★ 优化：变量不存在返回null，允许参与 == null 比较
         return context.getVariable(node.getName());
     }
 
@@ -81,12 +81,10 @@ public class StandardEvaluator implements Evaluator {
                 .map(arg -> evaluate(arg, context))
                 .toArray();
 
-        // 有 target：实例方法
         if (target != null) {
             return ReflectUtils.invokeMethod(target, node.getName(), args);
         }
 
-        // ★ 优化：先判断是否注册了函数，避免业务异常被错误回退
         if (context.containsFunction(node.getName())) {
             return context.callFunction(node.getName(), args);
         } else {
@@ -125,6 +123,14 @@ public class StandardEvaluator implements Evaluator {
         } else {
             throw new ExpressionException("Unsupported array access target: " + target.getClass());
         }
+    }
+
+    // ★★★★★ 新增：数组常量求值 ★★★★★
+    @Override
+    public Object visitArrayLiteral(ArrayLiteralNode node, EvaluationContext context) {
+        return node.getElements().stream()
+                .map(expr -> evaluate(expr, context))
+                .collect(Collectors.toList());
     }
 
     public Object evaluate(ExpressionNode node, EvaluationContext context) {

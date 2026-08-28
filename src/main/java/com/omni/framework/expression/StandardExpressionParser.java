@@ -153,20 +153,59 @@ public class StandardExpressionParser implements ExpressionParser {
         return parsePrimary();
     }
 
+    // ★★★★★ 核心修复：parsePrimary 中完成类型转换 + 支持数组常量 ★★★★★
     private ExpressionNode parsePrimary() {
-        // 修复：使用多类型匹配
-        if (match(TokenType.NUMBER, TokenType.STRING, TokenType.BOOLEAN, TokenType.NULL)) {
-            Token token = previous();
-            ExpressionNode node = new LiteralNode(token.getValue());
-            return parsePostfix(node);
+        // 1. 数字常量 -> 转为 Integer / Long / Double
+        if (match(TokenType.NUMBER)) {
+            String val = previous().getValue();
+            Object lit;
+            if (val.contains(".") || val.contains("E") || val.contains("e")) {
+                lit = Double.valueOf(val);
+            } else {
+                try {
+                    lit = Integer.valueOf(val);
+                } catch (NumberFormatException e) {
+                    lit = Long.valueOf(val);
+                }
+            }
+            return parsePostfix(new LiteralNode(lit));
         }
 
+        // 2. 字符串常量
+        if (match(TokenType.STRING)) {
+            return parsePostfix(new LiteralNode(previous().getValue()));
+        }
+
+        // 3. 布尔常量
+        if (match(TokenType.BOOLEAN)) {
+            return parsePostfix(new LiteralNode(Boolean.valueOf(previous().getValue())));
+        }
+
+        // 4. null 常量
+        if (match(TokenType.NULL)) {
+            return parsePostfix(new LiteralNode(null));
+        }
+
+        // 5. ★★★ 新增：数组常量 [expr1, expr2, ...] ★★★
+        if (match(TokenType.LBRACKET)) {
+            List<ExpressionNode> elements = new ArrayList<>();
+            if (!check(TokenType.RBRACKET)) {
+                do {
+                    elements.add(parseExpression());
+                } while (match(TokenType.COMMA));
+            }
+            expect(TokenType.RBRACKET);
+            return parsePostfix(new ArrayLiteralNode(elements));
+        }
+
+        // 6. 括号表达式
         if (match(TokenType.LPAREN)) {
             ExpressionNode node = parseExpression();
             expect(TokenType.RPAREN);
             return parsePostfix(node);
         }
 
+        // 7. 标识符（变量 / 函数调用）
         if (match(TokenType.IDENTIFIER)) {
             Token id = previous();
             if (match(TokenType.LPAREN)) {
@@ -226,7 +265,6 @@ public class StandardExpressionParser implements ExpressionParser {
         return tokens.get(pos - 1);
     }
 
-    // 匹配单个类型
     private boolean match(TokenType type) {
         if (pos < tokens.size() && tokens.get(pos).getType() == type) {
             pos++;
@@ -235,25 +273,10 @@ public class StandardExpressionParser implements ExpressionParser {
         return false;
     }
 
-    // 匹配类型 + 特定值（操作符）
     private boolean match(TokenType type, String... values) {
         if (pos < tokens.size() && tokens.get(pos).getType() == type) {
             for (String val : values) {
                 if (tokens.get(pos).getValue().equals(val)) {
-                    pos++;
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    // ★★★★★ 关键修正：支持多个类型匹配（用于字面量） ★★★★★
-    private boolean match(TokenType... types) {
-        if (pos < tokens.size()) {
-            TokenType current = tokens.get(pos).getType();
-            for (TokenType type : types) {
-                if (current == type) {
                     pos++;
                     return true;
                 }

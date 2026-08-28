@@ -79,7 +79,7 @@ public class VariableAwareEvaluationContext extends StandardEvaluationContext {
         }
 
         // 3. 全部未找到，返回 null（表达式可自行判空）
-        return null;
+        return getVariable(name);
     }
 
     @Override

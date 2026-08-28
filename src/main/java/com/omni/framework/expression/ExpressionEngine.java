@@ -56,6 +56,10 @@ public final class ExpressionEngine {
         return PARSER.parse(expression).getValue(context);
     }
 
+    public static Object eval(String expression) {
+        return PARSER.parse(expression).getValue(buildContextFromData(null));
+    }
+
     // ==================== 向后兼容的便捷方法 ====================
 
     public static Object eval(String expression, RootObject  rootObject) {
@@ -145,7 +149,10 @@ public final class ExpressionEngine {
 
 
 
-
+    @SuppressWarnings("unchecked")
+    private static VariableAwareEvaluationContext buildContextFromData() {
+        return buildContextFromData(null);
+    }
 
     // ==================== 内部辅助 ====================
 

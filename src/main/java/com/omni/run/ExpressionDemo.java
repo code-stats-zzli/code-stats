@@ -1,7 +1,6 @@
 package com.omni.run;
 
-import com.omni.framework.expression.*;
-import com.omni.framework.expression.function.BuiltinFunctions;
+import com.omni.framework.expression.ExpressionEngine;
 import com.omni.framework.expression.function.FunctionResolver;
 import com.omni.framework.expression.resolver.impl.ColumnMappingResolver;
 
@@ -71,7 +70,7 @@ public class ExpressionDemo {
                 "root", new User("赵六", 28),
                 "map", rowMap3,
                 "table", Map.of("headers", headers, "row", row),
-                "functions", Map.of("double", (FunctionResolver) a -> (double) a[0] * 2),
+                "functions", Map.of("double", (FunctionResolver) a -> (Integer)a[0] * 2),
                 "custom", Arrays.asList(new ColumnMappingResolver(mapping))
         ));
 
@@ -79,6 +78,7 @@ public class ExpressionDemo {
         String expr = "n + '年龄' + age + '，薪资' + s + '，奖金' + bonus + '，双倍奖金：' + double(bonus)";
         Object result4 = ExpressionEngine.eval(expr, data4);
 // 输出：赵六年龄28，薪资12000，奖金8000，双倍奖金：16000.0
+        System.out.println("result4" + result4); // true
     }
 
     static class User {

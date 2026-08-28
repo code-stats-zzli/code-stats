@@ -221,6 +221,13 @@ public final class ExpressionEngine {
                 context.addResolver(new RowMappingResolver((Map<String, Object>) mapObj));
             }
         }
+        // 5. 表格数据
+        if (config.containsKey(CFG_TABLE)) {
+            Object mapObj = config.get(CFG_TABLE);
+            if (mapObj instanceof Map) {
+                processTableConfig(context, (Map<String, Object>) mapObj);
+            }
+        }
 
         // 5. 临时函数
         if (config.containsKey(CFG_FUNCTIONS)) {

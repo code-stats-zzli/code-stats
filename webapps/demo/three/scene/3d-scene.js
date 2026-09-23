@@ -8,7 +8,8 @@ const pageMap = {
     callchain: '../callchain/callchain.html',
     trace: '../trace/trace.html',
     realtime: '../realtime/realtime-monitor.html',
-    jstats: '../jstats/jstats-monitor.html'
+    jstats: '../jstats/jstats-monitor.html',
+    configurable: '../scene/configurable.html'
 };
 
 function switchTab(tabId) {

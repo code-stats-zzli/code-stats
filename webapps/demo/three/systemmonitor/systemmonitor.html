@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>系统实时监控</title>
+    <link rel="stylesheet" href="../../global-tech.css">
+    <link rel="stylesheet" href="systemmonitor.css">
+    <script src="../../global.js"></script>
+</head>
+<body>
+<div class="monitor-container">
+    <header class="monitor-header">
+        <h2>🖥️ 系统实时运行监控</h2>
+        <div>
+            <span id="updateTime"></span>
+            <button id="pauseBtn" class="btn-secondary">⏸ 暂停</button>
+            <select id="intervalSel">
+                <option value="1000">1s</option>
+                <option value="2000" selected>2s</option>
+                <option value="5000">5s</option>
+            </select>
+        </div>
+    </header>
+    <div id="cardGrid" class="card-grid"></div>
+    <div id="detailPanel" class="detail-panel" style="display:none;"></div>
+</div>
+<script src="systemmonitor.js"></script>
+</body>
+</html>

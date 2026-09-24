@@ -9,7 +9,10 @@ const pageMap = {
     trace: '../trace/trace.html',
     realtime: '../realtime/realtime-monitor.html',
     jstats: '../jstats/jstats-monitor.html',
-    configurable: '../scene/configurable.html'
+    configurable: '../scene/configurable.html',
+
+    // ★ 新增
+    systemmonitor: '../systemmonitor/systemmonitor.html'
 };
 
 function switchTab(tabId) {

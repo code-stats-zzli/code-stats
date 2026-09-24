@@ -12,7 +12,11 @@ const pageMap = {
     configurable: '../scene/configurable.html',
 
     // ★ 新增
+    methodchain: '../methodchain/methodchain.html',
+
+    // ★ 新增
     systemmonitor: '../systemmonitor/systemmonitor.html'
+
 };
 
 function switchTab(tabId) {

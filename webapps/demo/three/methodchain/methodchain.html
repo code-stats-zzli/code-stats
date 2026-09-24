@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>方法级调用链 · 3D + 时序图</title>
+    <link rel="stylesheet" href="methodchain.css" />
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+<div id="app">
+    <div id="graph-area">
+        <div id="toolbar">
+            <input id="rootDirInput" placeholder="根目录，如 . 或 D:/work/git/code-stats/src/main/java">
+            <button id="scanBtn">扫描项目</button>
+            <span id="statInfo" style="color:#94a3b8; font-size:12px; margin-left:12px;"></span>
+        </div>
+        <div id="entry-bar">
+            <select id="entrySelect"><option>请先扫描项目</option></select>
+            <input id="depthInput" type="number" value="5" min="1" max="10" style="width:60px;">
+            <button id="loadBtn">加载调用链</button>
+            <button id="reloadBtn" title="重新扫描">↻</button>
+        </div>
+    </div>
+    <aside id="side-area">
+        <div class="panel">
+            <div class="panel-title">📊 方法信息</div>
+            <div id="methodInfo" class="panel-body" style="color:#94a3b8; font-size:12px;">
+                选择入口方法后显示
+            </div>
+        </div>
+        <div class="panel">
+            <div class="panel-title">
+                📄 PlantUML 时序图
+                <button id="copyUml" class="mini-btn">📋 复制</button>
+                <button id="previewUml" class="mini-btn">🌐 预览</button>
+            </div>
+            <pre id="umlText" class="panel-body">（选择方法后生成）</pre>
+        </div>
+        <div class="panel">
+            <div class="panel-title">🔗 直接调用邻居</div>
+            <div id="neighbors" class="panel-body"></div>
+        </div>
+    </aside>
+</div>
+<script type="module" src="methodchain.js"></script>
+</body>
+</html>

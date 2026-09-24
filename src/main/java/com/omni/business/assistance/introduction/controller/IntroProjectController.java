@@ -10,7 +10,7 @@ import java.util.*;
 
 @Controller
 @RequestMapping("/api/project")
-public class ProjectController {
+public class IntroProjectController {
 
     @RequestMapping("/nav")
     @ResponseBody

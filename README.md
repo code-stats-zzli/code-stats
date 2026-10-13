@@ -1,273 +1,390 @@
-<!-- ========== AI 生成内容标识（依据《人工智能生成合成内容标识办法》） ========== -->
+CodeStats
+一个教学级 Java Web 框架 Omni + 一个功能演示平台 CodeStats
 
-# CodeStats – 综合性开发工具平台
+不依赖 Tomcat、不依赖 Spring、不依赖 MyBatis —— 从 Socket 开始，手写 Web 服务器、IoC 容器、MVC 框架、ORM 映射、连接池、日志框架、缓存框架，全部自研。
 
->  **AI 辅助声明**  
-> 本项目**大量使用 AI 辅助编程**（deepseek）。
-> - 约 **100% 的代码**由 AI 生成初稿，经人工审查、调试、合并后形成最终版本。
-> - AI 生成的代码主要集中在：**控制器、服务层、MyBatis 代理、前端 Vue 组件、配置文件、重复性 CRUD 逻辑**。
-> - 人工贡献部分：**架构设计、核心 IoC/Tomcat 容器、依赖分析引擎、安全校验、项目助手知识库**。
+Omni 用来教框架原理，CodeStats 用来演示框架能力。
 
-> **透明性承诺**
-> - 本仓库不包含任何训练数据或模型，仅发布最终可执行代码。
+https://img.shields.io/badge/license-MIT-blue.svg
+https://img.shields.io/badge/Java-8%2B-orange.svg
+https://img.shields.io/badge/build-maven-green.svg
 
-> **法律责任声明**  
-> 根据《人工智能生成合成内容标识办法》，使用者应知晓本项目中部分内容可能由 AI 生成，不构成对原著作权或专利权的放弃。原作者保留对人工撰写部分的完整权利。
+两个仓库
+仓库	地址	定位
+Omni 框架	https://gitee.com/zhouzuoli/omni-lab.git	教学级框架 —— 从零实现，代码可读，适合精读
+CodeStats 应用	https://gitee.com/zhouzuoli/code-stats.git	功能演示平台 —— 用 Omni 撑起一个真实系统
+Omni 证明"框架能跑"，CodeStats 证明"框架能用"。
 
+一句话定位
+Omni = 一个能读完的迷你 Spring + Tomcat + MyBatis
+CodeStats = 一个能跑起来的全栈工具平台，用来演示 Omni 的实际能力
 
-CodeStats 项目介绍与推荐
-一份融合了项目介绍、架构解析、模块详解与推荐指南的完整文档
-基于完整项目源码整理，适合作为 README 或项目宣传材料
+为什么做这个项目
+市面上讲 Java Web 底层原理的资料，大多有两个问题：
 
-一、项目简介
-CodeStats 是一个完全自研的轻量级 Java Web 平台，底层基于自研的 Mini Tomcat、Mini Spring、Mini MVC、Mini MyBatis，从零构建企业级框架的核心技术。项目不依赖任何第三方 Web 框架（Tomcat / Spring / MyBatis），所有核心组件均为自研实现。
+太浅：只写一个 IoC 容器就结束，看不到完整链路
 
-平台集成了数据库管理、代码分析、目录管理、AI Agent、自动化测试、API 调试、3D 可视化、脚本引擎、系统监控、题库分析、网页爬虫、截图助手等十余个功能模块，既可作为开发工具集使用，也可作为学习 Java Web 底层原理的实战项目。
+太深：直接读 Spring / Tomcat 源码，几百万行，劝退
 
-二、为什么推荐 CodeStats？
-2.1 推荐人群
-强烈推荐以下人群阅读、学习或使用本项目：
+Omni 想填这个空白：用能读完的代码，实现完整的核心链路，从 ServerSocket.accept() 到 Controller 返回 JSON，每一步都看得见。
 
-Java 初中级开发者：想深入理解 Spring、Tomcat、MyBatis 底层原理，但阅读源码时感到吃力。CodeStats 用简洁清晰的代码实现了这些框架的核心机制，是绝佳的“源码入门替代品”。
+CodeStats 想证明：这个框架不是玩具，它能撑起一个包含十几个模块的真实应用。
 
-计算机专业学生 / 应届生：准备校招面试，需要项目经验证明技术深度。项目涵盖 IoC、AOP、MVC、连接池、线程池、设计模式等高频考点，且每个模块都可以独立讲透。
+AI 辅助声明
+本项目大量使用 AI 辅助编程（DeepSeek）。
 
-全栈开发学习者：项目前后端均由自研框架实现（SimpleVue 模拟 Vue 的响应式、模板编译、组件化），可一站式学习前后端框架的核心设计思想。
+约 100% 代码由 AI 生成初稿，经人工审查、调试、合并
 
-对 AI Agent 集成感兴趣的开发者：项目集成 Ollama 本地模型、DeepSeek API、自定义 OpenAI 兼容 API 以及项目助手（知识库 + n-gram 降级），提供完整的 Web 聊天界面。
+AI 生成集中在：Controller、Service、Mapper 代理、前端组件、配置、重复 CRUD
 
-需要快速搭建工具平台的开发者：CodeStats 本身就是一个可运行的开发工具平台，包含数据库浏览器、代码分析、文件管理、AI 聊天、自动化测试等功能，可直接作为基础平台二次开发。
+人工贡献集中在：架构设计、核心 IoC/Tomcat 容器、依赖分析引擎、安全校验、项目助手知识库
 
-想了解 JVM 监控与 3D 可视化的开发者：项目内置 JVM 监控（GC、线程、堆、类加载）、系统监控（CPU、内存、磁盘、进程）、3D 调用链拓扑、实时粒子流等，技术覆盖面广。
+依据《人工智能生成合成内容标识办法》，使用者应知晓部分内容可能由 AI 生成
 
-2.2 推荐理由
-完全自研，无框架依赖：Web 服务器、IoC 容器、MVC、ORM、连接池、日志、缓存、表达式引擎、脚本执行引擎全部自研，代码透明可控。
-
-可读性与完整性平衡：很多教学项目要么过于简单（一个 IoC 容器就结束），要么过于庞大（无法在几天内读完）。CodeStats 恰好覆盖了企业级 Java 平台的核心组件，每个模块代码量适中，配合清晰注释与合理分包，适合精读。
-
-功能丰富，开箱即用：内置十余个功能模块，每个模块都有完整的 Web 界面和 REST API，可直接运行体验。
-
-注解驱动，约定优于配置：支持 @Controller、@Service、@Repository、@Autowired、@RequestMapping、@Select 等注解，包扫描自动装配。
-
-Pipeline 责任链，易扩展：请求处理、代码分析、依赖分析均采用 Pipeline-Value 模式，新增功能只需增加 Stage 或 Valve。
-
-AI 辅助透明：明确标注 AI 生成与人工贡献范围，人工贡献集中在架构设计与核心容器实现，学习者可清楚知道哪些是需要深度思考的部分。
-
-实战学习价值高：从零实现 Web 容器、IoC、ORM、连接池、日志、缓存、表达式引擎、脚本引擎，是理解 Java 企业级开发底层原理的绝佳路径。
-
-三、核心特性
-完全自研框架：嵌入式 Tomcat、IoC 容器、MVC、ORM、连接池、日志、缓存、表达式引擎、脚本执行引擎等全部自研。
-
-零第三方框架依赖：核心 Web 容器、IoC、MVC、ORM 均不依赖 Spring / Tomcat / MyBatis。
-
-模块化设计：功能模块可插拔，数据库、AI、爬虫等模块均为可选配置。
-
-注解驱动：支持 @Controller、@Service、@Repository、@Autowired、@RequestMapping、@Select 等注解。
-
-Pipeline 责任链：请求处理、代码分析、依赖分析均采用 Pipeline 模式，易于扩展。
-
-前后端一体：内置自研前端框架 SimpleVue（响应式、模板编译、组件化），并提供多套功能页面。
-
-丰富的功能模块：数据库浏览器、代码分析、目录管理、AI Agent、自动化测试、API 调试、3D 可视化、脚本引擎、系统监控、题库分析、网页爬虫、截图助手等。
-
-AI 辅助声明：项目大量使用 AI 辅助编程，人工贡献集中在架构设计与核心容器实现。
-
-四、技术架构
-4.1 分层架构
-text
-┌─────────────────────────────────────────────────────────────┐
-│                        前端层（SimpleVue）                    │
-│  响应式数据绑定 / 模板编译 / 组件化 / 路由 / 事件系统            │
-├─────────────────────────────────────────────────────────────┤
-│                      业务功能层（Modules）                    │
-│  数据库 | 代码分析 | 目录管理 | AI Agent | 自动化测试 | API 调试 │
-│  3D 可视化 | 脚本引擎 | 系统监控 | 题库分析 | 网页爬虫 | 截图助手 │
-├─────────────────────────────────────────────────────────────┤
-│                    自研框架层（Framework）                    │
-│  Mini Tomcat | Mini Spring | Mini MVC | Mini MyBatis          │
-│  连接池 | 日志 | 缓存 | 表达式引擎 | 脚本执行引擎 | Swagger 风格 │
-├─────────────────────────────────────────────────────────────┤
-│                    基础设施层（Infrastructure）               │
-│  JDK 8+ | Maven | MySQL(可选) | Ollama(可选) | DeepSeek API   │
-└─────────────────────────────────────────────────────────────┘
-4.2 核心设计原则
-零第三方框架依赖：Web、IoC、MVC、ORM、连接池、日志、缓存、前端全部自研。
-
-模块可插拔：数据库、AI、爬虫等模块均为可选，不配置不影响主流程启动。
-
-约定优于配置：注解驱动，包扫描自动装配。
-
-Pipeline 责任链：请求处理、代码分析、依赖分析均采用 Pipeline-Value 模式。
-
-AI 辅助透明：明确标注 AI 生成与人工贡献范围。
-
-五、模块完整介绍
-5.1 自研框架层
-模块	功能	核心组件	技术点
-Mini Tomcat	自研 Web 服务器、Servlet 容器	Connector、Pipeline、Servlet、WebappClassLoader	Socket、线程池、责任链、类加载、HTTP 解析
-Mini Spring	IoC 容器、依赖注入、单例管理	SimpleApplicationContext、@Autowired、BeanFactory	反射、注解、递归注入、单例模式
-Mini MVC	路由映射、参数绑定、JSON 返回	DispatcherServlet、HandlerMapping、ParamBinder	反射调用、参数解析、JSON 序列化
-Mini MyBatis	注解 SQL、动态代理、结果映射	MapperProxy、JdbcTemplate、@Select 等	动态代理、JDBC、反射
-连接池	连接复用、超时管理、有效性检测	阻塞队列、Semaphore、清理线程	并发、信号量、阻塞队列
-日志框架	分级日志、多 Appender、XML 配置	Logger、Appender、Layout、Level	单例、工厂、策略、XML 解析
-缓存框架	本地缓存、TTL、定期清理	ConcurrentHashMap、过期线程	并发容器、定时任务
-表达式引擎	支持变量、函数、属性访问、数组、三元运算	Lexer、Parser、Evaluator、VariableResolver	递归下降解析、AST、反射
-脚本执行引擎	支持 Python、Java、C、C++ 脚本执行	ScriptEngine、ScriptExecutor、PythonExecutor 等	进程调用、动态编译、类加载
-Swagger 风格 API	扫描 Controller 生成 API 元数据	SwagHandler、ApiDefinition、@ApiModule	注解扫描、反射、JSON
-代码分析引擎	统计行数、注释、语言分布、复杂度	CollectStage→ParallelAnalyzeStage→AggregateStage→OutputStage	Pipeline、线程池、GitIgnore、正则
-依赖分析引擎	类依赖图、循环依赖检测、方法调用链	JavaDependencyExtractor、MethodExtractor、CallTreeBuilder	词法分析、图算法、PlantUML 导出
-JVM 监控	GC、线程、堆、类加载、JVM 参数	JvmMonitor、CommandExecutor、各 Parser	JMX、外部命令调用、解析
-5.2 业务功能层
-模块	功能	核心组件
-项目介绍	平台导航、架构说明、模块详情	IndexController、IntroProjectController
-数据库浏览器	多数据源管理、元数据浏览、表数据分页、SQL 查询	DatabaseClientController、DatabaseMetadataService、TableDataService
-代码分析	多线程行数统计、语言识别、依赖分析、方法调用链	CodeAnalysisController、MethodAnalysisController
-目录管理	文件浏览、编辑、上传下载、ZIP 打包	FilesController、DirectoryService
-AI Agent	多轮对话、Ollama/DeepSeek/自定义 API/项目助手	AgentController、AIChatController、AIChatService、ProjectAssistantService
-自动化测试	项目管理、用例管理、执行引擎、报告中心	ProjectController、TestCaseController、TestExecutionController、Pipeline
-API 调试	Swagger 风格接口文档、在线调试、自定义请求	ApiExplorerController、SwagService
-3D 可视化	项目模块图、柱状图、调用链拓扑、动态调用链、实时监控、JVM 监控、方法级调用链、系统监控	ThreeDController、ThreeDGraphService、JstatsController、SystemMonitorController
-脚本引擎	在线编辑、多语言执行、参数配置、结果展示	ScriptEngineController、ScriptExecutionService
-系统监控	CPU、内存、磁盘、GPU、进程、线程、文件系统、Java 运行时	SystemMonitorController、SystemMonitorEngine、各 Component
-题库分析	Excel 合并、数据预览、搜索、导出、OCR 识别	QuestionBankController、OcrController、QuestionBankService
-网页爬虫	CSDN 博客爬取、合并、失败链接追加	SpiderController、SpiderTaskService
-截图助手	全屏/区域截图、OCR 识别、搜索题库	ScreenshotAssistantBootstrap、ScreenshotService、OcrService
-数据源管理	多数据源配置、驱动管理	DataSourceController、DriverController
-5.3 前端层
-模块	功能
-SimpleVue	自研前端框架，支持响应式数据、模板编译、组件化、样式隔离
-demo 平台	完整的 Web 界面，包含所有功能模块的 HTML/JS/CSS
-face 重构版	基于 SimpleVue 重构的前端界面，展示组件化开发
-vue 核心库	SimpleVue 的核心实现：Observer、Compiler、Watcher、Dep、StyleManager
-六、项目结构
-text
-CodeStats/
-├── src/main/java/com/omni/
-│   ├── Bootstrap.java                 # 启动入口
-│   ├── business/assistance/           # 业务模块
-│   │   ├── agent/                     # AI Agent
-│   │   ├── api/                       # API 调试
-│   │   ├── autotest/                  # 自动化测试
-│   │   ├── codestat/                  # 代码分析
-│   │   ├── directory/                 # 目录管理
-│   │   ├── introduction/              # 项目介绍
-│   │   ├── jstats/                    # JVM 监控
-│   │   ├── questionbank/              # 题库分析
-│   │   ├── screenshot/                # 截图助手
-│   │   ├── scriptengine/              # 脚本引擎
-│   │   ├── spider/                    # 网页爬虫
-│   │   ├── systemmonitor/             # 系统监控
-│   │   ├── table/mysql/               # 数据库管理
-│   │   └── three3d/                   # 3D 可视化
-│   ├── framework/                     # 自研框架
-│   │   ├── tomcat/                    # Mini Tomcat
-│   │   ├── spring/                    # Mini Spring
-│   │   ├── mybatis/                   # Mini MyBatis
-│   │   ├── jdbc/                      # JDBC 工具
-│   │   ├── pool/                      # 连接池
-│   │   ├── log/                       # 日志框架
-│   │   ├── cache/                     # 缓存框架
-│   │   ├── expression/                # 表达式引擎
-│   │   ├── scriptexec/                # 脚本执行引擎
-│   │   ├── swag/                      # Swagger 风格 API
-│   │   ├── spider/                    # 爬虫核心
-│   │   ├── jstats/                    # JVM 监控核心
-│   │   ├── v4j/                       # SimpleVue 后端支持
-│   │   └── web/                       # Web 跟踪上下文
-│   └── common/                        # 公共工具
-│       ├── cache/                     # 缓存接口与实现
-│       ├── datasource/                # 动态数据源
-│       ├── excel/                     # Excel 工具
-│       └── util/                      # 通用工具
-├── src/main/resources/
-│   ├── application.properties         # 应用配置
-│   ├── config.yaml                    # 模块配置
-│   ├── log-config.xml                 # 日志配置
-│   └── project_knowledge.json         # 项目助手知识库
-├── webapps/
-│   ├── demo/                          # 完整 Web 界面
-│   │   ├── index.html                 # 主入口
-│   │   ├── agent/                     # AI Agent 页面
-│   │   ├── apiexplorer/               # API 调试页面
-│   │   ├── autotest/                  # 自动化测试页面
-│   │   ├── builder/                   # 可视化页面搭建器
-│   │   ├── code/                      # 代码分析页面
-│   │   ├── db/                        # 数据库管理页面
-│   │   ├── docs/                      # 项目介绍页面
-│   │   ├── files/                     # 目录管理页面
-│   │   ├── opensource/                # 开源工具页面
-│   │   ├── questionbank/              # 题库分析页面
-│   │   ├── scriptengine/              # 脚本引擎页面
-│   │   ├── spider/                    # 爬虫页面
-│   │   └── three/                     # 3D 可视化页面
-│   ├── face/                          # SimpleVue 重构版前端
-│   └── vue/                           # SimpleVue 核心库
-└── pom.xml
-七、快速开始
-7.1 环境要求
-JDK 8+（推荐 JDK 11+）
-
-Maven 3.6+
-
-MySQL（可选，用于数据库模块）
-
-Ollama（可选，用于本地 AI 模型）
-
-7.2 构建与运行
+一分钟快速启动
 bash
-# 克隆仓库
+# 1. 克隆项目
 git clone https://gitee.com/zhouzuoli/code-stats.git
 cd code-stats
 
-# 编译打包
+# 2. 编译打包
 mvn clean package
 
-# 启动主程序（内置 Tomcat 服务器）
-java -cp target/CodeStats-1.0.jar com.omni.run.Bootstrap
-启动后访问：http://localhost:28080/omni/demo/index.html
-（端口和 context path 可在 application.properties 中修改）
+# 3. 启动（内置 Web 服务器）
+java -jar target/code-stats-1.7.1.jar
+浏览器访问：http://localhost:28080/omni/demo/index.html
 
-7.3 配置说明
-在 src/main/resources/application.properties 中配置：
+无需任何配置：不配置数据库，代码分析、目录管理、AI Agent 等核心功能完整可用。
+
+两层结构
+text
+┌──────────────────────────────────────────────────────┐
+│          CodeStats (功能演示平台)                     │
+│  用真实模块演示 Omni 框架的能力                       │
+│  代码分析 · 目录管理 · AI Agent · 数据库 · 3D 可视化  │
+│  自动化测试 · API 调试 · 系统监控 · 脚本引擎 · 爬虫   │
+└──────────────────────┬───────────────────────────────┘
+                       │ 基于
+┌──────────────────────▼───────────────────────────────┐
+│            Omni (教学级框架)                          │
+│  用可读代码演示企业级框架的核心原理                    │
+│  Mini Tomcat · Mini Spring · Mini MVC · Mini MyBatis │
+│  连接池 · 日志 · 缓存 · 表达式引擎 · 脚本引擎         │
+└──────────────────────┬───────────────────────────────┘
+                       │ 从零实现
+┌──────────────────────▼───────────────────────────────┐
+│              JDK 8+ · Socket · JDBC                  │
+└──────────────────────────────────────────────────────┘
+Omni：教学级框架
+设计目标
+代码可读：每个类都有清晰职责，注释完整，不炫技
+
+链路完整：从 Socket 到 Controller，每一步都能追踪
+
+零依赖：核心模块不依赖任何第三方框架
+
+可运行：不是伪代码，是能跑真实 Web 应用的最小框架
+
+核心模块
+模块	教学内容	关键类
+Mini Tomcat	HTTP 解析、线程池、责任链、类加载	Connector / Pipeline / Request / Response
+Mini Spring	包扫描、Bean 生命周期、依赖注入	AnnotationConfigApplicationContext / BeanFactory
+Mini MVC	路由匹配、参数绑定、JSON 序列化	DispatcherServlet / ParamBinder
+Mini MyBatis	动态代理、注解 SQL、结果映射	MapperProxy / JdbcTemplate
+连接池	信号量、阻塞队列、连接验证	SimpleDataSource / PooledConnection
+日志框架	Appender / Layout / Filter	LoggerFactory / PatternLayout
+缓存框架	TTL、惰性删除、定期清理	LocalCache
+表达式引擎	词法分析、递归下降、AST	Lexer / StandardExpressionParser
+脚本引擎	进程调用、动态编译	BaseScriptExecutor / JavaExecutor
+教学亮点：一个请求的完整链路
+text
+1. Client 发起 HTTP 请求
+2. Connector.accept() 接收 Socket
+3. Request.parse() 解析 HTTP 报文
+4. Pipeline.invoke() 责任链流转
+5. DispatcherServlet 匹配 Handler
+6. ParamBinder 绑定参数
+7. 反射调用 Controller 方法
+8. Service → MapperProxy → JdbcTemplate
+9. SimpleDataSource 获取连接
+10. ResultSet → Bean 映射
+11. @ResponseBody 序列化为 JSON
+12. Response.send() 写回客户端
+这 12 步，每一步都有对应源码，可以逐个打断点追踪。
+
+框架核心注解
+java
+@Controller
+@RequestMapping("/user")
+public class UserController {
+
+    @Autowired
+    private UserService userService;
+
+    @RequestMapping("/info")
+    @ResponseBody
+    public User info(@RequestParam("id") int id) {
+        return userService.findById(id);
+    }
+}
+
+@Service
+public class UserService {
+    @Autowired
+    private UserMapper userMapper;
+
+    public User findById(int id) {
+        return userMapper.selectById(id);
+    }
+}
+
+@Mapper
+public interface UserMapper {
+    @Select("SELECT * FROM user WHERE id = #{id}")
+    User selectById(@Param("id") int id);
+}
+这些注解全部由 Omni 实现，不依赖 Spring / MyBatis。
+
+CodeStats：功能演示平台
+设计目标
+演示框架能力：用真实模块证明 Omni 能支撑复杂系统
+
+开箱即用：不配置数据库也能跑核心功能
+
+模块可插拔：每个模块独立，可按需裁剪
+
+全栈覆盖：后端 + 前端 + 3D + AI，展示框架的边界
+
+功能模块
+模块	演示了什么框架能力
+代码分析	Pipeline 责任链、多线程、文件 IO
+目录管理	MVC 参数绑定、文件流、安全校验
+AI Agent	HTTP 客户端、会话管理、多后端适配
+数据库浏览器	ORM 映射、元数据、动态数据源
+API 调试	注解扫描、反射、API 元数据生成
+自动化测试	Pipeline 执行、变量解析、断言
+系统监控	组件化架构、JMX、实时数据采集
+3D 可视化	前后端分离、WebSocket 风格数据推送
+脚本引擎	进程调用、动态编译、类加载
+题库分析	Excel 解析、缓存、OCR
+网页爬虫	并发、限速、状态回调
+SimpleVue 前端	自研前端框架，响应式 + 组件化
+演示亮点
+代码分析：
+
+多线程并行统计总行数、代码行、注释行、空行、复杂度
+
+GitIgnore 过滤 + 扩展名筛选 + 排除路径
+
+方法级调用链：手写 Java 词法分析器 → 调用图 → PlantUML 时序图
+
+循环依赖检测：Tarjan 强连通分量算法
+
+AI Agent：
+
+Ollama 本地模型 / DeepSeek API / 自定义 API / 项目助手（知识库 + n-gram 降级）
+
+不配置任何 Key 时，仍可使用内置知识库
+
+数据库浏览器：
+
+多数据源管理 + 驱动上传
+
+元数据浏览 + 表数据分页 + SQL 查询
+
+可视化视图：拖拽表 → 字段转换 → 生成 SQL
+
+3D 可视化：
+
+依赖图 / 调用链 / 实时监控 / 方法级调用树
+
+配置化场景引擎（JSON 驱动）
+
+项目结构
+text
+code-stats/
+├── src/main/java/com/omni/
+│   ├── Bootstrap.java              # 启动入口
+│   ├── framework/                  # ===== Omni 框架层（教学级）=====
+│   │   ├── tomcat/                 # Mini Tomcat
+│   │   ├── spring/                 # Mini Spring + MVC
+│   │   ├── mybatis/                # Mini MyBatis
+│   │   ├── jdbc/                   # JdbcTemplate
+│   │   ├── pool/                   # 连接池
+│   │   ├── log/                    # 日志框架
+│   │   ├── cache/                  # 缓存框架
+│   │   ├── expression/             # 表达式引擎
+│   │   ├── scriptexec/             # 脚本执行引擎
+│   │   ├── swag/                   # Swagger 风格 API
+│   │   ├── jstats/                 # JVM 监控核心
+│   │   └── v4j/                    # SimpleVue 后端支持
+│   ├── common/                     # 公共工具
+│   └── business/assistance/        # ===== CodeStats 应用层（演示）=====
+│       ├── codestat/               # 代码分析
+│       ├── directory/              # 目录管理
+│       ├── agent/                  # AI Agent
+│       ├── table/mysql/            # 数据库浏览器
+│       ├── apiexplorer/            # API 调试
+│       ├── autotest/               # 自动化测试
+│       ├── systemmonitor/          # 系统监控
+│       ├── three3d/                # 3D 可视化
+│       ├── scriptengine/           # 脚本引擎
+│       ├── questionbank/           # 题库分析
+│       ├── spider/                 # 网页爬虫
+│       ├── jstats/                 # JVM 监控
+│       ├── screenshot/             # 截图助手
+│       ├── introduction/           # 项目介绍
+│       └── datasource/             # 数据源管理
+├── src/main/resources/
+│   ├── application.properties      # 应用配置
+│   ├── config.yaml                 # 模块配置
+│   ├── log-config.xml              # 日志配置
+│   └── project_knowledge*.json     # 项目助手知识库
+├── webapps/
+│   ├── demo/                       # 完整 Web 界面
+│   ├── face/                       # SimpleVue 重构版
+│   └── vue/                        # SimpleVue 核心库
+└── pom.xml
+核心机制速览
+Web 容器（Mini Tomcat）
+text
+ServerSocket.accept()
+  → Request 解析 HTTP 报文
+  → Pipeline 责任链：Engine → Host → Context → Wrapper
+  → Servlet.service()
+IoC 容器（Mini Spring）
+text
+包扫描 → BeanDefinition 注册 → 反射实例化 → @Autowired 注入 → 单例池
+ORM 映射（Mini MyBatis）
+text
+@Mapper 接口 → JDK 动态代理 → 解析 @Select 注解
+  → #{xxx} 替换为 ? → 绑定参数 → ResultSet → Bean
+连接池
+text
+Semaphore 控制并发 + ArrayBlockingQueue 存放空闲连接
+  → 获取：acquire → 队列取或新建
+  → 归还：验证 → 放回 → release
+代码分析 Pipeline
+text
+Collect → ParallelAnalyze → Aggregate → Output
+  多线程并行 + GitIgnore 过滤 + 多格式输出
+配置（可选）
+在 src/main/resources/application.properties 中：
 
 properties
 # 服务器端口
 server.port=28080
-
-# Context Path
 context.path=/omni
 
-# 数据库配置（可选）
-db.url=jdbc:mysql://localhost:3306/yourdb?useSSL=false
+# 数据库连接（可选）
+db.url=jdbc:mysql://localhost:3306/demo?useSSL=false&serverTimezone=UTC
 db.username=root
 db.password=123456
+db.maxActive=20
 
 # AI 配置（可选）
 ollama.api.url=http://localhost:11434/api/chat
 deepseek.api.key=sk-xxxxxx
-八、技术亮点
-完全自研的 Web 容器：Connector + Pipeline + Servlet 容器 + WebappClassLoader，实现类隔离与热部署。
 
-注解驱动的 IoC 与 MVC：支持 @Controller、@Service、@Autowired、@RequestMapping 等，自动扫描装配。
+# 包扫描路径
+scan.packages=com.omni.**.controller,com.omni.**.service,com.omni.**.mapper
 
-动态代理 ORM：@Mapper + @Select 注解，运行时生成代理对象执行 SQL。
+# DispatcherServlet 全限定类名
+servlet.class=com.omni.framework.spring.mvc.DispatcherServlet
+不配置上述任何内容，项目依然可以正常运行。
 
-Pipeline 责任链：请求处理、代码分析、依赖分析均采用 Pipeline 模式，灵活扩展。
+API 示例
+text
+# 代码分析
+GET /code/api/analyze?rootDir=/project&extensions=java,js&excludeComments=true
 
-多线程代码分析：支持 GitIgnore 过滤、语言识别、复杂度估算、文件合并。
+# 目录树
+GET /files/api/tree?rootType=local&path=
 
-方法级调用链分析：手写 Java 词法分析器，构建方法调用图，生成 PlantUML 时序图。
+# AI 聊天
+POST /agent/api/chat
+Content-Type: application/json
 
-AI Agent 多后端：集成 Ollama、DeepSeek、自定义 API、项目助手（知识库 + n-gram 降级）。
+{
+  "model": "deepseek-r1:7b",
+  "messages": [{"role": "user", "content": "Hello"}],
+  "temperature": 0.7,
+  "backend": "ollama"
+}
+技术栈
+领域	自研实现	可选第三方
+Web 服务器	Connector + Pipeline + Servlet	—
+IoC 容器	注解扫描 + 反射注入	—
+MVC 框架	DispatcherServlet + ParamBinder	—
+ORM	MapperProxy + JdbcTemplate	—
+连接池	Semaphore + BlockingQueue	—
+日志	Appender + Layout + XML	—
+缓存	ConcurrentHashMap + TTL	Caffeine
+表达式引擎	Lexer + Parser	—
+脚本引擎	Process + JavaCompiler API	—
+JSON	反射 + 手写序列化	Jackson
+YAML 解析	—	SnakeYAML
+HTTP 客户端	HttpURLConnection	Apache HttpClient
+前端框架	SimpleVue（响应式 + 组件）	—
+推荐人群
+人群	从哪看起
+Java 初中级开发者	从 Omni 的 IoC 和 Mini Tomcat 入手，理解 Spring / Tomcat 底层
+计算机专业学生 / 应届生	精读框架层，作为校招项目经验；CodeStats 作为功能演示
+全栈学习者	Omni 后端 + SimpleVue 前端，一站式学习框架设计
+AI 集成开发者	看 CodeStats 的 Agent 模块：多后端 + 知识库 + 降级
+工具平台开发者	直接基于 CodeStats 二次开发
+JVM / 3D 可视化爱好者	看 CodeStats 的 3D 可视化模块
+学习路径建议
+text
+第 1 步：跑起来
+  → mvn clean package && java -jar target/code-stats-1.7.1.jar
+  → 打开浏览器，体验各个模块
 
-3D 可视化：基于 Three.js 和 ECharts GL，展示项目模块、调用链、实时监控等。
+第 2 步：看框架
+  → 从 Bootstrap 进入 → SpringApplication → AnnotationConfigApplicationContext
+  → 理解 IoC 容器如何启动
 
-自研 SimpleVue：响应式数据、模板编译、组件化、样式隔离，前后端一体。
+第 3 步：追请求
+  → 从 Connector.accept() 开始 → Request.parse() → Pipeline → DispatcherServlet
+  → 追踪一个完整的 HTTP 请求链路
 
-丰富的工具集：数据库浏览器、目录管理、脚本引擎、系统监控、题库分析、爬虫、截图助手。
+第 4 步：读模块
+  → 挑一个感兴趣的模块（代码分析 / AI Agent / 数据库）
+  → 看它如何调用框架能力
 
-九、许可证
+第 5 步：改代码
+  → 加一个自己的 @Controller
+  → 加一个自己的 @Mapper
+  → 感受框架的扩展方式
+贡献指南
+欢迎提交 Issue 和 Pull Request。可参与的方向：
+
+补充单元测试
+
+增加更多注解（@PostConstruct、@Value、@Configuration）
+
+支持 WebSocket
+
+优化 Pipeline 责任链性能
+
+完善教学文档
+
+开发规范
+代码风格：Alibaba Java Coding Guidelines
+
+提交信息：feat: / fix: / docs: / refactor: / test:
+
+提交前：mvn clean test
+
+许可证
 MIT License © 2025 CodeStats Contributors
 
-CodeStats — 从零构建企业级 Java 平台的绝佳学习项目，也是快速搭建开发工具平台的首选基础。
-推荐给每一位想深入理解 Java Web 底层原理、又不想被庞大源码劝退的开发者。
+相关链接
+项目	地址	定位
+Omni 框架	https://gitee.com/zhouzuoli/omni-lab.git	教学级框架
+CodeStats 应用	https://gitee.com/zhouzuoli/code-stats.git	功能演示平台
+问题反馈	Issues	—
+Omni —— 一个能读完的迷你 Spring + Tomcat + MyBatis 🎓
+CodeStats —— 一个能跑起来的全栈工具平台 🚀
+
+如果这个项目对你有帮助，欢迎点个 Star 支持一下。

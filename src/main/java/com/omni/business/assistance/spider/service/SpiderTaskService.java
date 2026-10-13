@@ -7,8 +7,9 @@ import com.omni.framework.spider.config.SpiderConfig;
 import com.omni.framework.spider.core.Crawler;
 import com.omni.framework.spider.model.Article;
 import com.omni.framework.spring.annotation.Service;
-import com.omni.common.util.PlaywrightStealthUtil;
+
 import com.microsoft.playwright.Page;
+import com.omni.framework.util.PlaywrightStealthUtil;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;

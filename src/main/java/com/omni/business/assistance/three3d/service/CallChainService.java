@@ -2,6 +2,7 @@ package com.omni.business.assistance.three3d.service;
 
 import com.omni.business.assistance.codestat.service.CodeAnalysisService;
 import com.omni.framework.codestats.dependency.model.ClassInfo;
+import com.omni.framework.codestats.dependency.model.DependencyGraph;
 import com.omni.framework.codestats.dependency.model.DependencyResult;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Service;
@@ -75,7 +76,7 @@ public class CallChainService {
             }
 
             // 统计入度（被依赖次数）
-            var graph = depResult.getGraph();
+            DependencyGraph graph = depResult.getGraph();
             for (String src : graph.getAllClasses()) {
                 for (String target : graph.getDependencies(src)) {
                     if (inDegree.containsKey(target)) {

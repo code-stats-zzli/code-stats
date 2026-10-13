@@ -1,5 +1,6 @@
 package com.omni.business.assistance.jstats.controller;
 
+import com.omni.business.assistance.jstats.model.JstatsMonitorData;
 import com.omni.business.assistance.jstats.service.JstatsMonitorService;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
@@ -25,7 +26,7 @@ public class JstatsController {
         try {
             HttpServletRequest request = RequestContextHolder.getRequest();
             String pid = request.getParameter("pid"); // 可选参数
-            var summary = service.collectAllData();
+            JstatsMonitorData summary = service.collectAllData();
             result.put("success", true);
             result.put("data", summary);
         } catch (Exception e) {

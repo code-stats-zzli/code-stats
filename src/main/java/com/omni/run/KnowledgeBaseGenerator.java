@@ -97,7 +97,7 @@ public class KnowledgeBaseGenerator {
     }
 
     private static String extractRequestMapping(Class<?> clazz) {
-        var ann = clazz.getAnnotation(com.omni.framework.spring.annotation.RequestMapping.class);
+        com.omni.framework.spring.annotation.RequestMapping ann = clazz.getAnnotation(com.omni.framework.spring.annotation.RequestMapping.class);
         return ann != null ? ann.value() : "/";
     }
 

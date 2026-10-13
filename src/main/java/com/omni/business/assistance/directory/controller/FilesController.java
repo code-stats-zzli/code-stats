@@ -50,7 +50,7 @@ public class FilesController {
         String rootType = getRootType(params);
         String path = params.getOrDefault("path", "");
         boolean withChildren = !"false".equalsIgnoreCase(params.get("withChildren"));
-        var node = directoryService.getTreeNode(rootType, path, withChildren);
+        Map<String, Object> node = directoryService.getTreeNode(rootType, path, withChildren);
         return JsonUtil.toJson(node);
     }
 
@@ -60,7 +60,7 @@ public class FilesController {
         Map<String, String> params = parseQueryParams();
         String rootType = getRootType(params);
         String path = params.getOrDefault("path", "");
-        var list = directoryService.listDirectory(rootType, path);
+        java.util.List<Map<String, Object>> list = directoryService.listDirectory(rootType, path);
         return JsonUtil.toJson(list);
     }
 

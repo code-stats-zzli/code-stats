@@ -9,11 +9,13 @@ import com.omni.framework.spring.annotation.Service;
 import com.omni.framework.spring.config.ConfigLoader;
 import com.omni.framework.util.JsonUtil;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 @Service
@@ -31,7 +33,6 @@ public class AIChatService {
     private final String customApiUrl;
     private final String customApiKey;
 
-    private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
     // 独立项目助手服务
@@ -44,9 +45,6 @@ public class AIChatService {
         this.customApiUrl = ConfigLoader.getProperty("custom.api.url", "");
         this.customApiKey = ConfigLoader.getProperty("custom.api.key", "");
 
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
         this.objectMapper = new ObjectMapper();
 
         // 初始化项目助手
@@ -120,28 +118,67 @@ public class AIChatService {
         return question;
     }
 
+    // ==================== HTTP 通用发送方法 (Java 8) ====================
+    private String sendPostRequest(String url, String jsonBody, String apiKey, int timeoutSeconds) throws Exception {
+        HttpURLConnection conn = null;
+        try {
+            URL obj = new URL(url);
+            conn = (HttpURLConnection) obj.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            if (apiKey != null && !apiKey.isEmpty()) {
+                conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+            }
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(timeoutSeconds * 1000);
+            conn.setReadTimeout(timeoutSeconds * 1000);
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(jsonBody.getBytes(StandardCharsets.UTF_8));
+                os.flush();
+            }
+
+            int responseCode = conn.getResponseCode();
+            InputStream is = (responseCode >= 200 && responseCode < 300)
+                    ? conn.getInputStream()
+                    : conn.getErrorStream();
+
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) {
+                    response.append(line);
+                }
+                String responseBody = response.toString();
+
+                if (responseCode >= 200 && responseCode < 300) {
+                    return responseBody;
+                } else {
+                    throw new RuntimeException("HTTP " + responseCode + ": " + responseBody);
+                }
+            }
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
     // ==================== Ollama 实现 ====================
     private String chatWithOllama(String model, List<Map<String, String>> messages, double temperature) {
         Map<String, Object> request = new HashMap<>();
         request.put("model", model != null ? model : "deepseek-r1:7b");
         request.put("messages", messages);
         request.put("stream", false);
-        request.put("options", Map.of("temperature", temperature));
+        // Java 8 兼容：使用 HashMap 代替 Map.of
+        Map<String, Double> options = new HashMap<>();
+        options.put("temperature", temperature);
+        request.put("options", options);
         try {
             String json = objectMapper.writeValueAsString(request);
-            HttpRequest httpReq = HttpRequest.newBuilder()
-                    .uri(URI.create(ollamaUrl))
-                    .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(60))
-                    .POST(HttpRequest.BodyPublishers.ofString(json))
-                    .build();
-            HttpResponse<String> response = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200) {
-                JsonNode node = objectMapper.readTree(response.body());
-                return node.path("message").path("content").asText();
-            } else {
-                return "Ollama 错误: " + response.statusCode();
-            }
+            String responseBody = sendPostRequest(ollamaUrl, json, null, 60);
+            JsonNode node = objectMapper.readTree(responseBody);
+            return node.path("message").path("content").asText();
         } catch (Exception e) {
             log.error("调用 Ollama 失败", e);
             return "调用 Ollama 失败: " + e.getMessage();
@@ -166,20 +203,9 @@ public class AIChatService {
         request.put("stream", false);
         try {
             String json = objectMapper.writeValueAsString(request);
-            HttpRequest httpReq = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.deepseek.com/v1/chat/completions"))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + deepseekApiKey)
-                    .timeout(Duration.ofSeconds(60))
-                    .POST(HttpRequest.BodyPublishers.ofString(json))
-                    .build();
-            HttpResponse<String> response = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200) {
-                JsonNode node = objectMapper.readTree(response.body());
-                return node.path("choices").get(0).path("message").path("content").asText();
-            } else {
-                return "DeepSeek API 错误: " + response.statusCode();
-            }
+            String responseBody = sendPostRequest("https://api.deepseek.com/v1/chat/completions", json, deepseekApiKey, 60);
+            JsonNode node = objectMapper.readTree(responseBody);
+            return node.path("choices").get(0).path("message").path("content").asText();
         } catch (Exception e) {
             log.error("调用 DeepSeek API 失败", e);
             return "调用 DeepSeek API 失败: " + e.getMessage();
@@ -196,20 +222,8 @@ public class AIChatService {
         request.put("stream", false);
         try {
             String json = objectMapper.writeValueAsString(request);
-            HttpRequest.Builder builder = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(60))
-                    .POST(HttpRequest.BodyPublishers.ofString(json));
-            if (apiKey != null && !apiKey.isEmpty()) {
-                builder.header("Authorization", "Bearer " + apiKey);
-            }
-            HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200) {
-                return extractResponse(response.body());
-            } else {
-                return "自定义 API 错误: " + response.statusCode();
-            }
+            String responseBody = sendPostRequest(url, json, apiKey, 60);
+            return extractResponse(responseBody);
         } catch (Exception e) {
             log.error("调用自定义 API 失败", e);
             return "调用自定义 API 失败: " + e.getMessage();

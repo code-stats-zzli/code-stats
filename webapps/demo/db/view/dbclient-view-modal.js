@@ -191,3 +191,6 @@ const ViewModal = (function() {
 
     return { initModal, openModal, getCurrentRules };
 })();
+
+// ★ 挂载到 window，便于调试和统一管理
+window.ViewModal = ViewModal;

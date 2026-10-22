@@ -135,3 +135,6 @@ const ViewJoin = (function() {
 
     return { init, openJoinModal };
 })();
+
+// ★ 关键修复：挂载到 window，供 dbclient-view.js 中 window.ViewJoin 判断使用
+window.ViewJoin = ViewJoin;

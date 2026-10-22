@@ -83,6 +83,16 @@ const DBModule = (function() {
         tableContainer.innerHTML = html;
 
         document.querySelectorAll('#tableListContainer .table-item').forEach(el => {
+            // ★ 拖拽开始：写入表信息，供视图画布 drop 时读取
+            el.addEventListener('dragstart', (e) => {
+                const payload = {
+                    db: el.dataset.database,
+                    table: el.dataset.table
+                };
+                e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+                e.dataTransfer.effectAllowed = 'copy';
+            });
+
             el.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const tableName = el.dataset.table;

@@ -1,20 +1,24 @@
-// ========== 表列表模块：加载数据源下所有表（跨数据库） ==========
+// ========== 表列表模块：按数据源绑定的数据库加载表（无数据库选择、不可修改） ==========
 const DBModule = (function() {
     let tableFilter = null;
     let tableContainer = null;
     let allTables = [];
     let currentFilter = '';
     let currentRequest = null;
+    let currentDbName = null;
 
-    async function loadAllTables() {
+    // ---------- 按数据库加载表（由 core 在数据源切换时调用） ----------
+    async function loadTables(dbName) {
         if (!tableContainer) {
-            console.error('tableContainer 未找到');
+            console.warn('[DBModule] tableContainer 未初始化');
             return;
         }
-        if (!currentDataSourceId) {
-            tableContainer.innerHTML = '<div class="empty-state">请选择数据源</div>';
+        if (!dbName) {
+            tableContainer.innerHTML = '<div class="empty-state">未绑定数据库</div>';
+            allTables = [];
             return;
         }
+        currentDbName = dbName;
 
         if (currentRequest) currentRequest.abort();
         currentRequest = new AbortController();
@@ -22,84 +26,88 @@ const DBModule = (function() {
 
         tableContainer.innerHTML = '<div class="loading">加载表列表中...</div>';
         try {
-            const url = DB.apiBase + '/tables/all';
-            const resp = await fetch(url + (url.includes('?') ? '&' : '?') + `dsId=${currentDataSourceId}`, { signal });
+            // 请求只针对当前库，dsId 由 DB 层注入（这里手动拼，保持与 fetchJSON 逻辑一致）
+            let url = DB.apiBase + '/tables?db=' + encodeURIComponent(dbName);
+            if (typeof currentDataSourceId !== 'undefined' && currentDataSourceId) {
+                url += '&dsId=' + currentDataSourceId;
+            }
+
+            const resp = await fetch(url, { signal });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const tables = await resp.json();
-            allTables = tables;
+
+            // 只保留表（过滤视图等）
+            allTables = Array.isArray(tables)
+                ? tables.filter(t => !t.type || t.type.toUpperCase() === 'TABLE')
+                : [];
+
             renderTableList(allTables);
         } catch (err) {
             if (err.name === 'AbortError') return;
-            console.error('加载表列表失败', err);
-            tableContainer.innerHTML = '<div class="error">加载失败，请检查网络或数据源配置</div>';
+            console.error('[DBModule] 加载表列表失败', err);
+            tableContainer.innerHTML = '<div class="error">加载失败，请检查数据源配置</div>';
         } finally {
             currentRequest = null;
         }
     }
 
+    // ---------- 渲染表列表（data-database 固定为当前库，供视图拖拽使用） ----------
     function renderTableList(tables) {
         if (!tableContainer) return;
         const filterText = currentFilter.toLowerCase();
         let filtered = tables;
         if (filterText) {
-            filtered = tables.filter(t =>
-                t.name.toLowerCase().includes(filterText) ||
-                t.database.toLowerCase().includes(filterText)
-            );
+            filtered = tables.filter(t => t.name.toLowerCase().includes(filterText));
         }
         if (!filtered.length) {
             tableContainer.innerHTML = '<div class="empty-state">暂无匹配的表</div>';
             return;
         }
+
+        const dbName = currentDbName || DB.getCurrentDb() || '';
         let html = '';
         for (const t of filtered) {
-            const activeClass = (DB.getCurrentTable() === t.name && DB.getCurrentDb() === t.database) ? 'active' : '';
-            // ★ 表项上显示数据库名 badge，并用 title 提示完整路径
+            const activeClass = (DB.getCurrentTable() === t.name) ? 'active' : '';
             html += `
                 <div class="table-item ${activeClass}"
                      data-table="${escapeHtml(t.name)}"
-                     data-database="${escapeHtml(t.database)}"
-                     title="${escapeHtml(t.database + '.' + t.name)}">
+                     data-database="${escapeHtml(dbName)}"
+                     title="${escapeHtml(dbName + '.' + t.name)}">
                     <span class="icon">📄</span>
                     <span class="name">${escapeHtml(t.name)}</span>
-                    <span style="font-size:10px;color:#94a3b8;background:rgba(0,102,255,0.1);
-                                 padding:0 6px;border-radius:8px;margin-left:4px;flex-shrink:0;">
-                        ${escapeHtml(t.database)}
-                    </span>
                 </div>
             `;
         }
         tableContainer.innerHTML = html;
 
-        document.querySelectorAll('.table-item').forEach(el => {
+        document.querySelectorAll('#tableListContainer .table-item').forEach(el => {
             el.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const tableName = el.dataset.table;
-                const dbName = el.dataset.database;
-                if (tableName && dbName) {
-                    selectTable(dbName, tableName);
+                const db = el.dataset.database || DB.getCurrentDb();
+                if (tableName && db) {
+                    selectTable(db, tableName);
                 }
             });
         });
 
         // 默认选中第一张表（仅当没有选中任何表时）
         if (!DB.getCurrentTable() && filtered.length > 0) {
-            const firstItem = document.querySelector('.table-item');
+            const firstItem = document.querySelector('#tableListContainer .table-item');
             if (firstItem) {
-                const dbName = firstItem.dataset.database;
                 const tableName = firstItem.dataset.table;
-                if (dbName && tableName) {
-                    selectTable(dbName, tableName);
-                }
+                const db = firstItem.dataset.database || DB.getCurrentDb();
+                if (tableName && db) selectTable(db, tableName);
             }
         }
     }
 
+    // ---------- 选中表（联动属性/数据/SQL/视图） ----------
     function selectTable(dbName, tableName) {
         DB.setCurrentDb(dbName);
         DB.setCurrentTable(tableName);
-        document.querySelectorAll('.table-item').forEach(el => {
-            el.classList.toggle('active', el.dataset.table === tableName && el.dataset.database === dbName);
+        document.querySelectorAll('#tableListContainer .table-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.table === tableName);
         });
         if (window.PropertiesModule && typeof window.PropertiesModule.loadProperties === 'function') {
             window.PropertiesModule.loadProperties(dbName, tableName);
@@ -112,6 +120,7 @@ const DBModule = (function() {
         DB.notify(dbName, tableName);
     }
 
+    // ---------- 表名过滤（防抖） ----------
     let filterTimer = null;
     function filterTables() {
         if (filterTimer) clearTimeout(filterTimer);
@@ -124,19 +133,23 @@ const DBModule = (function() {
     function clear() {
         if (tableContainer) tableContainer.innerHTML = '';
         allTables = [];
+        currentDbName = null;
     }
 
     function init() {
         tableFilter = document.getElementById('tableFilter');
         tableContainer = document.getElementById('tableListContainer');
+
         if (!tableFilter || !tableContainer) {
-            console.error('DBModule: 必要元素未找到');
+            console.error('[DBModule] 必要元素未找到（tableFilter/tableListContainer）');
             return;
         }
+
+        tableFilter.removeEventListener('input', filterTables);
         tableFilter.addEventListener('input', filterTables);
     }
 
-    return { init, loadAllTables, clear };
+    return { init, loadTables, clear };
 })();
 
 if (document.readyState === 'loading') {

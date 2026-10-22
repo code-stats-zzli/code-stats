@@ -13,7 +13,6 @@
         <div class="db-selector">
             <label>数据源：</label>
             <select id="dataSourceSelect" style="min-width: 220px;"></select>
-            <!-- 替换为 -->
             <div class="dropdown" id="manageDropdown">
                 <button class="btn-secondary dropdown-toggle">⚙️ 管理</button>
                 <div class="dropdown-menu">
@@ -28,8 +27,13 @@
         <!-- 左侧表列表 -->
         <div class="table-list-panel" id="tableListPanel">
             <h3>📋 表列表</h3>
+            <!-- ★ 只读数据库展示（数据源自带，不可修改） -->
+            <div class="db-info-inline" id="dbInfoInline" style="display:none;">
+                <span class="db-info-label">数据库：</span>
+                <span class="db-info-value" id="dbInfoValue">-</span>
+            </div>
             <div class="table-filter-inline">
-                <input type="text" id="tableFilter" placeholder="输入表名或数据库名过滤...">
+                <input type="text" id="tableFilter" placeholder="输入表名过滤...">
             </div>
             <div id="tableListContainer" class="table-list"></div>
         </div>
@@ -159,7 +163,7 @@
             if (window.ViewModule && typeof window.ViewModule.init === 'function') {
                 window.ViewModule.init();
             }
-            // 初始化数据源（会触发 loadAllTables）
+            // 初始化数据源（会触发绑定数据库 + 表列表加载）
             if (typeof loadDataSources === 'function') loadDataSources();
 
             const tabBtns = document.querySelectorAll('.tab-btn');

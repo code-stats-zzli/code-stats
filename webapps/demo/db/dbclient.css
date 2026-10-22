@@ -23,12 +23,12 @@ body {
 .db-toolbar {
     display: flex;
     align-items: center;
-    gap: 24px;
-    padding: 12px 20px;
+    gap: 16px;
+    padding: 10px 16px;
     background: var(--bg-card);
     backdrop-filter: blur(16px);
     border-bottom: 1px solid rgba(0, 102, 255, 0.2);
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
 .db-selector {
@@ -37,44 +37,44 @@ body {
     gap: 8px;
 }
 .db-selector select {
-    min-width: 200px;
+    min-width: 180px;
 }
 
 .db-main-row {
     display: flex;
     flex: 1;
-    gap: 20px;
-    padding: 0 20px 20px 20px;
+    gap: 12px;
+    padding: 0 16px 16px 16px;
     overflow: hidden;
 }
 
-/* 左侧表列表面板 */
+/* ==================== 左侧表列表面板（宽度已收窄） ==================== */
 .table-list-panel {
-    width: 280px;
+    width: 220px;
     background: var(--bg-card);
-    border-radius: 24px;
-    padding: 16px;
+    border-radius: 20px;
+    padding: 12px;
     display: flex;
     flex-direction: column;
     overflow-y: auto;
     flex-shrink: 0;
 }
 .table-list-panel h3 {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
     color: var(--accent-primary);
-    font-size: 16px;
+    font-size: 15px;
 }
 
-/* ★ 新增：只读数据库展示（数据源自带，不可修改） */
+/* 只读数据库展示 */
 .db-info-inline {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 12px;
-    padding: 8px 12px;
+    gap: 4px;
+    margin-bottom: 10px;
+    padding: 6px 10px;
     background: rgba(0, 102, 255, 0.05);
-    border-radius: 12px;
-    font-size: 13px;
+    border-radius: 10px;
+    font-size: 12px;
     border: 1px dashed rgba(0, 102, 255, 0.3);
     line-height: 1.4;
 }
@@ -91,12 +91,13 @@ body {
 }
 
 .table-filter-inline {
-    margin-bottom: 16px;
+    margin-bottom: 10px;
 }
 .table-filter-inline input {
     width: 100%;
-    padding: 8px 12px;
-    border-radius: 20px;
+    padding: 6px 10px;
+    font-size: 13px;
+    border-radius: 16px;
     background: white;
     border: 1px solid rgba(0, 102, 255, 0.3);
 }
@@ -105,15 +106,19 @@ body {
     overflow-y: auto;
 }
 .table-item {
-    padding: 8px 12px;
-    margin: 4px 0;
-    border-radius: 16px;
-    cursor: pointer;
+    padding: 6px 10px;
+    margin: 3px 0;
+    border-radius: 12px;
+    cursor: grab;
     transition: 0.2s;
-    font-size: 14px;
+    font-size: 13px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    user-select: none;
+}
+.table-item:active {
+    cursor: grabbing;
 }
 .table-item:hover {
     background: rgba(0, 102, 255, 0.1);
@@ -123,37 +128,39 @@ body {
     color: white;
 }
 .table-item .icon {
-    font-size: 16px;
+    font-size: 14px;
 }
 .table-item .name {
     flex: 1;
     word-break: break-word;
 }
 
-/* 右侧内容面板 */
+/* ==================== 右侧内容面板 ==================== */
 .content-panel {
     flex: 1;
     display: flex;
     flex-direction: column;
     background: var(--bg-card);
-    border-radius: 24px;
+    border-radius: 20px;
     overflow: hidden;
     min-width: 0;
+    min-height: 0;
 }
 
 /* 标签页头部 */
 .tab-header {
     background: rgba(0, 0, 0, 0.3);
     border-bottom: 1px solid rgba(0, 200, 255, 0.3);
-    padding: 0 20px;
+    padding: 0 16px;
     display: flex;
+    flex-shrink: 0;
 }
 .tab-btn {
-    padding: 12px 24px;
+    padding: 10px 20px;
     border: none;
     background: transparent;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
     color: var(--text-dark);
     border-bottom: 2px solid transparent;
     transition: 0.2s;
@@ -161,23 +168,130 @@ body {
 .tab-btn.active {
     color: white;
     background: var(--accent-primary);
-    border-radius: 24px 24px 0 0;
+    border-radius: 20px 20px 0 0;
     border-bottom: 2px solid var(--accent-primary);
     box-shadow: 0 -2px 8px rgba(0, 102, 255, 0.2);
 }
+
+/* ==================== 关键修复：tab-content / tab-pane flex 布局 ==================== */
 .tab-content {
     flex: 1;
-    padding: 20px;
-    overflow-y: auto;
+    padding: 16px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
+
 .tab-pane {
     display: none;
 }
+
+/* 普通页签：block + 撑满 + 可滚动 */
 .tab-pane.active {
     display: block;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
 }
 
-/* 表格样式 */
+/* 图页签：block + 撑满 + 禁止自身滚动（内部画布自己滚），让 height:100% 生效 */
+#tab-diagram.active {
+    overflow: hidden;
+}
+
+/* ==================== 视图画布容器 ==================== */
+.diagram-simple-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    gap: 8px;
+}
+
+/* 画布工具栏 */
+.canvas-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 0 4px;
+}
+.canvas-toolbar .canvas-hint-text {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.btn-sm {
+    padding: 4px 14px;
+    font-size: 12px;
+    border-radius: 20px;
+}
+
+.canvas-area {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.canvas-container {
+    flex: 1;
+    background: #f8fafc;
+    border-radius: 16px;
+    border: 1px solid rgba(0, 102, 255, 0.2);
+    overflow: auto;
+    position: relative;
+    min-height: 0;
+}
+#diagramSvg {
+    width: 100%;
+    height: 100%;
+    background-image: linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+    linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+    background-size: 20px 20px;
+    cursor: crosshair;
+    display: block;
+}
+.canvas-placeholder {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #94a3b8;
+    pointer-events: none;
+    font-size: 14px;
+}
+
+/* ==================== 视图 SQL 面板（默认隐藏，点击按钮显示） ==================== */
+.sql-preview-panel {
+    flex-shrink: 0;
+    background: var(--bg-card);
+    border-radius: 16px;
+    border: 1px solid rgba(0, 102, 255, 0.2);
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    max-height: 220px;
+}
+.sql-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+#viewSqlText {
+    width: 100%;
+    font-family: monospace;
+    background: #f1f5f9;
+    border-radius: 12px;
+    padding: 8px 10px;
+    resize: vertical;
+    border: 1px solid rgba(0, 102, 255, 0.3);
+    font-size: 12px;
+    line-height: 1.4;
+    min-height: 80px;
+}
+
+/* ==================== 表格样式 ==================== */
 .data-table, .props-table, .sql-result-table {
     width: 100%;
     border-collapse: collapse;
@@ -221,73 +335,6 @@ body {
     color: var(--text-muted);
 }
 .error { color: #dc2626; }
-
-/* ==================== 视图画布相关 ==================== */
-.diagram-simple-container {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    gap: 16px;
-    min-height: 0;
-}
-.canvas-area {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-}
-.canvas-container {
-    flex: 1;
-    background: #f8fafc;
-    border-radius: 20px;
-    border: 1px solid rgba(0, 102, 255, 0.2);
-    overflow: auto;
-    position: relative;
-}
-#diagramSvg {
-    width: 100%;
-    height: 100%;
-    background-image: linear-gradient(to right, #e2e8f0 1px, transparent 1px),
-    linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
-    background-size: 20px 20px;
-    cursor: crosshair;
-}
-.canvas-placeholder {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: #94a3b8;
-    pointer-events: none;
-    font-size: 14px;
-}
-.sql-preview-panel {
-    flex-shrink: 0;
-    background: var(--bg-card);
-    border-radius: 20px;
-    border: 1px solid rgba(0, 102, 255, 0.2);
-    padding: 12px 16px;
-    display: flex;
-    flex-direction: column;
-}
-.sql-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-#viewSqlText {
-    width: 100%;
-    font-family: monospace;
-    background: #f1f5f9;
-    border-radius: 16px;
-    padding: 10px;
-    resize: vertical;
-    border: 1px solid rgba(0, 102, 255, 0.3);
-    font-size: 13px;
-    line-height: 1.4;
-    min-height: 90px;
-}
 
 /* 表节点样式 */
 .table-node-group { cursor: move; }

@@ -26,7 +26,7 @@ const DBModule = (function() {
 
         tableContainer.innerHTML = '<div class="loading">加载表列表中...</div>';
         try {
-            // 请求只针对当前库，dsId 由 DB 层注入（这里手动拼，保持与 fetchJSON 逻辑一致）
+            // 请求只针对当前库，dsId 由 DB 层注入
             let url = DB.apiBase + '/tables?db=' + encodeURIComponent(dbName);
             if (typeof currentDataSourceId !== 'undefined' && currentDataSourceId) {
                 url += '&dsId=' + currentDataSourceId;
@@ -51,7 +51,7 @@ const DBModule = (function() {
         }
     }
 
-    // ---------- 渲染表列表（data-database 固定为当前库，供视图拖拽使用） ----------
+    // ---------- 渲染表列表（draggable="true" 支持拖到画板） ----------
     function renderTableList(tables) {
         if (!tableContainer) return;
         const filterText = currentFilter.toLowerCase();
@@ -68,11 +68,13 @@ const DBModule = (function() {
         let html = '';
         for (const t of filtered) {
             const activeClass = (DB.getCurrentTable() === t.name) ? 'active' : '';
+            // ★ 关键修复：draggable="true"，否则 dragstart 不会触发
             html += `
                 <div class="table-item ${activeClass}"
+                     draggable="true"
                      data-table="${escapeHtml(t.name)}"
                      data-database="${escapeHtml(dbName)}"
-                     title="${escapeHtml(dbName + '.' + t.name)}">
+                     title="拖拽到画布生成视图：${escapeHtml(dbName + '.' + t.name)}">
                     <span class="icon">📄</span>
                     <span class="name">${escapeHtml(t.name)}</span>
                 </div>

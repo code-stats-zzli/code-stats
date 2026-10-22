@@ -1,4 +1,13 @@
 // dbclient-view-sql.js - 按选中节点（表 / join）生成 SQL、复制、执行
+// 视图 SQL 结构：
+//   SELECT * FROM (
+//     SELECT
+//       a.<字段> AS a_<字段>,
+//       b.<字段> AS b_<字段>
+//     FROM <左输入> a
+//     JOIN <右输入> b ON a.<x> = b.<y>
+//   ) AS 视图名;
+// 其中 <左输入>/<右输入> 若是表 → `db`.`table`；若是视图 → (视图完整 SQL) 作为子查询。
 const ViewSql = (function() {
     let sqlTextarea = null;
     let copySqlBtn = null;
@@ -15,11 +24,46 @@ const ViewSql = (function() {
         updateSql();
     }
 
+    // 渲染 FROM / JOIN 子句中的输入片段（不含别名）
+    function renderInputFragment(input) {
+        if (input.kind === 'table') {
+            return '`' + input.dbName + '`.`' + input.tableName + '`';
+        }
+        const j = core.getJoinNodes().get(input.joinId);
+        if (!j) return '';
+        // 视图作为子查询（使用视图完整 SQL）
+        return '(\n' + buildFullViewSql(j) + '\n)';
+    }
+
+    // 视图内层 SELECT
+    function buildInnerSql(node) {
+        const LEFT_ALIAS = 'a';
+        const RIGHT_ALIAS = 'b';
+
+        const selectParts = (node.outputFields || []).map(f => {
+            const alias = f.source === 'left' ? LEFT_ALIAS : RIGHT_ALIAS;
+            return alias + '.`' + f.sourceField + '` AS `' + f.name + '`';
+        });
+
+        const fromFragment = renderInputFragment(node.leftInput) + ' ' + LEFT_ALIAS;
+        const joinFragment =
+            node.joinType + ' ' +
+            renderInputFragment(node.rightInput) + ' ' + RIGHT_ALIAS +
+            ' ON ' + LEFT_ALIAS + '.`' + node.leftField + '` ' +
+            node.operator + ' ' + RIGHT_ALIAS + '.`' + node.rightField + '`';
+
+        return `SELECT\n  ${selectParts.join(',\n  ')}\nFROM ${fromFragment}\n${joinFragment}`;
+    }
+
+    // 视图完整 SQL（外层套 SELECT * FROM (...) AS 视图名）
+    function buildFullViewSql(node) {
+        return `SELECT * FROM (\n${buildInnerSql(node)}\n) AS \`${node.name}\``;
+    }
+
     // 单表 SQL（含字段转换规则时）
     function buildTableSql(table) {
         const rules = (window.ViewTransform && window.ViewTransform.getTransformRulesForTable)
-            ? window.ViewTransform.getTransformRulesForTable(table.name)
-            : [];
+            ? window.ViewTransform.getTransformRulesForTable(table.name) : [];
         if (!rules || rules.length === 0) {
             return 'SELECT * FROM `' + table.dbName + '`.`' + table.name + '`;';
         }
@@ -34,70 +78,24 @@ const ViewSql = (function() {
         return 'SELECT ' + allFields + ', ' + transformFields + ' FROM `' + table.dbName + '`.`' + table.name + '`;';
     }
 
-    // ★ 关联视图 SQL：真实表平铺 + a/b/c 别名
-    function buildJoinSql(jNode) {
-        const tables = jNode.flatTables || [];
-        const conditions = jNode.flatConditions || [];
-        const outputFields = jNode.outputFields || [];
-
-        if (!tables.length) return '-- 无表数据';
-
-        const firstTable = tables[0];
-        let sql = 'SELECT\n';
-
-        if (outputFields.length > 0) {
-            sql += '  ' + outputFields.map(f =>
-                `${f.alias}.\`${f.columnName}\` AS \`${f.alias}_${f.columnName}\``
-            ).join(',\n  ') + '\n';
-        } else {
-            sql += '  *\n';
-        }
-
-        sql += `FROM \`${firstTable.dbName}\`.\`${firstTable.name}\` ${firstTable.alias}\n`;
-
-        // 依次 JOIN 后续表，用条件匹配
-        for (let i = 1; i < tables.length; i++) {
-            const t = tables[i];
-            // 找引用该表别名的条件
-            const cond = conditions.find(c =>
-                c.leftAlias === t.alias || c.rightAlias === t.alias
-            );
-            if (!cond) {
-                // 没匹配到条件时退化为 CROSS JOIN
-                sql += `CROSS JOIN \`${t.dbName}\`.\`${t.name}\` ${t.alias}\n`;
-                continue;
-            }
-            const jt = cond.joinType || 'INNER JOIN';
-            sql += `${jt} \`${t.dbName}\`.\`${t.name}\` ${t.alias} ON `;
-            sql += `${cond.leftAlias}.\`${cond.leftField}\` ${cond.operator} ${cond.rightAlias}.\`${cond.rightField}\`\n`;
-        }
-
-        return sql.replace(/\n+$/, '') + ';';
-    }
-
     function generateViewSql() {
         const node = core.getSelectedNode();
         if (!node) return '-- 未选中视图\n-- 点击画布上的表节点或关联节点查看对应 SQL';
-
         if (node.type === 'table') {
             const table = core.getTables().get(node.id);
             if (!table) return '-- 表节点不存在';
             return buildTableSql(table);
         }
-
         if (node.type === 'join') {
             const jNode = core.getJoinNodes().get(node.id);
             if (!jNode) return '-- 关联节点不存在';
-            return buildJoinSql(jNode);
+            return buildFullViewSql(jNode) + ';';
         }
-
         return '-- 未知节点类型';
     }
 
     function updateSql() {
-        if (sqlTextarea) {
-            sqlTextarea.value = generateViewSql();
-        }
+        if (sqlTextarea) sqlTextarea.value = generateViewSql();
     }
 
     function copySql() {
@@ -110,10 +108,7 @@ const ViewSql = (function() {
 
     function executeCurrentViewSql() {
         const sql = sqlTextarea ? sqlTextarea.value : '';
-        if (!sql || sql.startsWith('--')) {
-            alert('没有有效的 SQL 语句');
-            return;
-        }
+        if (!sql || sql.startsWith('--')) { alert('没有有效的 SQL 语句'); return; }
         const sqlTabBtn = document.querySelector('.tab-btn[data-tab="sql"]');
         if (sqlTabBtn) sqlTabBtn.click();
         const sqlEditor = document.getElementById('sqlEditor');

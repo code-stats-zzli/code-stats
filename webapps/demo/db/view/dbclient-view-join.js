@@ -1,15 +1,17 @@
 // dbclient-view-join.js - Ctrl 多选两个表/视图后右键 → 创建关联视图
-// 支持：递归展平输入、真实表 a/b/c 别名、输出字段选择
+// 视图设计：
+//   每个视图是独立结果集，内部所有输入（表或视图）统一按 a/b 分配字母，
+//   字段 AS 成 字母_字段名（a_id、b_user_id 等）；
+//   视图再作为输入时，整体作为子查询嵌入，用对外字段名参与 JOIN。
 const ViewJoin = (function() {
     let core = null;
     let refreshCallback = null;
     let modal = null;
-    let currentState = null;   // { leftNode, rightNode, merged }
+    let currentState = null;
 
     function init(coreInstance, onRefresh) {
         core = coreInstance;
         refreshCallback = onRefresh;
-
         modal = document.getElementById('joinModal');
         if (!modal) {
             console.warn('[ViewJoin] joinModal 元素未找到');
@@ -34,104 +36,30 @@ const ViewJoin = (function() {
     }
 
     /**
-     * 展平输入节点为 { tables, conditions, fields }
-     * table 节点：1 张表，无内部条件
-     * join 节点：直接复用其 flatTables / flatConditions / flatFields
+     * 提取某个输入的字段列表
+     *   sourceField：在输入内部引用该字段时使用的名字
+     *     表输入 → 原始列名（id、name）
+     *     视图输入 → 视图对外字段名（a_id、b_user_id）
      */
-    function flattenInput(node) {
-        if (!node) return { tables: [], conditions: [], fields: [] };
-
-        if (node.type === 'table') {
-            const rawFields = (node.node && node.node.fields) || [];
-            return {
-                tables: [{
-                    name: node.name,
-                    dbName: node.dbName,
-                    alias: 'a',
-                    fields: rawFields.map(f => ({ ...f }))
-                }],
-                conditions: [],
-                fields: rawFields.map(f => ({
-                    columnName: f.columnName,
-                    typeName: f.typeName,
-                    ownerName: node.name,
-                    alias: 'a'
-                }))
-            };
+    function getInputFields(input) {
+        if (input.kind === 'table') {
+            const t = core.getTables().get(input.tableName);
+            if (!t) return [];
+            return (t.fields || []).map(f => ({
+                display: `${input.tableName}.${f.columnName}`,
+                ownerName: input.tableName,
+                sourceField: f.columnName,
+                typeName: f.typeName
+            }));
         }
-
-        // join 节点：深拷贝，避免后续修改污染原节点
-        const jNode = node.node;
-        return {
-            tables: (jNode.flatTables || []).map(t => ({
-                name: t.name,
-                dbName: t.dbName,
-                alias: t.alias,
-                fields: (t.fields || []).map(f => ({ ...f }))
-            })),
-            conditions: (jNode.flatConditions || []).map(c => ({ ...c })),
-            fields: (jNode.flatFields || []).map(f => ({ ...f }))
-        };
-    }
-
-    /**
-     * 合并左右输入，分配 a/b/c 别名
-     * 左输入保持自己已有的 alias（因为其内部 conditions 里已引用）
-     * 右输入基于左输入表数量，从下一个字母继续分配
-     */
-    function mergeInputs(leftNode, rightNode) {
-        const left = flattenInput(leftNode);
-        const right = flattenInput(rightNode);
-
-        const letters = 'abcdefghijklmnopqrstuvwxyz';
-
-        // 左输入：如果它是 table（初始 alias 全部是 'a'），重新从 a 开始分配
-        // 如果它是 join，其 flatTables 已经带别名，不重排
-        if (leftNode.type === 'table') {
-            left.tables.forEach((t, idx) => {
-                t.alias = letters[idx] || ('t' + idx);
-            });
-            left.fields.forEach(f => {
-                const ownerTbl = left.tables.find(t => t.name === f.ownerName);
-                if (ownerTbl) f.alias = ownerTbl.alias;
-            });
-        }
-
-        // 右输入：从 nextIdx 开始分配
-        let nextIdx = left.tables.length;
-        if (rightNode.type === 'table') {
-            right.tables.forEach((t) => {
-                t.alias = letters[nextIdx++] || ('t' + nextIdx);
-            });
-            right.fields.forEach(f => {
-                const ownerTbl = right.tables.find(t => t.name === f.ownerName);
-                if (ownerTbl) f.alias = ownerTbl.alias;
-            });
-        } else {
-            // 右输入是 join：需要把它的 alias 重新映射到 nextIdx 起始的字母
-            const aliasMap = {};
-            right.tables.forEach((t) => {
-                const newAlias = letters[nextIdx++] || ('t' + nextIdx);
-                aliasMap[t.alias] = newAlias;
-                t.alias = newAlias;
-            });
-            // 更新右 join 内部 conditions 的 alias 引用
-            right.conditions.forEach(c => {
-                if (aliasMap[c.leftAlias]) c.leftAlias = aliasMap[c.leftAlias];
-                if (aliasMap[c.rightAlias]) c.rightAlias = aliasMap[c.rightAlias];
-            });
-            // 更新右 join 字段的 alias
-            right.fields.forEach(f => {
-                if (aliasMap[f.alias]) f.alias = aliasMap[f.alias];
-            });
-        }
-
-        return {
-            tables: [...left.tables, ...right.tables],
-            conditions: [...left.conditions, ...right.conditions],
-            leftFields: left.fields,
-            rightFields: right.fields
-        };
+        const j = core.getJoinNodes().get(input.joinId);
+        if (!j) return [];
+        return (j.outputFields || []).map(f => ({
+            display: `${j.name}.${f.name}`,
+            ownerName: j.name,
+            sourceField: f.name,
+            typeName: f.typeName
+        }));
     }
 
     function openJoinModal() {
@@ -148,26 +76,28 @@ const ViewJoin = (function() {
             const idRaw = parts.slice(1).join(':');
             if (type === 'table') {
                 const n = core.findNodeByName(idRaw);
-                if (n) nodes.push(n);
+                if (n) nodes.push({ kind: 'table', name: n.name, node: n.node });
             } else if (type === 'join') {
                 const jid = parseInt(idRaw);
                 const j = core.getJoinNodes().get(jid);
-                if (j) {
-                    const n = core.findNodeByName(j.name);
-                    if (n) nodes.push(n);
-                }
+                if (j) nodes.push({ kind: 'join', name: j.name, node: j });
             }
         });
 
-        if (nodes.length !== 2) {
-            alert('选中的节点无效');
-            return;
-        }
-
+        if (nodes.length !== 2) { alert('选中的节点无效'); return; }
         const [leftNode, rightNode] = nodes;
-        const merged = mergeInputs(leftNode, rightNode);
 
-        if (!merged.leftFields.length || !merged.rightFields.length) {
+        const leftInput = leftNode.kind === 'table'
+            ? { kind: 'table', dbName: leftNode.node.dbName, tableName: leftNode.node.name }
+            : { kind: 'join', joinId: leftNode.node.id };
+        const rightInput = rightNode.kind === 'table'
+            ? { kind: 'table', dbName: rightNode.node.dbName, tableName: rightNode.node.name }
+            : { kind: 'join', joinId: rightNode.node.id };
+
+        const leftFields = getInputFields(leftInput);
+        const rightFields = getInputFields(rightInput);
+
+        if (!leftFields.length || !rightFields.length) {
             alert('左右输入至少一侧没有字段，无法创建关联');
             return;
         }
@@ -178,43 +108,39 @@ const ViewJoin = (function() {
         document.getElementById('joinOperator').value = '=';
         document.getElementById('joinAlias').value = '';
 
-        // 左字段下拉
         const leftFieldSelect = document.getElementById('joinLeftField');
-        leftFieldSelect.innerHTML = merged.leftFields.map(f =>
-            `<option value="${f.alias}|${f.columnName}">${f.alias}.${f.columnName}  (${f.ownerName})</option>`
+        leftFieldSelect.innerHTML = leftFields.map((f, idx) =>
+            `<option value="${idx}">${f.ownerName}.${f.sourceField}  (${f.typeName || ''})</option>`
         ).join('');
 
-        // 右字段下拉
         const rightFieldSelect = document.getElementById('joinRightField');
-        rightFieldSelect.innerHTML = merged.rightFields.map(f =>
-            `<option value="${f.alias}|${f.columnName}">${f.alias}.${f.columnName}  (${f.ownerName})</option>`
+        rightFieldSelect.innerHTML = rightFields.map((f, idx) =>
+            `<option value="${idx}">${f.ownerName}.${f.sourceField}  (${f.typeName || ''})</option>`
         ).join('');
 
-        // 输出字段多选：左右所有字段，按 alias 顺序展示
         const outputContainer = document.getElementById('outputFieldsContainer');
-        const allFields = [...merged.leftFields, ...merged.rightFields];
-        // 按 alias 排序，让 a.* 在前
-        allFields.sort((x, y) => {
-            if (x.alias < y.alias) return -1;
-            if (x.alias > y.alias) return 1;
-            return 0;
-        });
-        outputContainer.innerHTML = allFields.map((f, idx) => `
+        let html = '';
+        leftFields.forEach((f, idx) => {
+            html += `
             <label style="display:inline-flex; align-items:center; gap:6px; margin:3px 14px 3px 0;
                           font-size:13px; font-family:'JetBrains Mono',monospace; cursor:pointer;">
-                <input type="checkbox" class="output-field-cb"
-                       data-idx="${idx}"
-                       data-alias="${f.alias}"
-                       data-column="${f.columnName}"
-                       data-type="${f.typeName || ''}"
-                       data-owner="${f.ownerName}"
-                       checked>
-                <span>${f.alias}.${f.columnName}</span>
+                <input type="checkbox" class="output-field-cb" data-source="left" data-field-idx="${idx}" checked>
+                <span>${f.ownerName}.${f.sourceField}</span>
                 <span style="color:#94a3b8; font-size:11px;">(${f.typeName || ''})</span>
-            </label>
-        `).join('');
+            </label>`;
+        });
+        rightFields.forEach((f, idx) => {
+            html += `
+            <label style="display:inline-flex; align-items:center; gap:6px; margin:3px 14px 3px 0;
+                          font-size:13px; font-family:'JetBrains Mono',monospace; cursor:pointer;">
+                <input type="checkbox" class="output-field-cb" data-source="right" data-field-idx="${idx}" checked>
+                <span>${f.ownerName}.${f.sourceField}</span>
+                <span style="color:#94a3b8; font-size:11px;">(${f.typeName || ''})</span>
+            </label>`;
+        });
+        outputContainer.innerHTML = html;
 
-        currentState = { leftNode, rightNode, merged };
+        currentState = { leftNode, rightNode, leftInput, rightInput, leftFields, rightFields };
         modal.style.display = 'flex';
     }
 
@@ -228,99 +154,73 @@ const ViewJoin = (function() {
 
     function confirmJoin() {
         if (!currentState) return;
-        const { leftNode, rightNode, merged } = currentState;
+        const { leftNode, rightNode, leftInput, rightInput, leftFields, rightFields } = currentState;
 
         const joinType = document.getElementById('joinTypeSelect').value;
-        const leftFieldValue = document.getElementById('joinLeftField').value;
-        const rightFieldValue = document.getElementById('joinRightField').value;
+        const leftFieldIdx = parseInt(document.getElementById('joinLeftField').value);
+        const rightFieldIdx = parseInt(document.getElementById('joinRightField').value);
         const operator = document.getElementById('joinOperator').value;
         const aliasInput = document.getElementById('joinAlias').value.trim();
 
-        if (!leftFieldValue || !rightFieldValue || leftFieldValue === '无字段') {
-            alert('请选择关联字段');
-            return;
+        if (isNaN(leftFieldIdx) || isNaN(rightFieldIdx)) {
+            alert('请选择关联字段'); return;
         }
+        const leftJoinField = leftFields[leftFieldIdx].sourceField;
+        const rightJoinField = rightFields[rightFieldIdx].sourceField;
 
-        const [leftAlias, leftFieldName] = leftFieldValue.split('|');
-        const [rightAlias, rightFieldName] = rightFieldValue.split('|');
-
-        // 名称
         let name = aliasInput;
         if (!name) {
             const base = leftNode.name + '_关联';
             if (!isNameUsed(base)) name = base;
-            else {
-                let i = 1;
-                while (isNameUsed(base + '_' + i)) i++;
-                name = base + '_' + i;
-            }
+            else { let i = 1; while (isNameUsed(base + '_' + i)) i++; name = base + '_' + i; }
         } else if (isNameUsed(name)) {
-            alert('名称 "' + name + '" 已被占用，请换一个或留空使用默认');
-            return;
+            alert('名称 "' + name + '" 已被占用，请换一个或留空'); return;
         }
 
-        // 收集勾选的输出字段
+        // 左输入固定别名 a，右输入固定别名 b
+        const LEFT_ALIAS = 'a';
+        const RIGHT_ALIAS = 'b';
+
         const outputFields = [];
         document.querySelectorAll('#outputFieldsContainer input.output-field-cb:checked').forEach(cb => {
+            const source = cb.dataset.source;
+            const fieldIdx = parseInt(cb.dataset.fieldIdx);
+            const fields = source === 'left' ? leftFields : rightFields;
+            const f = fields[fieldIdx];
+            const alias = source === 'left' ? LEFT_ALIAS : RIGHT_ALIAS;
+            const newName = alias + '_' + f.sourceField;
             outputFields.push({
-                alias: cb.dataset.alias,
-                columnName: cb.dataset.column,
-                typeName: cb.dataset.type,
-                ownerName: cb.dataset.owner
+                name: newName,
+                typeName: f.typeName,
+                source: source,
+                sourceField: f.sourceField,
+                ownerName: f.ownerName
             });
         });
+
         if (outputFields.length === 0) {
-            alert('请至少勾选一个输出字段');
-            return;
+            alert('请至少勾选一个输出字段'); return;
         }
-
-        // 当前新 join 的条件
-        const currentCond = {
-            leftAlias: leftAlias,
-            leftField: leftFieldName,
-            operator: operator,
-            rightAlias: rightAlias,
-            rightField: rightFieldName,
-            joinType: joinType
-        };
-
-        const flatTables = merged.tables.map(t => ({
-            name: t.name,
-            dbName: t.dbName,
-            alias: t.alias,
-            fields: (t.fields || []).map(f => ({ ...f }))
-        }));
-        const flatConditions = [...merged.conditions, currentCond];
-        const flatFields = [...merged.leftFields, ...merged.rightFields].map(f => ({
-            columnName: f.columnName,
-            typeName: f.typeName,
-            ownerName: f.ownerName,
-            alias: f.alias
-        }));
 
         const jid = core.getNextJoinId();
         const jNode = {
             id: jid,
             name: name,
-            dbName: leftNode.dbName || (flatTables[0] && flatTables[0].dbName),
+            dbName: leftInput.kind === 'table' ? leftInput.dbName : (leftNode.node.dbName || ''),
+            leftInput: leftInput,
+            rightInput: rightInput,
+            leftField: leftJoinField,
+            rightField: rightJoinField,
+            operator: operator,
+            joinType: joinType,
+            alias: aliasInput,
+            fields: outputFields.map(f => ({ name: f.name, typeName: f.typeName })),
+            outputFields: outputFields,
+            // 兼容连线定位
             leftTable: leftNode.name,
             rightTable: rightNode.name,
-            joinType: joinType,
-            leftField: leftFieldName,
-            rightField: rightFieldName,
-            leftAlias: leftAlias,
-            rightAlias: rightAlias,
-            operator: operator,
-            alias: aliasInput,
-            // 卡片显示的字段（带 alias 前缀）
-            fields: flatFields,
-            // 平铺 SQL 所需
-            flatTables,
-            flatConditions,
-            flatFields,
-            outputFields,
-            x: Math.max(leftNode.x, rightNode.x) + 300,
-            y: (leftNode.y + rightNode.y) / 2,
+            x: Math.max(leftNode.node.x, rightNode.node.x) + 300,
+            y: (leftNode.node.y + rightNode.node.y) / 2,
             nodeGroup: null,
             edges: []
         };

@@ -111,7 +111,7 @@
         return group;
     }
 
-    // ============ ★ 渲染 Join 节点（卡片样式，显示 a.id 形式的字段） ============
+    // ============ 渲染 Join 节点（卡片，字段显示对外名 a_id 等） ============
     function renderJoinNode(jNode) {
         const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.setAttribute('class', 'join-node-group');
@@ -122,7 +122,6 @@
         const width = 220, headerHeight = 34, rowHeight = 26;
         let yOffset = 0;
 
-        // 头部（橙色，与表节点蓝色区分）
         const headerRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         headerRect.setAttribute('width', width);
         headerRect.setAttribute('height', headerHeight);
@@ -144,7 +143,6 @@
         group.appendChild(titleText);
         yOffset += headerHeight;
 
-        // 字段列表：显示 alias.columnName（如 a.id）
         (jNode.fields || []).forEach(field => {
             const fieldRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             fieldRect.setAttribute('width', width - 16);
@@ -162,17 +160,13 @@
             iconText.textContent = getTypeIcon(field.typeName);
             group.appendChild(iconText);
 
-            const displayName = field.alias
-                ? `${field.alias}.${field.columnName}`
-                : field.columnName;
-
             const fieldText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             fieldText.setAttribute('x', 36);
             fieldText.setAttribute('y', yOffset + rowHeight / 2);
             fieldText.setAttribute('font-size', '12px');
             fieldText.setAttribute('dominant-baseline', 'middle');
             fieldText.setAttribute('fill', '#1e293b');
-            fieldText.textContent = displayName;
+            fieldText.textContent = field.name || field.columnName || '';
             group.appendChild(fieldText);
 
             const typeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -355,7 +349,6 @@
         const joinItem = menu.querySelector('[data-action="createJoin"]');
         if (joinItem) joinItem.style.display = canJoin ? 'block' : 'none';
 
-        // join 节点不显示：查看数据 / 查看结构 / 字段转换
         const viewDataItem = menu.querySelector('[data-action="viewData"]');
         const viewStructItem = menu.querySelector('[data-action="viewStructure"]');
         const transformItem = menu.querySelector('[data-action="fieldTransform"]');
@@ -375,7 +368,6 @@
 
             if (action === 'deleteTable') {
                 if (isJoin) {
-                    // 删除 join 本身，以及引用它的其他 join
                     const toRemove = [];
                     for (let [jid, jNode] of core.getJoinNodes().entries()) {
                         if (jNode.name === nodeName) toRemove.push(jid);

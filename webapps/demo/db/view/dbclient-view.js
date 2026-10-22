@@ -43,7 +43,7 @@
         group.appendChild(titleText);
         yOffset += headerHeight;
 
-        table.fields.forEach(field => {
+        (table.fields || []).forEach(field => {
             const fieldRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             fieldRect.setAttribute('width', width - 16);
             fieldRect.setAttribute('height', rowHeight - 2);
@@ -111,53 +111,91 @@
         return group;
     }
 
-    // ============ 渲染 Join 节点 ============
+    // ============ ★ 渲染 Join 节点（卡片样式，与表节点一致） ============
     function renderJoinNode(jNode) {
         const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.setAttribute('class', 'join-node-group');
         group.setAttribute('data-join-id', jNode.id);
+        group.setAttribute('data-join-name', jNode.name);
         group.setAttribute('transform', `translate(${jNode.x}, ${jNode.y})`);
 
-        const width = 220, height = 64;
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('width', width);
-        rect.setAttribute('height', height);
-        rect.setAttribute('rx', '10');
-        rect.setAttribute('fill', '#f59e0b');
-        rect.setAttribute('stroke', '#d97706');
-        rect.setAttribute('stroke-width', '2');
-        group.appendChild(rect);
+        const width = 220, headerHeight = 34, rowHeight = 26;
+        let yOffset = 0;
+
+        // 头部（橙色，与表节点蓝色区分）
+        const headerRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        headerRect.setAttribute('width', width);
+        headerRect.setAttribute('height', headerHeight);
+        headerRect.setAttribute('x', 0);
+        headerRect.setAttribute('y', 0);
+        headerRect.setAttribute('fill', '#f59e0b');
+        headerRect.setAttribute('rx', '6');
+        group.appendChild(headerRect);
 
         const titleText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         titleText.setAttribute('x', width / 2);
-        titleText.setAttribute('y', 24);
+        titleText.setAttribute('y', headerHeight / 2);
         titleText.setAttribute('text-anchor', 'middle');
+        titleText.setAttribute('dominant-baseline', 'middle');
         titleText.setAttribute('fill', 'white');
         titleText.setAttribute('font-size', '13');
         titleText.setAttribute('font-weight', 'bold');
-        titleText.textContent = `🔗 ${jNode.leftTable} ⋈ ${jNode.rightTable}`;
+        titleText.textContent = '🔗 ' + jNode.name;
         group.appendChild(titleText);
+        yOffset += headerHeight;
 
-        const subText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        subText.setAttribute('x', width / 2);
-        subText.setAttribute('y', 44);
-        subText.setAttribute('text-anchor', 'middle');
-        subText.setAttribute('fill', 'rgba(255,255,255,0.9)');
-        subText.setAttribute('font-size', '11');
-        subText.textContent = `${jNode.joinType} ON ${jNode.leftField} ${jNode.operator} ${jNode.rightField}`;
-        group.appendChild(subText);
+        // 字段列表
+        (jNode.fields || []).forEach(field => {
+            const fieldRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            fieldRect.setAttribute('width', width - 16);
+            fieldRect.setAttribute('height', rowHeight - 2);
+            fieldRect.setAttribute('x', 8);
+            fieldRect.setAttribute('y', yOffset);
+            fieldRect.setAttribute('class', 'field-rect');
+            group.appendChild(fieldRect);
+
+            const iconText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            iconText.setAttribute('x', 16);
+            iconText.setAttribute('y', yOffset + rowHeight / 2);
+            iconText.setAttribute('font-size', '12px');
+            iconText.setAttribute('dominant-baseline', 'middle');
+            iconText.textContent = getTypeIcon(field.typeName);
+            group.appendChild(iconText);
+
+            const fieldText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            fieldText.setAttribute('x', 36);
+            fieldText.setAttribute('y', yOffset + rowHeight / 2);
+            fieldText.setAttribute('font-size', '12px');
+            fieldText.setAttribute('dominant-baseline', 'middle');
+            fieldText.setAttribute('fill', '#1e293b');
+            fieldText.textContent = field.columnName;
+            group.appendChild(fieldText);
+
+            const typeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            typeText.setAttribute('x', width - 16);
+            typeText.setAttribute('y', yOffset + rowHeight / 2);
+            typeText.setAttribute('font-size', '10px');
+            typeText.setAttribute('text-anchor', 'end');
+            typeText.setAttribute('dominant-baseline', 'middle');
+            typeText.setAttribute('fill', '#94a3b8');
+            typeText.textContent = field.typeName || '';
+            group.appendChild(typeText);
+
+            yOffset += rowHeight;
+        });
 
         jNode.nodeGroup = group;
         return group;
     }
 
-    // ============ 绘制 Join 边（两表 -> join 节点） ============
+    // ============ 绘制 Join 边（两输入节点 -> join 节点） ============
     function drawJoinEdges(jNode) {
         const svg = core.getSvg();
-        const tablesMap = core.getTables();
-        const leftTable = tablesMap.get(jNode.leftTable);
-        const rightTable = tablesMap.get(jNode.rightTable);
-        if (!leftTable || !rightTable || !svg) return;
+        if (!svg) return;
+
+        const leftNode = core.findNodeByName(jNode.leftTable);
+        const rightNode = core.findNodeByName(jNode.rightTable);
+        if (!leftNode || !rightNode) return;
 
         if (jNode.edges) {
             jNode.edges.forEach(edge => {
@@ -167,11 +205,15 @@
         }
         jNode.edges = [];
 
-        function drawOneEdge(table, labelText) {
-            const startX = table.x + 220;
-            const startY = table.y + 17;
+        // join 节点垂直中心
+        const joinNodeHeight = 34 + (jNode.fields ? jNode.fields.length : 0) * 26;
+        const joinCenterY = jNode.y + joinNodeHeight / 2;
+
+        function drawOneEdge(fromNode, labelText) {
+            const startX = fromNode.x + 220;
+            const startY = fromNode.y + 17;
             const endX = jNode.x;
-            const endY = jNode.y + 32;
+            const endY = joinCenterY;
             const pathData = `M ${startX} ${startY} C ${startX + 80} ${startY}, ${endX - 80} ${endY}, ${endX} ${endY}`;
 
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -192,11 +234,11 @@
             lbl.textContent = labelText;
             svg.appendChild(lbl);
 
-            jNode.edges.push({ line, label: lbl, tableName: table.name });
+            jNode.edges.push({ line, label: lbl });
         }
 
-        drawOneEdge(leftTable, '左表');
-        drawOneEdge(rightTable, '右表');
+        drawOneEdge(leftNode, '左');
+        drawOneEdge(rightNode, '右');
     }
 
     function updateJoinEdgesForTable(tableName) {
@@ -284,28 +326,28 @@
     if (window.ViewJoin) ViewJoin.init(core, fullRefresh);
 
     // ============ 右键菜单 ============
-    function bindTableContextMenu() {
+    function bindNodeContextMenu() {
         document.addEventListener('contextmenu', (e) => {
-            const target = e.target.closest('.table-node-group');
+            const target = e.target.closest('.table-node-group, .join-node-group');
             if (!target) return;
             e.preventDefault();
-            const tableName = target.getAttribute('data-table-name');
-            if (!tableName) return;
+
+            const isJoin = target.classList.contains('join-node-group');
+            const nodeName = isJoin
+                ? target.getAttribute('data-join-name')
+                : target.getAttribute('data-table-name');
+            if (!nodeName) return;
 
             const multi = core.getMultiSelected();
-            const tablesInMulti = Array.from(multi)
-                .filter(k => k.startsWith('table:'))
-                .map(k => k.substring(6));
-            const canJoin = tablesInMulti.length === 2 && tablesInMulti.indexOf(tableName) >= 0;
+            const canJoin = multi.size === 2 && Array.from(multi).some(k => k.endsWith(':' + nodeName));
 
-            showContextMenu(e.clientX, e.clientY, tableName, canJoin);
+            showContextMenu(e.clientX, e.clientY, nodeName, canJoin, isJoin);
         });
     }
 
-    function showContextMenu(x, y, tableName, canJoin) {
+    function showContextMenu(x, y, nodeName, canJoin, isJoin) {
         const menu = document.getElementById('contextMenu');
         if (!menu) return;
-        // ★ 确保菜单定位正确
         menu.style.position = 'fixed';
         menu.style.zIndex = '9999';
         menu.style.left = x + 'px';
@@ -315,37 +357,67 @@
         const joinItem = menu.querySelector('[data-action="createJoin"]');
         if (joinItem) joinItem.style.display = canJoin ? 'block' : 'none';
 
+        // join 节点不显示：查看数据 / 查看结构 / 字段转换
+        const viewDataItem = menu.querySelector('[data-action="viewData"]');
+        const viewStructItem = menu.querySelector('[data-action="viewStructure"]');
+        const transformItem = menu.querySelector('[data-action="fieldTransform"]');
+        if (isJoin) {
+            if (viewDataItem) viewDataItem.style.display = 'none';
+            if (viewStructItem) viewStructItem.style.display = 'none';
+            if (transformItem) transformItem.style.display = 'none';
+        } else {
+            if (viewDataItem) viewDataItem.style.display = 'block';
+            if (viewStructItem) viewStructItem.style.display = 'block';
+            if (transformItem) transformItem.style.display = 'block';
+        }
+
         const handler = (ev) => {
             const item = ev.target.closest('.context-item');
             const action = item ? item.dataset.action : null;
+
             if (action === 'deleteTable') {
-                core.getTables().delete(tableName);
-                for (let [jid, jNode] of Array.from(core.getJoinNodes().entries())) {
-                    if (jNode.leftTable === tableName || jNode.rightTable === tableName) {
-                        core.getJoinNodes().delete(jid);
+                if (isJoin) {
+                    // 删除 join 节点，以及引用它的其他 join 节点
+                    const toRemove = [];
+                    for (let [jid, jNode] of core.getJoinNodes().entries()) {
+                        if (jNode.name === nodeName) toRemove.push(jid);
+                    }
+                    toRemove.forEach(jid => core.getJoinNodes().delete(jid));
+                    // 二次清理：其他 join 引用了此节点
+                    for (let [jid, jNode] of Array.from(core.getJoinNodes().entries())) {
+                        if (jNode.leftTable === nodeName || jNode.rightTable === nodeName) {
+                            core.getJoinNodes().delete(jid);
+                        }
+                    }
+                } else {
+                    core.getTables().delete(nodeName);
+                    for (let [jid, jNode] of Array.from(core.getJoinNodes().entries())) {
+                        if (jNode.leftTable === nodeName || jNode.rightTable === nodeName) {
+                            core.getJoinNodes().delete(jid);
+                        }
                     }
                 }
                 const sel = core.getSelectedNode();
-                if (sel && sel.type === 'table' && sel.id === tableName) core.setSelectedNode(null, null);
+                if (sel && sel.id === nodeName) core.setSelectedNode(null, null);
                 fullRefresh();
                 if (window.ViewSql) window.ViewSql.updateSql();
             } else if (action === 'fieldTransform') {
                 const sel = core.getSelectedNode();
-                if (!sel || sel.type !== 'table' || sel.id !== tableName) {
-                    core.setSelectedNode('table', tableName);
+                if (!sel || sel.type !== 'table' || sel.id !== nodeName) {
+                    core.setSelectedNode('table', nodeName);
                     refreshSelectionHighlight();
                     if (window.ViewSql) window.ViewSql.updateSql();
                 }
                 ViewModal.openModal();
             } else if (action === 'viewData') {
-                const table = core.getTables().get(tableName);
+                const table = core.getTables().get(nodeName);
                 if (table) {
                     DB.setCurrentDb(table.dbName);
                     DB.setCurrentTable(table.name);
                     document.querySelector('.tab-btn[data-tab="data"]').click();
                 }
             } else if (action === 'viewStructure') {
-                const table = core.getTables().get(tableName);
+                const table = core.getTables().get(nodeName);
                 if (table) {
                     DB.setCurrentDb(table.dbName);
                     DB.setCurrentTable(table.name);
@@ -360,7 +432,7 @@
         setTimeout(() => document.addEventListener('click', handler), 10);
     }
 
-    bindTableContextMenu();
+    bindNodeContextMenu();
 
     // ============ 点击画布空白清空选中 ============
     document.addEventListener('click', (e) => {

@@ -3,14 +3,14 @@ const ViewCore = (function() {
     let svg = null;
     let tables = new Map();
     let transformNodes = new Map();
-    let joinNodes = new Map();             // ★ 新增：关联节点
+    let joinNodes = new Map();
     let currentTransformConfig = new Map();
     let activeTableForTransform = null;
     let nextTableId = 1;
     let nextTransformId = 1;
-    let nextJoinId = 1;                    // ★ 新增
+    let nextJoinId = 1;
 
-    // ★ 新增：选中状态
+    // 选中状态
     let selectedNode = null;               // { type: 'table'|'join', id }
     let multiSelected = new Set();         // Set<string>，如 'table:t1' / 'join:1'
 
@@ -37,7 +37,7 @@ const ViewCore = (function() {
         marker.appendChild(polygon);
         defs.appendChild(marker);
 
-        // ★ 橙色箭头（Join 边）
+        // 橙色箭头（Join 边）
         const markerOrange = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
         markerOrange.setAttribute('id', 'arrowhead-orange');
         markerOrange.setAttribute('markerWidth', '10');
@@ -81,6 +81,38 @@ const ViewCore = (function() {
     }
     function clearMultiSelect() { multiSelected.clear(); }
 
+    // ★ 新增：按名称统一查找表或 join 节点
+    // 返回 { type, name, dbName, x, y, fields, node } 或 null
+    function findNodeByName(name) {
+        if (!name) return null;
+        const table = tables.get(name);
+        if (table) {
+            return {
+                type: 'table',
+                name: table.name,
+                dbName: table.dbName,
+                x: table.x,
+                y: table.y,
+                fields: table.fields || [],
+                node: table
+            };
+        }
+        for (let j of joinNodes.values()) {
+            if (j.name === name) {
+                return {
+                    type: 'join',
+                    name: j.name,
+                    dbName: j.dbName,
+                    x: j.x,
+                    y: j.y,
+                    fields: j.fields || [],
+                    node: j
+                };
+            }
+        }
+        return null;
+    }
+
     function escapeHtml(str) {
         if (!str) return '';
         return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
@@ -108,6 +140,7 @@ const ViewCore = (function() {
         getCurrentTransformConfig, getActiveTableForTransform, setActiveTableForTransform,
         getNextTableId, getNextTransformId, getNextJoinId, getArrowDef,
         getSelectedNode, setSelectedNode, getMultiSelected, toggleMultiSelect, clearMultiSelect,
+        findNodeByName,
         escapeHtml, refreshAll
     };
 })();

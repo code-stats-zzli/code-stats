@@ -15,6 +15,18 @@ const ViewSql = (function() {
         updateSql();
     }
 
+    // 生成表/视图引用（表名 → `db`.`table`；join 名 → `join名`）
+    function buildTableRef(name) {
+        const t = core.getTables().get(name);
+        if (t) return '`' + t.dbName + '`.`' + t.name + '`';
+        return '`' + name + '`';
+    }
+
+    // 生成字段前缀（表用表名，join 用 join 名）
+    function fieldRef(ownerName, fieldName) {
+        return '`' + ownerName + '`.`' + fieldName + '`';
+    }
+
     function generateViewSql() {
         const node = core.getSelectedNode();
         if (!node) return '-- 未选中视图\n-- 点击画布上的表节点或关联节点查看对应 SQL';
@@ -22,15 +34,13 @@ const ViewSql = (function() {
         if (node.type === 'table') {
             const table = core.getTables().get(node.id);
             if (!table) return '-- 表节点不存在';
-            const db = table.dbName;
-            const tableName = table.name;
             const rules = (window.ViewTransform && window.ViewTransform.getTransformRulesForTable)
-                ? window.ViewTransform.getTransformRulesForTable(tableName)
+                ? window.ViewTransform.getTransformRulesForTable(table.name)
                 : [];
             if (!rules || rules.length === 0) {
-                return 'SELECT * FROM `' + db + '`.`' + tableName + '`;';
+                return 'SELECT * FROM `' + table.dbName + '`.`' + table.name + '`;';
             }
-            const allFields = table.fields.map(f => '`' + f.columnName + '`').join(', ');
+            const allFields = (table.fields || []).map(f => '`' + f.columnName + '`').join(', ');
             const transformFields = rules.map(rule => {
                 let expr = rule.expression || '';
                 expr = expr.replace(/\{field\}/g, rule.sourceField);
@@ -38,23 +48,22 @@ const ViewSql = (function() {
                 const alias = rule.alias ? ' AS `' + rule.alias + '`' : '';
                 return expr + alias;
             }).join(', ');
-            return 'SELECT ' + allFields + ', ' + transformFields + ' FROM `' + db + '`.`' + tableName + '`;';
+            return 'SELECT ' + allFields + ', ' + transformFields + ' FROM `' + table.dbName + '`.`' + table.name + '`;';
         }
 
         if (node.type === 'join') {
             const jNode = core.getJoinNodes().get(node.id);
             if (!jNode) return '-- 关联节点不存在';
-            const tables = core.getTables();
-            const leftTable = tables.get(jNode.leftTable);
-            const rightTable = tables.get(jNode.rightTable);
-            if (!leftTable || !rightTable) return '-- 关联表不存在';
-            const leftRef = '`' + leftTable.dbName + '`.`' + jNode.leftTable + '`';
-            const rightRef = '`' + rightTable.dbName + '`.`' + jNode.rightTable + '`';
+
+            const leftRef = buildTableRef(jNode.leftTable);
+            const rightRef = buildTableRef(jNode.rightTable);
             const onClause =
-                '`' + jNode.leftTable + '`.`' + jNode.leftField + '` ' +
+                fieldRef(jNode.leftTable, jNode.leftField) + ' ' +
                 jNode.operator + ' ' +
-                '`' + jNode.rightTable + '`.`' + jNode.rightField + '`';
-            return 'SELECT * FROM ' + leftRef + ' ' + jNode.joinType + ' ' + rightRef + ' ON ' + onClause + ';';
+                fieldRef(jNode.rightTable, jNode.rightField);
+
+            return 'SELECT * FROM ' + leftRef + ' ' + jNode.joinType + ' ' + rightRef +
+                ' ON ' + onClause + ';';
         }
 
         return '-- 未知节点类型';
@@ -95,5 +104,4 @@ const ViewSql = (function() {
     return { initSql, updateSql };
 })();
 
-// ★ 关键修复：挂载到 window，供 dbclient-view.js 中 window.ViewSql 判断使用
 window.ViewSql = ViewSql;

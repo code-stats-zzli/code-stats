@@ -1,4 +1,4 @@
-// dbclient-view-drag.js - 视图拖拽核心模块（支持 Ctrl/Cmd 多选）
+// dbclient-view-drag.js - 视图拖拽核心模块（表拖入、表/Join 拖动、Ctrl 多选）
 const ViewDrag = (function() {
     let core = null;
     let refreshCallback = null;
@@ -15,7 +15,7 @@ const ViewDrag = (function() {
             return;
         }
         bindCanvasDrop();
-        bindTableDrag();
+        bindNodeDrag();
     }
 
     // ---------- 左侧表拖入画布 ----------
@@ -30,10 +30,7 @@ const ViewDrag = (function() {
             let payload;
             try {
                 const raw = e.dataTransfer.getData('text/plain');
-                if (!raw) {
-                    console.warn('[ViewDrag] 拖拽数据为空，请检查 dragstart 是否设置了数据');
-                    return;
-                }
+                if (!raw) return;
                 payload = JSON.parse(raw);
             } catch (err) {
                 console.warn('[ViewDrag] 解析拖拽数据失败', err);
@@ -42,7 +39,6 @@ const ViewDrag = (function() {
             const { db, table } = payload || {};
             if (!db || !table) return;
 
-            // 如果表已存在，选中它
             if (core.getTables().has(table)) {
                 core.setSelectedNode('table', table);
                 if (window.ViewModule && window.ViewModule.refreshSelectionHighlight) {
@@ -52,11 +48,9 @@ const ViewDrag = (function() {
                 return;
             }
 
-            // 计算 drop 坐标（SVG 坐标系）
             const rect = container.getBoundingClientRect();
             const svgX = e.clientX - rect.left + container.scrollLeft;
             const svgY = e.clientY - rect.top + container.scrollTop;
-            // 表节点宽度 220，header 高度 34，让鼠标大致在节点中心
             const x = svgX - 110;
             const y = svgY - 17;
 
@@ -89,26 +83,41 @@ const ViewDrag = (function() {
         });
     }
 
-    // ---------- 画布上表节点：Ctrl/Cmd 多选 + 拖动移动 ----------
-    function bindTableDrag() {
+    // ---------- 画布上表 / Join 节点：Ctrl 多选 + 拖动 ----------
+    function bindNodeDrag() {
         let dragging = null;
         let startX = 0, startY = 0;
         let originX = 0, originY = 0;
 
         svg.addEventListener('mousedown', (e) => {
-            const group = e.target.closest('.table-node-group');
+            if (e.button !== 0) return;
+            const group = e.target.closest('.table-node-group, .join-node-group');
             if (!group) return;
-            if (e.button !== 0) return; // 只处理左键
-            const tableName = group.getAttribute('data-table-name');
-            if (!tableName) return;
-            const table = core.getTables().get(tableName);
-            if (!table) return;
 
-            // ★ Ctrl / Cmd 多选：只切换多选状态，不启动拖动
+            const isJoin = group.classList.contains('join-node-group');
+            let nodeName = null;
+            let joinId = null;
+            let node = null;
+
+            if (isJoin) {
+                joinId = parseInt(group.getAttribute('data-join-id'));
+                nodeName = group.getAttribute('data-join-name');
+                node = core.getJoinNodes().get(joinId);
+            } else {
+                nodeName = group.getAttribute('data-table-name');
+                node = core.getTables().get(nodeName);
+            }
+            if (!node || !nodeName) return;
+
+            // ★ Ctrl / Cmd 多选
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
                 e.stopPropagation();
-                core.toggleMultiSelect('table', tableName);
+                if (isJoin) {
+                    core.toggleMultiSelect('join', joinId);
+                } else {
+                    core.toggleMultiSelect('table', nodeName);
+                }
                 if (window.ViewModule && window.ViewModule.refreshSelectionHighlight) {
                     window.ViewModule.refreshSelectionHighlight();
                 }
@@ -117,7 +126,11 @@ const ViewDrag = (function() {
 
             // 普通点击：清空多选，单选
             core.clearMultiSelect();
-            core.setSelectedNode('table', tableName);
+            if (isJoin) {
+                core.setSelectedNode('join', joinId);
+            } else {
+                core.setSelectedNode('table', nodeName);
+            }
             if (window.ViewModule && window.ViewModule.refreshSelectionHighlight) {
                 window.ViewModule.refreshSelectionHighlight();
             }
@@ -127,11 +140,11 @@ const ViewDrag = (function() {
             e.preventDefault();
             e.stopPropagation();
 
-            dragging = { group, table };
+            dragging = { group, node, isJoin, nodeName, joinId };
             startX = e.clientX;
             startY = e.clientY;
-            originX = table.x;
-            originY = table.y;
+            originX = node.x;
+            originY = node.y;
 
             document.addEventListener('mousemove', onDragMove);
             document.addEventListener('mouseup', onDragEnd);
@@ -141,22 +154,38 @@ const ViewDrag = (function() {
             if (!dragging) return;
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
-            dragging.table.x = originX + dx;
-            dragging.table.y = originY + dy;
+            dragging.node.x = originX + dx;
+            dragging.node.y = originY + dy;
             dragging.group.setAttribute('transform',
-                `translate(${dragging.table.x}, ${dragging.table.y})`);
-            // 实时更新关联边和转换边
-            if (window.ViewModule && window.ViewModule.updateJoinEdgesForTable) {
-                window.ViewModule.updateJoinEdgesForTable(dragging.table.name);
+                `translate(${dragging.node.x}, ${dragging.node.y})`);
+            // 更新与该节点相关的边
+            if (dragging.isJoin) {
+                // 自身作为 join 的边（连到左右表）
+                if (window.ViewModule && window.ViewModule.redrawJoinEdges) {
+                    window.ViewModule.redrawJoinEdges(dragging.node);
+                }
+                // 其他 join 引用此 join 的边
+                for (let jNode of core.getJoinNodes().values()) {
+                    if (jNode.id !== dragging.joinId &&
+                        (jNode.leftTable === dragging.nodeName || jNode.rightTable === dragging.nodeName)) {
+                        if (window.ViewModule && window.ViewModule.redrawJoinEdges) {
+                            window.ViewModule.redrawJoinEdges(jNode);
+                        }
+                    }
+                }
+            } else {
+                // 表节点被拖动：更新引用此表的 join 边
+                if (window.ViewModule && window.ViewModule.updateJoinEdgesForTable) {
+                    window.ViewModule.updateJoinEdgesForTable(dragging.nodeName);
+                }
             }
             if (window.ViewTransform && window.ViewTransform.updateEdgesForTable) {
-                window.ViewTransform.updateEdgesForTable(dragging.table.name);
+                window.ViewTransform.updateEdgesForTable(dragging.nodeName);
             }
         }
 
         function onDragEnd() {
             if (!dragging) return;
-            // 拖动结束，整体刷新（重绘边、更新 SQL 等）
             if (refreshCallback) refreshCallback();
             if (window.ViewSql) window.ViewSql.updateSql();
             dragging = null;
@@ -168,5 +197,4 @@ const ViewDrag = (function() {
     return { initDrag };
 })();
 
-// 挂载到 window，供 dbclient-view.js 中的 window.ViewDrag 判断（如有）
 window.ViewDrag = ViewDrag;

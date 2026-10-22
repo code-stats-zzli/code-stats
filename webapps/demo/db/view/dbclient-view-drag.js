@@ -1,4 +1,4 @@
-// dbclient-view-drag.js - 视图拖拽核心模块
+// dbclient-view-drag.js - 视图拖拽核心模块（支持 Ctrl/Cmd 多选）
 const ViewDrag = (function() {
     let core = null;
     let refreshCallback = null;
@@ -89,7 +89,7 @@ const ViewDrag = (function() {
         });
     }
 
-    // ---------- 画布上表节点拖动移动 ----------
+    // ---------- 画布上表节点：Ctrl/Cmd 多选 + 拖动移动 ----------
     function bindTableDrag() {
         let dragging = null;
         let startX = 0, startY = 0;
@@ -98,12 +98,32 @@ const ViewDrag = (function() {
         svg.addEventListener('mousedown', (e) => {
             const group = e.target.closest('.table-node-group');
             if (!group) return;
-            if (e.button !== 0) return;
+            if (e.button !== 0) return; // 只处理左键
             const tableName = group.getAttribute('data-table-name');
             if (!tableName) return;
             const table = core.getTables().get(tableName);
             if (!table) return;
 
+            // ★ Ctrl / Cmd 多选：只切换多选状态，不启动拖动
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                core.toggleMultiSelect('table', tableName);
+                if (window.ViewModule && window.ViewModule.refreshSelectionHighlight) {
+                    window.ViewModule.refreshSelectionHighlight();
+                }
+                return;
+            }
+
+            // 普通点击：清空多选，单选
+            core.clearMultiSelect();
+            core.setSelectedNode('table', tableName);
+            if (window.ViewModule && window.ViewModule.refreshSelectionHighlight) {
+                window.ViewModule.refreshSelectionHighlight();
+            }
+            if (window.ViewSql) window.ViewSql.updateSql();
+
+            // 开始拖动
             e.preventDefault();
             e.stopPropagation();
 
@@ -112,13 +132,6 @@ const ViewDrag = (function() {
             startY = e.clientY;
             originX = table.x;
             originY = table.y;
-
-            // 选中该表
-            core.setSelectedNode('table', tableName);
-            if (window.ViewModule && window.ViewModule.refreshSelectionHighlight) {
-                window.ViewModule.refreshSelectionHighlight();
-            }
-            if (window.ViewSql) window.ViewSql.updateSql();
 
             document.addEventListener('mousemove', onDragMove);
             document.addEventListener('mouseup', onDragEnd);

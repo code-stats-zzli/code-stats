@@ -305,6 +305,9 @@
     function showContextMenu(x, y, tableName, canJoin) {
         const menu = document.getElementById('contextMenu');
         if (!menu) return;
+        // ★ 确保菜单定位正确
+        menu.style.position = 'fixed';
+        menu.style.zIndex = '9999';
         menu.style.left = x + 'px';
         menu.style.top = y + 'px';
         menu.style.display = 'block';

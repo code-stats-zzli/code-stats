@@ -3,6 +3,7 @@
 //   每个视图是独立结果集，内部所有输入（表或视图）统一按 a/b 分配字母，
 //   字段 AS 成 字母_字段名（a_id、b_user_id 等）；
 //   视图再作为输入时，整体作为子查询嵌入，用对外字段名参与 JOIN。
+// 弹窗支持拖动，内容超出时内部滚动。
 const ViewJoin = (function() {
     let core = null;
     let refreshCallback = null;
@@ -33,14 +34,57 @@ const ViewJoin = (function() {
             document.querySelectorAll('#outputFieldsContainer input.output-field-cb')
                 .forEach(cb => cb.checked = false);
         });
+
+        // ★ 弹窗拖动
+        setupModalDrag(modal);
     }
 
-    /**
-     * 提取某个输入的字段列表
-     *   sourceField：在输入内部引用该字段时使用的名字
-     *     表输入 → 原始列名（id、name）
-     *     视图输入 → 视图对外字段名（a_id、b_user_id）
-     */
+    // ★ 通用弹窗拖动：按住 header 拖动整个 content
+    function setupModalDrag(modalEl) {
+        const content = modalEl.querySelector('.modal-content');
+        const header = modalEl.querySelector('.modal-header');
+        if (!content || !header) return;
+        let dragging = false;
+        let startX = 0, startY = 0, baseX = 0, baseY = 0;
+
+        header.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            // 点关闭按钮 / 输入控件时不拖动
+            if (e.target.closest('button') || e.target.closest('input') ||
+                e.target.closest('select') || e.target.closest('a')) return;
+            dragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            baseX = 0;
+            baseY = 0;
+            const m = (content.style.transform || '').match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+            if (m) {
+                baseX = parseFloat(m[1]);
+                baseY = parseFloat(m[2]);
+            }
+            content.style.animation = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - startX + baseX;
+            const dy = e.clientY - startY + baseY;
+            content.style.transform = `translate(${dx}px, ${dy}px)`;
+        });
+
+        document.addEventListener('mouseup', () => { dragging = false; });
+    }
+
+    // 打开前重置位置
+    function resetModalPosition() {
+        const content = modal && modal.querySelector('.modal-content');
+        if (content) {
+            content.style.transform = '';
+            content.style.animation = '';
+        }
+    }
+
     function getInputFields(input) {
         if (input.kind === 'table') {
             const t = core.getTables().get(input.tableName);
@@ -141,6 +185,8 @@ const ViewJoin = (function() {
         outputContainer.innerHTML = html;
 
         currentState = { leftNode, rightNode, leftInput, rightInput, leftFields, rightFields };
+
+        resetModalPosition();
         modal.style.display = 'flex';
     }
 
@@ -177,7 +223,6 @@ const ViewJoin = (function() {
             alert('名称 "' + name + '" 已被占用，请换一个或留空'); return;
         }
 
-        // 左输入固定别名 a，右输入固定别名 b
         const LEFT_ALIAS = 'a';
         const RIGHT_ALIAS = 'b';
 
@@ -216,7 +261,6 @@ const ViewJoin = (function() {
             alias: aliasInput,
             fields: outputFields.map(f => ({ name: f.name, typeName: f.typeName })),
             outputFields: outputFields,
-            // 兼容连线定位
             leftTable: leftNode.name,
             rightTable: rightNode.name,
             x: Math.max(leftNode.node.x, rightNode.node.x) + 300,

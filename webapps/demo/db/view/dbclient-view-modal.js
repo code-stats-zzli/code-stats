@@ -1,4 +1,5 @@
 // dbclient-view-modal.js - 字段转换弹窗
+// 弹窗支持拖动，内容超出时内部滚动。
 const ViewModal = (function() {
     let modal = null;
     let modalSourceFields = null;
@@ -34,10 +35,56 @@ const ViewModal = (function() {
         if (cancelModalBtn) cancelModalBtn.addEventListener('click', () => modal.style.display = 'none');
 
         setupModalDrop();
+
+        // ★ 弹窗拖动
+        setupModalDrag(modal);
+    }
+
+    // ★ 通用弹窗拖动
+    function setupModalDrag(modalEl) {
+        const content = modalEl.querySelector('.modal-content');
+        const header = modalEl.querySelector('.modal-header');
+        if (!content || !header) return;
+        let dragging = false;
+        let startX = 0, startY = 0, baseX = 0, baseY = 0;
+
+        header.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            if (e.target.closest('button') || e.target.closest('input') ||
+                e.target.closest('select') || e.target.closest('a')) return;
+            dragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            baseX = 0;
+            baseY = 0;
+            const m = (content.style.transform || '').match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+            if (m) {
+                baseX = parseFloat(m[1]);
+                baseY = parseFloat(m[2]);
+            }
+            content.style.animation = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - startX + baseX;
+            const dy = e.clientY - startY + baseY;
+            content.style.transform = `translate(${dx}px, ${dy}px)`;
+        });
+
+        document.addEventListener('mouseup', () => { dragging = false; });
+    }
+
+    function resetModalPosition() {
+        const content = modal && modal.querySelector('.modal-content');
+        if (content) {
+            content.style.transform = '';
+            content.style.animation = '';
+        }
     }
 
     function openModal() {
-        // ★ 改为从画板选中节点获取表信息
         const node = core.getSelectedNode();
         if (!node || node.type !== 'table') {
             alert('请先在画布上选中一张表节点');
@@ -51,6 +98,7 @@ const ViewModal = (function() {
         loadCurrentTableColumns(table.dbName, table.name).then(() => {
             renderModalSourceFields();
             renderModalTransformRules();
+            resetModalPosition();
             modal.style.display = 'flex';
         });
     }
@@ -192,5 +240,4 @@ const ViewModal = (function() {
     return { initModal, openModal, getCurrentRules };
 })();
 
-// ★ 挂载到 window，便于调试和统一管理
 window.ViewModal = ViewModal;

@@ -144,18 +144,18 @@
 
 <!-- 创建关联视图弹窗 -->
 <div id="joinModal" class="modal" style="display:none;">
-    <div class="modal-content" style="width: 620px;">
+    <div class="modal-content" style="width: 720px;">
         <div class="modal-header">
             <span>🔗 创建关联视图</span>
             <span class="close-modal" id="closeJoinModalBtn">&times;</span>
         </div>
         <div class="modal-body">
             <div class="form-row">
-                <label>左表：</label>
+                <label>左输入：</label>
                 <span id="joinLeftTable" class="join-table-name">-</span>
             </div>
             <div class="form-row">
-                <label>右表：</label>
+                <label>右输入：</label>
                 <span id="joinRightTable" class="join-table-name">-</span>
             </div>
             <div class="form-row">
@@ -183,9 +183,25 @@
                     <select id="joinRightField"></select>
                 </div>
             </div>
+            <div class="form-row" style="align-items:flex-start;">
+                <label style="padding-top:6px;">输出字段：</label>
+                <div style="flex:1;">
+                    <div style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
+                        <button type="button" id="selectAllOutputBtn" class="mini-btn">✅ 全选</button>
+                        <button type="button" id="selectNoneOutputBtn" class="mini-btn">✖ 全不选</button>
+                        <span style="font-size:12px; color:#64748b;">
+                            勾选字段会出现在 SELECT 中（自动带别名 a / b / c 前缀）
+                        </span>
+                    </div>
+                    <div id="outputFieldsContainer"
+                         style="max-height:220px; overflow-y:auto; border:1px solid rgba(0,102,255,0.2);
+                                border-radius:12px; padding:8px; background:#f8fafc;">
+                    </div>
+                </div>
+            </div>
             <div class="form-row">
-                <label>别名（可选）：</label>
-                <input type="text" id="joinAlias" placeholder="例如: joined_view">
+                <label>视图名称：</label>
+                <input type="text" id="joinAlias" placeholder="留空则默认「左输入名_关联」">
             </div>
         </div>
         <div class="modal-footer">

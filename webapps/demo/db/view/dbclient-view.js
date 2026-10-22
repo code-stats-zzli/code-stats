@@ -111,7 +111,7 @@
         return group;
     }
 
-    // ============ ★ 渲染 Join 节点（卡片样式，与表节点一致） ============
+    // ============ ★ 渲染 Join 节点（卡片样式，显示 a.id 形式的字段） ============
     function renderJoinNode(jNode) {
         const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.setAttribute('class', 'join-node-group');
@@ -144,7 +144,7 @@
         group.appendChild(titleText);
         yOffset += headerHeight;
 
-        // 字段列表
+        // 字段列表：显示 alias.columnName（如 a.id）
         (jNode.fields || []).forEach(field => {
             const fieldRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             fieldRect.setAttribute('width', width - 16);
@@ -162,13 +162,17 @@
             iconText.textContent = getTypeIcon(field.typeName);
             group.appendChild(iconText);
 
+            const displayName = field.alias
+                ? `${field.alias}.${field.columnName}`
+                : field.columnName;
+
             const fieldText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             fieldText.setAttribute('x', 36);
             fieldText.setAttribute('y', yOffset + rowHeight / 2);
             fieldText.setAttribute('font-size', '12px');
             fieldText.setAttribute('dominant-baseline', 'middle');
             fieldText.setAttribute('fill', '#1e293b');
-            fieldText.textContent = field.columnName;
+            fieldText.textContent = displayName;
             group.appendChild(fieldText);
 
             const typeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -205,7 +209,6 @@
         }
         jNode.edges = [];
 
-        // join 节点垂直中心
         const joinNodeHeight = 34 + (jNode.fields ? jNode.fields.length : 0) * 26;
         const joinCenterY = jNode.y + joinNodeHeight / 2;
 
@@ -285,18 +288,15 @@
 
     // ============ 完整刷新 ============
     function fullRefresh() {
-        // 1. 表 + 转换节点
         core.refreshAll(renderTableNode, renderTransformNode);
 
         const svg = core.getSvg();
         if (!svg) return;
 
-        // 2. 重绘转换节点边
         if (window.ViewTransform && window.ViewTransform.redrawAllTransformEdges) {
             window.ViewTransform.redrawAllTransformEdges();
         }
 
-        // 3. 先画 Join 边，再画 Join 节点（节点在上层）
         for (let jNode of core.getJoinNodes().values()) {
             drawJoinEdges(jNode);
         }
@@ -304,14 +304,12 @@
             svg.appendChild(renderJoinNode(jNode));
         }
 
-        // 4. placeholder
         const placeholder = document.getElementById('diagramPlaceholder');
         if (placeholder) {
             placeholder.style.display =
                 (core.getTables().size === 0 && core.getJoinNodes().size === 0) ? 'block' : 'none';
         }
 
-        // 5. 高亮
         refreshSelectionHighlight();
     }
 
@@ -377,13 +375,12 @@
 
             if (action === 'deleteTable') {
                 if (isJoin) {
-                    // 删除 join 节点，以及引用它的其他 join 节点
+                    // 删除 join 本身，以及引用它的其他 join
                     const toRemove = [];
                     for (let [jid, jNode] of core.getJoinNodes().entries()) {
                         if (jNode.name === nodeName) toRemove.push(jid);
                     }
                     toRemove.forEach(jid => core.getJoinNodes().delete(jid));
-                    // 二次清理：其他 join 引用了此节点
                     for (let [jid, jNode] of Array.from(core.getJoinNodes().entries())) {
                         if (jNode.leftTable === nodeName || jNode.rightTable === nodeName) {
                             core.getJoinNodes().delete(jid);
@@ -451,7 +448,7 @@
         }
     });
 
-    // ============ 左侧 DB 变化联动：若画板上已有该表，选中它 ============
+    // ============ 左侧 DB 变化联动 ============
     DB.subscribe((db, table) => {
         if (db && table) {
             if (core.getTables().has(table)) {

@@ -15,16 +15,64 @@ const ViewSql = (function() {
         updateSql();
     }
 
-    // 生成表/视图引用（表名 → `db`.`table`；join 名 → `join名`）
-    function buildTableRef(name) {
-        const t = core.getTables().get(name);
-        if (t) return '`' + t.dbName + '`.`' + t.name + '`';
-        return '`' + name + '`';
+    // 单表 SQL（含字段转换规则时）
+    function buildTableSql(table) {
+        const rules = (window.ViewTransform && window.ViewTransform.getTransformRulesForTable)
+            ? window.ViewTransform.getTransformRulesForTable(table.name)
+            : [];
+        if (!rules || rules.length === 0) {
+            return 'SELECT * FROM `' + table.dbName + '`.`' + table.name + '`;';
+        }
+        const allFields = (table.fields || []).map(f => '`' + f.columnName + '`').join(', ');
+        const transformFields = rules.map(rule => {
+            let expr = rule.expression || '';
+            expr = expr.replace(/\{field\}/g, rule.sourceField);
+            expr = expr.replace(new RegExp('\\b' + rule.sourceField + '\\b', 'g'), '`' + rule.sourceField + '`');
+            const alias = rule.alias ? ' AS `' + rule.alias + '`' : '';
+            return expr + alias;
+        }).join(', ');
+        return 'SELECT ' + allFields + ', ' + transformFields + ' FROM `' + table.dbName + '`.`' + table.name + '`;';
     }
 
-    // 生成字段前缀（表用表名，join 用 join 名）
-    function fieldRef(ownerName, fieldName) {
-        return '`' + ownerName + '`.`' + fieldName + '`';
+    // ★ 关联视图 SQL：真实表平铺 + a/b/c 别名
+    function buildJoinSql(jNode) {
+        const tables = jNode.flatTables || [];
+        const conditions = jNode.flatConditions || [];
+        const outputFields = jNode.outputFields || [];
+
+        if (!tables.length) return '-- 无表数据';
+
+        const firstTable = tables[0];
+        let sql = 'SELECT\n';
+
+        if (outputFields.length > 0) {
+            sql += '  ' + outputFields.map(f =>
+                `${f.alias}.\`${f.columnName}\` AS \`${f.alias}_${f.columnName}\``
+            ).join(',\n  ') + '\n';
+        } else {
+            sql += '  *\n';
+        }
+
+        sql += `FROM \`${firstTable.dbName}\`.\`${firstTable.name}\` ${firstTable.alias}\n`;
+
+        // 依次 JOIN 后续表，用条件匹配
+        for (let i = 1; i < tables.length; i++) {
+            const t = tables[i];
+            // 找引用该表别名的条件
+            const cond = conditions.find(c =>
+                c.leftAlias === t.alias || c.rightAlias === t.alias
+            );
+            if (!cond) {
+                // 没匹配到条件时退化为 CROSS JOIN
+                sql += `CROSS JOIN \`${t.dbName}\`.\`${t.name}\` ${t.alias}\n`;
+                continue;
+            }
+            const jt = cond.joinType || 'INNER JOIN';
+            sql += `${jt} \`${t.dbName}\`.\`${t.name}\` ${t.alias} ON `;
+            sql += `${cond.leftAlias}.\`${cond.leftField}\` ${cond.operator} ${cond.rightAlias}.\`${cond.rightField}\`\n`;
+        }
+
+        return sql.replace(/\n+$/, '') + ';';
     }
 
     function generateViewSql() {
@@ -34,36 +82,13 @@ const ViewSql = (function() {
         if (node.type === 'table') {
             const table = core.getTables().get(node.id);
             if (!table) return '-- 表节点不存在';
-            const rules = (window.ViewTransform && window.ViewTransform.getTransformRulesForTable)
-                ? window.ViewTransform.getTransformRulesForTable(table.name)
-                : [];
-            if (!rules || rules.length === 0) {
-                return 'SELECT * FROM `' + table.dbName + '`.`' + table.name + '`;';
-            }
-            const allFields = (table.fields || []).map(f => '`' + f.columnName + '`').join(', ');
-            const transformFields = rules.map(rule => {
-                let expr = rule.expression || '';
-                expr = expr.replace(/\{field\}/g, rule.sourceField);
-                expr = expr.replace(new RegExp('\\b' + rule.sourceField + '\\b', 'g'), '`' + rule.sourceField + '`');
-                const alias = rule.alias ? ' AS `' + rule.alias + '`' : '';
-                return expr + alias;
-            }).join(', ');
-            return 'SELECT ' + allFields + ', ' + transformFields + ' FROM `' + table.dbName + '`.`' + table.name + '`;';
+            return buildTableSql(table);
         }
 
         if (node.type === 'join') {
             const jNode = core.getJoinNodes().get(node.id);
             if (!jNode) return '-- 关联节点不存在';
-
-            const leftRef = buildTableRef(jNode.leftTable);
-            const rightRef = buildTableRef(jNode.rightTable);
-            const onClause =
-                fieldRef(jNode.leftTable, jNode.leftField) + ' ' +
-                jNode.operator + ' ' +
-                fieldRef(jNode.rightTable, jNode.rightField);
-
-            return 'SELECT * FROM ' + leftRef + ' ' + jNode.joinType + ' ' + rightRef +
-                ' ON ' + onClause + ';';
+            return buildJoinSql(jNode);
         }
 
         return '-- 未知节点类型';

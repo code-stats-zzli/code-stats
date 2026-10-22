@@ -118,7 +118,6 @@ if (document.readyState === 'loading') {
 }
 
 // 包装 DB.fetchJSON，自动附加 dsId
-const originalFetchJSON = DB.fetchJSON;
 DB.fetchJSON = async function(url) {
     let finalUrl = url;
     if (currentDataSourceId) {
@@ -126,6 +125,22 @@ DB.fetchJSON = async function(url) {
         finalUrl += `${separator}dsId=${currentDataSourceId}`;
     }
     const res = await fetch(finalUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+};
+
+// 包装 DB.postJSON，自动附加 dsId（用于 POST 请求，如 SQL 执行）
+DB.postJSON = async function(url, body) {
+    let finalUrl = url;
+    if (currentDataSourceId) {
+        const separator = url.includes('?') ? '&' : '?';
+        finalUrl += `${separator}dsId=${currentDataSourceId}`;
+    }
+    const res = await fetch(finalUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
 };

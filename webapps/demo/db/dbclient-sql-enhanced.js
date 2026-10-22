@@ -254,7 +254,7 @@ const EnhancedSqlModule = (function() {
         textarea.dispatchEvent(new Event('input'));
     }
 
-    // ========== 执行SQL ==========
+    // ========== 执行SQL（使用 DB.postJSON 自动附带 dsId） ==========
     async function executeSql() {
         const sql = textarea.value.trim();
         if (!sql) { alert('请输入SQL语句'); return; }
@@ -262,12 +262,8 @@ const EnhancedSqlModule = (function() {
         if (!currentDb) { alert('请先从左侧选择一个数据库'); return; }
         sqlResultArea.innerHTML = '<div class="loading">执行中...</div>';
         try {
-            const resp = await fetch(DB.apiBase + '/sqlQuery', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ db: currentDb, sql: sql })
-            });
-            const data = await resp.json();
+            // 通过 DB.postJSON 发送，会自动在 URL 上附加 dsId
+            const data = await DB.postJSON(DB.apiBase + '/sqlQuery', { db: currentDb, sql: sql });
             if (data.error) {
                 sqlResultArea.innerHTML = `<div class="error">${data.error}</div>`;
                 return;

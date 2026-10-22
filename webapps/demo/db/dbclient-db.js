@@ -54,10 +54,18 @@ const DBModule = (function() {
         let html = '';
         for (const t of filtered) {
             const activeClass = (DB.getCurrentTable() === t.name && DB.getCurrentDb() === t.database) ? 'active' : '';
+            // ★ 表项上显示数据库名 badge，并用 title 提示完整路径
             html += `
-                <div class="table-item ${activeClass}" data-table="${escapeHtml(t.name)}" data-database="${escapeHtml(t.database)}">
+                <div class="table-item ${activeClass}"
+                     data-table="${escapeHtml(t.name)}"
+                     data-database="${escapeHtml(t.database)}"
+                     title="${escapeHtml(t.database + '.' + t.name)}">
                     <span class="icon">📄</span>
                     <span class="name">${escapeHtml(t.name)}</span>
+                    <span style="font-size:10px;color:#94a3b8;background:rgba(0,102,255,0.1);
+                                 padding:0 6px;border-radius:8px;margin-left:4px;flex-shrink:0;">
+                        ${escapeHtml(t.database)}
+                    </span>
                 </div>
             `;
         }

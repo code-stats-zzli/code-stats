@@ -24,10 +24,8 @@
     </div>
 
     <div class="db-main-row">
-        <!-- 左侧表列表 -->
         <div class="table-list-panel" id="tableListPanel">
             <h3>📋 表列表</h3>
-            <!-- 只读数据库展示（数据源自带，不可修改） -->
             <div class="db-info-inline" id="dbInfoInline" style="display:none;">
                 <span class="db-info-label">数据库：</span>
                 <span class="db-info-value" id="dbInfoValue">-</span>
@@ -38,7 +36,6 @@
             <div id="tableListContainer" class="table-list"></div>
         </div>
 
-        <!-- 右侧内容区 -->
         <div class="content-panel">
             <div class="tab-header">
                 <button class="tab-btn active" data-tab="properties">属性</button>
@@ -58,18 +55,16 @@
                 </div>
                 <div class="tab-pane" id="tab-diagram">
                     <div class="diagram-simple-container">
-                        <!-- 画布工具栏 -->
                         <div class="canvas-toolbar">
-                            <span class="canvas-hint-text">💡 从左侧拖拽表到画布生成视图</span>
+                            <span class="canvas-hint-text">💡 拖左侧表到画布生成视图 · Ctrl 点两表后右键 → 创建关联</span>
                             <button id="toggleSqlBtn" class="btn-secondary btn-sm">📄 显示 SQL</button>
                         </div>
                         <div class="canvas-area">
                             <div id="diagramCanvasContainer" class="canvas-container">
-                                <svg id="diagramSvg" width="100%" height="100%"></svg>
+                                <svg id="diagramSvg"></svg>
                                 <div id="diagramPlaceholder" class="canvas-placeholder">拖拽左侧表至此处生成视图</div>
                             </div>
                         </div>
-                        <!-- SQL 面板默认隐藏 -->
                         <div id="sqlViewPanel" class="sql-preview-panel" style="display: none;">
                             <div class="sql-header">
                                 <strong>📄 当前视图 SQL</strong>
@@ -102,6 +97,7 @@
 <!-- 右键菜单 -->
 <div id="contextMenu" class="context-menu" style="display:none;">
     <ul style="list-style: none; margin: 0; padding: 4px 0;">
+        <li data-action="createJoin" class="context-item" style="display:none;color:#d97706;font-weight:600;">🔗 创建关联视图</li>
         <li data-action="viewData" class="context-item">📊 查看数据</li>
         <li data-action="viewStructure" class="context-item">📐 查看结构</li>
         <li data-action="fieldTransform" class="context-item">⚙️ 字段转换（弹窗）</li>
@@ -146,6 +142,59 @@
     </div>
 </div>
 
+<!-- 创建关联视图弹窗 -->
+<div id="joinModal" class="modal" style="display:none;">
+    <div class="modal-content" style="width: 620px;">
+        <div class="modal-header">
+            <span>🔗 创建关联视图</span>
+            <span class="close-modal" id="closeJoinModalBtn">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="form-row">
+                <label>左表：</label>
+                <span id="joinLeftTable" class="join-table-name">-</span>
+            </div>
+            <div class="form-row">
+                <label>右表：</label>
+                <span id="joinRightTable" class="join-table-name">-</span>
+            </div>
+            <div class="form-row">
+                <label>关联类型：</label>
+                <select id="joinTypeSelect">
+                    <option value="INNER JOIN">INNER JOIN</option>
+                    <option value="LEFT JOIN">LEFT JOIN</option>
+                    <option value="RIGHT JOIN">RIGHT JOIN</option>
+                    <option value="FULL JOIN">FULL OUTER JOIN</option>
+                    <option value="CROSS JOIN">CROSS JOIN</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label>关联条件：</label>
+                <div class="join-condition">
+                    <select id="joinLeftField"></select>
+                    <select id="joinOperator">
+                        <option value="=">=</option>
+                        <option value="&gt;">&gt;</option>
+                        <option value="&lt;">&lt;</option>
+                        <option value="&gt;=">&gt;=</option>
+                        <option value="&lt;=">&lt;=</option>
+                        <option value="&lt;&gt;">&lt;&gt;</option>
+                    </select>
+                    <select id="joinRightField"></select>
+                </div>
+            </div>
+            <div class="form-row">
+                <label>别名（可选）：</label>
+                <input type="text" id="joinAlias" placeholder="例如: joined_view">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="confirmJoinBtn" class="btn-primary">确定</button>
+            <button id="cancelJoinBtn" class="btn-secondary">取消</button>
+        </div>
+    </div>
+</div>
+
 <script src="dbclient-core.js"></script>
 <script src="dbclient-properties.js"></script>
 <script src="dbclient-data.js"></script>
@@ -156,6 +205,7 @@
 <script src="view/dbclient-view-modal.js"></script>
 <script src="view/dbclient-view-transform.js"></script>
 <script src="view/dbclient-view-sql.js"></script>
+<script src="view/dbclient-view-join.js"></script>
 <script src="view/dbclient-view.js"></script>
 
 <script>
@@ -163,13 +213,8 @@
         function initAll() {
             PropertiesModule.init();
             DataModule.init();
-            if (window.DBModule && typeof window.DBModule.init === 'function') {
-                window.DBModule.init();
-            }
-            if (window.ViewModule && typeof window.ViewModule.init === 'function') {
-                window.ViewModule.init();
-            }
-            // 初始化数据源（会触发绑定数据库 + 表列表加载）
+            if (window.DBModule && typeof window.DBModule.init === 'function') window.DBModule.init();
+            if (window.ViewModule && typeof window.ViewModule.init === 'function') window.ViewModule.init();
             if (typeof loadDataSources === 'function') loadDataSources();
 
             const tabBtns = document.querySelectorAll('.tab-btn');
@@ -185,7 +230,6 @@
             }
             tabBtns.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
 
-            // ========== 视图 SQL 面板显示/隐藏切换 ==========
             const toggleSqlBtn = document.getElementById('toggleSqlBtn');
             const sqlViewPanel = document.getElementById('sqlViewPanel');
             if (toggleSqlBtn && sqlViewPanel) {
@@ -193,10 +237,7 @@
                     const hidden = (sqlViewPanel.style.display === 'none' || sqlViewPanel.style.display === '');
                     sqlViewPanel.style.display = hidden ? 'flex' : 'none';
                     toggleSqlBtn.textContent = hidden ? '📄 隐藏 SQL' : '📄 显示 SQL';
-                    // 画布尺寸变化后刷新
-                    if (window.ViewModule && window.ViewModule.refreshCanvasSize) {
-                        window.ViewModule.refreshCanvasSize();
-                    }
+                    if (window.ViewModule && window.ViewModule.refreshCanvasSize) window.ViewModule.refreshCanvasSize();
                 });
             }
         }

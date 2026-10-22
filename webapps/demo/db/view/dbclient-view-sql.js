@@ -1,4 +1,4 @@
-// dbclient-view-sql.js - SQL 生成、复制、执行
+// dbclient-view-sql.js - 按选中节点（表 / join）生成 SQL、复制、执行
 const ViewSql = (function() {
     let sqlTextarea = null;
     let copySqlBtn = null;
@@ -16,26 +16,48 @@ const ViewSql = (function() {
     }
 
     function generateViewSql() {
-        const active = core.getActiveTableForTransform();
-        if (!active) return '';
-        const { db, table, columns } = active;
-        // 获取转换规则（从转换节点中获取）
-        let rules = [];
-        if (window.ViewTransform && window.ViewTransform.getTransformRulesForTable) {
-            rules = window.ViewTransform.getTransformRulesForTable(table);
+        const node = core.getSelectedNode();
+        if (!node) return '-- 未选中视图\n-- 点击画布上的表节点或关联节点查看对应 SQL';
+
+        if (node.type === 'table') {
+            const table = core.getTables().get(node.id);
+            if (!table) return '-- 表节点不存在';
+            const db = table.dbName;
+            const tableName = table.name;
+            const rules = (window.ViewTransform && window.ViewTransform.getTransformRulesForTable)
+                ? window.ViewTransform.getTransformRulesForTable(tableName)
+                : [];
+            if (!rules || rules.length === 0) {
+                return 'SELECT * FROM `' + db + '`.`' + tableName + '`;';
+            }
+            const allFields = table.fields.map(f => '`' + f.columnName + '`').join(', ');
+            const transformFields = rules.map(rule => {
+                let expr = rule.expression || '';
+                expr = expr.replace(/\{field\}/g, rule.sourceField);
+                expr = expr.replace(new RegExp('\\b' + rule.sourceField + '\\b', 'g'), '`' + rule.sourceField + '`');
+                const alias = rule.alias ? ' AS `' + rule.alias + '`' : '';
+                return expr + alias;
+            }).join(', ');
+            return 'SELECT ' + allFields + ', ' + transformFields + ' FROM `' + db + '`.`' + tableName + '`;';
         }
-        if (rules.length === 0) {
-            return `SELECT * FROM \`${db}\`.\`${table}\`;`;
+
+        if (node.type === 'join') {
+            const jNode = core.getJoinNodes().get(node.id);
+            if (!jNode) return '-- 关联节点不存在';
+            const tables = core.getTables();
+            const leftTable = tables.get(jNode.leftTable);
+            const rightTable = tables.get(jNode.rightTable);
+            if (!leftTable || !rightTable) return '-- 关联表不存在';
+            const leftRef = '`' + leftTable.dbName + '`.`' + jNode.leftTable + '`';
+            const rightRef = '`' + rightTable.dbName + '`.`' + jNode.rightTable + '`';
+            const onClause =
+                '`' + jNode.leftTable + '`.`' + jNode.leftField + '` ' +
+                jNode.operator + ' ' +
+                '`' + jNode.rightTable + '`.`' + jNode.rightField + '`';
+            return 'SELECT * FROM ' + leftRef + ' ' + jNode.joinType + ' ' + rightRef + ' ON ' + onClause + ';';
         }
-        const allFields = columns.map(c => `\`${c.columnName}\``).join(', ');
-        const transformFields = rules.map(rule => {
-            let expr = rule.expression;
-            expr = expr.replace(/\{field\}/g, rule.sourceField);
-            expr = expr.replace(new RegExp(`\\b${rule.sourceField}\\b`, 'g'), `\`${rule.sourceField}\``);
-            const alias = rule.alias ? ` AS \`${rule.alias}\`` : '';
-            return `${expr}${alias}`;
-        }).join(', ');
-        return `SELECT ${allFields}, ${transformFields} FROM \`${db}\`.\`${table}\`;`;
+
+        return '-- 未知节点类型';
     }
 
     function updateSql() {
@@ -53,16 +75,17 @@ const ViewSql = (function() {
     }
 
     function executeCurrentViewSql() {
-        const sql = sqlTextarea?.value;
+        const sql = sqlTextarea ? sqlTextarea.value : '';
         if (!sql || sql.startsWith('--')) {
             alert('没有有效的 SQL 语句');
             return;
         }
-        document.querySelector('.tab-btn[data-tab="sql"]').click();
+        const sqlTabBtn = document.querySelector('.tab-btn[data-tab="sql"]');
+        if (sqlTabBtn) sqlTabBtn.click();
         const sqlEditor = document.getElementById('sqlEditor');
         if (sqlEditor) {
             sqlEditor.value = sql;
-            setTimeout(() => {
+            setTimeout(function() {
                 const executeBtn = document.getElementById('executeSqlBtn');
                 if (executeBtn) executeBtn.click();
             }, 100);

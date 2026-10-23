@@ -1,5 +1,7 @@
 package com.omni.framework.tomcat.connector;
 
+import com.omni.framework.log.LoggerFactory;
+import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.mvc.MultipartResolver;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.session.HttpSession;
@@ -11,7 +13,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class Request implements HttpServletRequest {
-    private final BufferedInputStream input;          // 改为 BufferedInputStream 以支持 mark/reset
+    private static final Logger log = LoggerFactory.getLogger(Request.class);
+
+    private final BufferedInputStream input;
     private String uri;
     private String method;
     private String contextPath = "";
@@ -39,12 +43,9 @@ public class Request implements HttpServletRequest {
     private Map<String, Object> attributes = new HashMap<>();
     private List<Cookie> cookies;
     private HttpSession session;
-
-    // 标记是否为 multipart 请求
     private boolean isMultipart = false;
 
     public Request(InputStream input) {
-        // ★ 关键修复：将原始流包装为 BufferedInputStream，使其支持 mark/reset
         this.input = new BufferedInputStream(input);
     }
 
@@ -66,7 +67,6 @@ public class Request implements HttpServletRequest {
     }
 
     public void parse() throws Exception {
-        // 使用 BufferedReader 读取请求行和头部（BufferedInputStream 支持 mark，可安全使用）
         BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
         String requestLine = reader.readLine();
         if (requestLine == null) return;
@@ -81,7 +81,6 @@ public class Request implements HttpServletRequest {
                 fullUri = fullUri.substring(0, qIdx);
                 parseQueryString(queryString, parameters);
             }
-            // 解析 contextPath, servletPath, pathInfo
             int idx = fullUri.indexOf('/', 1);
             if (idx > 0) {
                 contextPath = fullUri.substring(0, idx);
@@ -99,7 +98,6 @@ public class Request implements HttpServletRequest {
             if (parts.length == 3) protocol = parts[2];
         }
 
-        // 解析 headers
         String line;
         while ((line = reader.readLine()) != null && !line.isEmpty()) {
             int colon = line.indexOf(':');
@@ -119,7 +117,6 @@ public class Request implements HttpServletRequest {
             }
         }
 
-        // 处理 body
         if (!isMultipart) {
             StringBuilder bodyBuilder = new StringBuilder();
             while (reader.ready()) {
@@ -132,7 +129,6 @@ public class Request implements HttpServletRequest {
                 }
             }
         } else {
-            // multipart 请求不读取 body 字符串，保留流位置供 MultipartResolver 使用
             body = null;
         }
 
@@ -173,7 +169,7 @@ public class Request implements HttpServletRequest {
         }
     }
 
-    // ==================== 实现 HttpServletRequest 接口 ====================
+    // ==================== HttpServletRequest 实现 ====================
     @Override public String getMethod() { return method; }
     @Override public String getUri() { return uri; }
     @Override public String getContextPath() { return contextPath; }
@@ -187,19 +183,23 @@ public class Request implements HttpServletRequest {
     }
     @Override public String getContentType() { return contentType; }
     @Override public InputStream getInputStream() { return input; }
-    @Override public MultipartResolver getMultipartResolver() {
+
+    /**
+     * ★ 修复：解析失败不再 printStackTrace 到 stderr，而是走 Logger 打印完整堆栈
+     */
+    @Override
+    public MultipartResolver getMultipartResolver() {
         if (multipartResolver == null && isMultipart && contentType != null) {
             try {
-                // ★ 使用包装后的 BufferedInputStream，支持 mark/reset
                 multipartResolver = new MultipartResolver(contentType, input);
-            } catch (IOException e) {
-                e.printStackTrace();
+            } catch (Exception e) {
+                log.error("解析 multipart 请求失败, contentType={}, uri={}", contentType, uri, e);
+                multipartResolver = null;
             }
         }
         return multipartResolver;
     }
 
-    // ========== 其他标准方法（保持不变） ==========
     @Override public String getRequestURI() { return uri; }
     @Override public StringBuffer getRequestURL() {
         StringBuffer url = new StringBuffer();

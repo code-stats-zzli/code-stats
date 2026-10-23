@@ -5,6 +5,8 @@ import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.appender.Appender;
 import com.omni.framework.log.config.Configuration;
 
+import java.util.Arrays;
+
 public class Logger {
     private final String name;
     private final Configuration.LoggerConfig config;
@@ -27,7 +29,7 @@ public class Logger {
     public void error(String msg) { log(Level.ERROR, msg, null); }
     public void error(String msg, Throwable t) { log(Level.ERROR, msg, t); }
 
-    // 通用格式化方法
+    // ==================== 核心：占位符格式化 ====================
     private String formatMessage(String format, Object... args) {
         if (args == null || args.length == 0) {
             return format;
@@ -45,45 +47,66 @@ public class Logger {
         return sb.toString();
     }
 
-    // 新增带参数的 info 方法
-    public void info(String format, Object... args) {
-        if (isInfoEnabled()) {
-            String msg = formatMessage(format, args);
-            log(Level.INFO, msg, null);
+    /**
+     * ★ 新增：检测 args 末尾是否带了 Throwable
+     * 让 log.error("xxx {} {}", a, b, e) 这种调用不再丢失异常堆栈。
+     * 返回值：[0] = 去掉 Throwable 后的真实参数数组，[1] = 提取出的 Throwable（可能为 null）
+     */
+    private Object[] extractThrowable(Object[] args) {
+        if (args != null && args.length > 0 && args[args.length - 1] instanceof Throwable) {
+            Throwable t = (Throwable) args[args.length - 1];
+            Object[] realArgs = Arrays.copyOf(args, args.length - 1);
+            return new Object[]{realArgs, t};
         }
+        return new Object[]{args, null};
     }
 
-    // debug
+    // ==================== 带占位符 + 可选 Throwable 的日志方法 ====================
+
+    public void trace(String format, Object... args) {
+        if (!isTraceEnabled()) return;
+        Object[] r = extractThrowable(args);
+        log(Level.TRACE, formatMessage(format, (Object[]) r[0]), (Throwable) r[1]);
+    }
+
     public void debug(String format, Object... args) {
-        if (isDebugEnabled()) {
-            String msg = formatMessage(format, args);
-            log(Level.DEBUG, msg, null);
-        }
+        if (!isDebugEnabled()) return;
+        Object[] r = extractThrowable(args);
+        log(Level.DEBUG, formatMessage(format, (Object[]) r[0]), (Throwable) r[1]);
     }
 
-    // warn
+    public void info(String format, Object... args) {
+        if (!isInfoEnabled()) return;
+        Object[] r = extractThrowable(args);
+        log(Level.INFO, formatMessage(format, (Object[]) r[0]), (Throwable) r[1]);
+    }
+
     public void warn(String format, Object... args) {
-        if (isWarnEnabled()) {
-            String msg = formatMessage(format, args);
-            log(Level.WARN, msg, null);
-        }
+        if (!isWarnEnabled()) return;
+        Object[] r = extractThrowable(args);
+        log(Level.WARN, formatMessage(format, (Object[]) r[0]), (Throwable) r[1]);
     }
 
-    // error (无异常)
+    /**
+     * 带占位符的 error；args 末尾若是 Throwable 会被自动识别为异常并打印完整堆栈。
+     * 这样 log.error("处理请求失败: {} {}", method, uri, e) 也能正确工作。
+     */
     public void error(String format, Object... args) {
-        if (isErrorEnabled()) {
-            String msg = formatMessage(format, args);
-            log(Level.ERROR, msg, null);
-        }
+        if (!isErrorEnabled()) return;
+        Object[] r = extractThrowable(args);
+        log(Level.ERROR, formatMessage(format, (Object[]) r[0]), (Throwable) r[1]);
     }
 
-    // error (带异常) – 参数顺序：先格式化字符串和参数，最后是 Throwable
+    /**
+     * 显式 Throwable 版本：log.error("失败: {}", "ctx", e) —— 第二个参数必须是 Throwable
+     * 保留此重载以兼容原有调用，语义最清晰。
+     */
     public void error(String format, Throwable t, Object... args) {
-        if (isErrorEnabled()) {
-            String msg = formatMessage(format, args);
-            log(Level.ERROR, msg, t);
-        }
+        if (!isErrorEnabled()) return;
+        log(Level.ERROR, formatMessage(format, args), t);
     }
+
+    // ==================== 内部 ====================
 
     private void log(Level level, String msg, Throwable t) {
         if (!level.isGreaterOrEqual(config.level)) return;
@@ -101,14 +124,12 @@ public class Logger {
         for (Appender appender : config.appenders) {
             appender.doAppend(event);
         }
-        // 支持 additivity 传播到父 Logger
         if (config.additive && !"ROOT".equals(config.name)) {
             propagateToParent(level, msg, t);
         }
     }
 
     private void propagateToParent(Level level, String msg, Throwable t) {
-        // 简化：使用 LoggerFactory 获取父 logger（按点分隔）
         String parentName = name.lastIndexOf('.') > 0 ? name.substring(0, name.lastIndexOf('.')) : "ROOT";
         Logger parent = LoggerFactory.getLogger(parentName);
         if (parent != this) {
@@ -121,10 +142,11 @@ public class Logger {
         boolean foundLog = false;
         for (StackTraceElement ste : stack) {
             String className = ste.getClassName();
-            if (foundLog && !className.startsWith("com.framework.log.")) {
+            if (foundLog && !className.startsWith("com.omni.framework.log.")) {
                 return ste;
             }
-            if (className.equals(Logger.class.getName()) || className.equals(LoggerFactory.class.getName())) {
+            if (className.equals(Logger.class.getName())
+                    || className.equals(LoggerFactory.class.getName())) {
                 foundLog = true;
             }
         }

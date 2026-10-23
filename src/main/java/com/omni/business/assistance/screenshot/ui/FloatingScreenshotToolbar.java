@@ -2,6 +2,7 @@
 package com.omni.business.assistance.screenshot.ui;
 
 import com.omni.business.assistance.screenshot.service.ScreenshotService;
+import com.omni.business.assistance.screenshot.util.FontUtil;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 
@@ -36,51 +37,32 @@ public class FloatingScreenshotToolbar extends JWindow {
                 BorderFactory.createEmptyBorder(6, 12, 6, 12)
         ));
 
-        JLabel titleLabel = new JLabel("📷 截图助手");
-        titleLabel.setFont(new Font("微软雅黑", Font.BOLD, 14));
+        // 标题：移除 📷 emoji，纯中文
+        JLabel titleLabel = new JLabel("截图助手");
+        titleLabel.setFont(FontUtil.deriveUIFont("Label.font", Font.BOLD, 14));
         titleLabel.setForeground(Color.WHITE);
         contentPanel.add(titleLabel, BorderLayout.WEST);
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 0));
         btnPanel.setOpaque(false);
 
-        JButton fullBtn = new JButton("全屏");
-        fullBtn.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        fullBtn.setBackground(new Color(0, 102, 255));
-        fullBtn.setForeground(Color.WHITE);
-        fullBtn.setFocusPainted(false);
-        fullBtn.setBorderPainted(false);
-        fullBtn.setOpaque(true);
-        fullBtn.setPreferredSize(new Dimension(55, 28));
+        JButton fullBtn = createButton("全屏", new Color(0, 102, 255), 55);
         fullBtn.addActionListener(e -> doFullScreenCapture());
         btnPanel.add(fullBtn);
 
-        JButton realtimeBtn = new JButton("实时全屏");
-        realtimeBtn.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        realtimeBtn.setBackground(new Color(0, 200, 0));
-        realtimeBtn.setForeground(Color.WHITE);
-        realtimeBtn.setFocusPainted(false);
-        realtimeBtn.setBorderPainted(false);
-        realtimeBtn.setOpaque(true);
-        realtimeBtn.setPreferredSize(new Dimension(80, 28));
+        JButton realtimeBtn = createButton("实时全屏", new Color(0, 200, 0), 80);
         realtimeBtn.addActionListener(e -> startRealtimeCapture());
         btnPanel.add(realtimeBtn);
 
-        JButton areaBtn = new JButton("区域");
-        areaBtn.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        areaBtn.setBackground(new Color(255, 165, 0));
-        areaBtn.setForeground(Color.WHITE);
-        areaBtn.setFocusPainted(false);
-        areaBtn.setBorderPainted(false);
-        areaBtn.setOpaque(true);
-        areaBtn.setPreferredSize(new Dimension(55, 28));
+        JButton areaBtn = createButton("区域", new Color(255, 165, 0), 55);
         areaBtn.addActionListener(e -> doAreaCapture());
         btnPanel.add(areaBtn);
 
         contentPanel.add(btnPanel, BorderLayout.CENTER);
 
-        JButton closeBtn = new JButton("✖");
-        closeBtn.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        // 关闭按钮：✖ (U+2716) 换成 × (U+00D7)，Latin-1 补充字符，所有字体都有
+        JButton closeBtn = new JButton("×");
+        closeBtn.setFont(FontUtil.deriveUIFont("Button.font", Font.PLAIN, 16));
         closeBtn.setBackground(new Color(200, 50, 50));
         closeBtn.setForeground(Color.WHITE);
         closeBtn.setFocusPainted(false);
@@ -91,6 +73,21 @@ public class FloatingScreenshotToolbar extends JWindow {
         contentPanel.add(closeBtn, BorderLayout.EAST);
 
         setContentPane(contentPanel);
+    }
+
+    /**
+     * 统一创建工具栏按钮：字体从 UIManager 派生，避免硬编码字体名。
+     */
+    private JButton createButton(String text, Color bg, int width) {
+        JButton btn = new JButton(text);
+        btn.setFont(FontUtil.deriveUIFont("Button.font", Font.PLAIN, 12));
+        btn.setBackground(bg);
+        btn.setForeground(Color.WHITE);
+        btn.setFocusPainted(false);
+        btn.setBorderPainted(false);
+        btn.setOpaque(true);
+        btn.setPreferredSize(new Dimension(width, 28));
+        return btn;
     }
 
     private void setupDrag() {
@@ -131,30 +128,27 @@ public class FloatingScreenshotToolbar extends JWindow {
             Rectangle screenRect = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
             BufferedImage image = robot.createScreenCapture(screenRect);
             File saved = screenshotService.saveImage(image, "fullscreen");
-            showNotification("✅ 全屏截图已保存\n" + saved.getAbsolutePath());
+            showNotification("全屏截图已保存\n" + saved.getAbsolutePath());
         } catch (Exception e) {
             log.error("全屏截图失败", e);
-            showNotification("❌ 截图失败: " + e.getMessage());
+            showNotification("截图失败: " + e.getMessage());
         } finally {
             setVisible(true);
         }
     }
 
     /**
-     * 实时全屏：点击按钮后显示全屏透明窗口，点击任意位置即截图（ESC取消）
+     * 实时全屏：点击按钮后显示全屏透明窗口，点击任意位置即截图（ESC 取消）。
      */
     public void startRealtimeCapture() {
-        // 隐藏工具栏
         setVisible(false);
 
-        // 创建透明全屏窗口
         JWindow clickWindow = new JWindow();
         clickWindow.setSize(Toolkit.getDefaultToolkit().getScreenSize());
         clickWindow.setAlwaysOnTop(true);
-        clickWindow.setBackground(new Color(0, 0, 0, 0)); // 完全透明
+        clickWindow.setBackground(new Color(0, 0, 0, 0));
         clickWindow.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
 
-        // 鼠标点击 → 截图
         clickWindow.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -164,14 +158,13 @@ public class FloatingScreenshotToolbar extends JWindow {
             }
         });
 
-        // ESC → 取消
         clickWindow.addKeyListener(new java.awt.event.KeyAdapter() {
             @Override
             public void keyPressed(java.awt.event.KeyEvent e) {
                 if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ESCAPE) {
                     clickWindow.setVisible(false);
                     clickWindow.dispose();
-                    setVisible(true); // 恢复工具栏
+                    setVisible(true);
                 }
             }
         });
@@ -187,10 +180,10 @@ public class FloatingScreenshotToolbar extends JWindow {
             Rectangle screenRect = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
             BufferedImage image = robot.createScreenCapture(screenRect);
             File saved = screenshotService.saveImage(image, "realtime");
-            showNotification("✅ 实时全屏截图已保存\n" + saved.getAbsolutePath());
+            showNotification("实时全屏截图已保存\n" + saved.getAbsolutePath());
         } catch (Exception e) {
             log.error("实时全屏截图失败", e);
-            showNotification("❌ 截图失败: " + e.getMessage());
+            showNotification("截图失败: " + e.getMessage());
         } finally {
             setVisible(true);
         }
@@ -206,13 +199,13 @@ public class FloatingScreenshotToolbar extends JWindow {
                     Robot robot = new Robot();
                     BufferedImage image = robot.createScreenCapture(rect);
                     File saved = screenshotService.saveImage(image, "screenshot");
-                    showNotification("✅ 区域截图已保存\n" + saved.getAbsolutePath());
+                    showNotification("区域截图已保存\n" + saved.getAbsolutePath());
                 } catch (Exception e) {
                     log.error("区域截图失败", e);
-                    showNotification("❌ 截图失败: " + e.getMessage());
+                    showNotification("截图失败: " + e.getMessage());
                 }
             } else {
-                showNotification("⚠️ 选区太小或已取消");
+                showNotification("选区太小或已取消");
             }
             setVisible(true);
         });
@@ -228,7 +221,7 @@ public class FloatingScreenshotToolbar extends JWindow {
                     icons[0].displayMessage("截图助手", msg, TrayIcon.MessageType.INFO);
                     return;
                 }
-            } catch (Exception e) {}
+            } catch (Exception ignored) {}
         }
         JOptionPane.showMessageDialog(this, msg, "截图助手", JOptionPane.INFORMATION_MESSAGE);
     }

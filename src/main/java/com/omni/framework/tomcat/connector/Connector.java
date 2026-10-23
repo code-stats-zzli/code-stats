@@ -43,14 +43,12 @@ public class Connector implements Lifecycle {
                         Socket socket = serverSocket.accept();
                         threadPool.submit(() -> process(socket));
                     } catch (SocketException e) {
-                        // 当 serverSocket.close() 被调用时，accept() 会抛出 SocketException
-                        // 这是正常的停止信号，不打印错误栈
                         if (running) {
                             log.error("Socket error while running", e);
                         } else {
                             log.info("Connector stopped, accept interrupted.");
                         }
-                        break;  // 退出循环
+                        break;
                     } catch (IOException e) {
                         log.error("Accept failed", e);
                     }
@@ -62,9 +60,17 @@ public class Connector implements Lifecycle {
     }
 
     private void process(Socket socket) {
-        try (java.io.InputStream in = socket.getInputStream(); java.io.OutputStream out = socket.getOutputStream()) {
+        long startTime = System.currentTimeMillis();
+        // ====== 连接建立日志 ======
+        log.debug("TCP 连接建立: remote={}, local={}",
+                socket.getRemoteSocketAddress(), socket.getLocalSocketAddress());
+
+        try (java.io.InputStream in = socket.getInputStream();
+             java.io.OutputStream out = socket.getOutputStream()) {
             Request request = new Request(in);
+            request.setSocket(socket);
             request.parse();
+
             Response response = new Response(out);
             Engine engine = service.getEngine();
             if (engine != null) {
@@ -74,8 +80,12 @@ public class Connector implements Lifecycle {
                 response.write("<h1>No Engine</h1>");
                 response.send();
             }
+            log.debug("TCP 连接处理完成: remote={}, method={}, uri={}, 耗时={}ms",
+                    socket.getRemoteSocketAddress(),
+                    request.getMethod(), request.getUri(),
+                    System.currentTimeMillis() - startTime);
         } catch (Exception e) {
-            log.error("Request processing failed", e);
+            log.error("Request processing failed, remote={}", socket.getRemoteSocketAddress(), e);
         } finally {
             try { socket.close(); } catch (IOException e) { log.warn("Close socket error", e); }
         }
@@ -91,8 +101,9 @@ public class Connector implements Lifecycle {
         } catch (IOException e) {
             log.warn("Close server socket error", e);
         }
-        // 可选：等待现有请求处理完（简化）
-    }@Override
+    }
+
+    @Override
     public void destroy() {
         stop();
         if (threadPool != null && !threadPool.isShutdown()) {
@@ -106,6 +117,7 @@ public class Connector implements Lifecycle {
             }
         }
     }
+
     @Override public void addLifecycleListener(LifecycleListener listener) {}
     @Override public LifecycleListener[] findLifecycleListeners() { return new LifecycleListener[0]; }
     @Override public void removeLifecycleListener(LifecycleListener listener) {}

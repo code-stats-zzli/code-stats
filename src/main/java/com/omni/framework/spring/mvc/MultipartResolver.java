@@ -1,23 +1,24 @@
 package com.omni.framework.spring.mvc;
 
+import com.omni.framework.log.LoggerFactory;
+import com.omni.framework.log.core.Logger;
+
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class MultipartResolver implements AutoCloseable {
+    private static final Logger log = LoggerFactory.getLogger(MultipartResolver.class);
+
     private static final int CONTENT_BUFFER = 8192;
     private final BufferedInputStream inputStream;
     private final byte[] boundary;
     private final Map<String, String> textFields = new HashMap<>();
     private final Map<String, FileItem> fileFields = new HashMap<>();
     private boolean closed = false;
-    private static final boolean DEBUG = true;
-
-    private static void log(String msg) {
-        if (DEBUG) System.out.println("[MultipartResolver] " + msg);
-    }
 
     public MultipartResolver(String contentType, InputStream inputStream) throws IOException {
         this.inputStream = new BufferedInputStream(inputStream, CONTENT_BUFFER * 2);
@@ -28,6 +29,14 @@ public class MultipartResolver implements AutoCloseable {
         this.boundary = ("--" + boundaryStr).getBytes(StandardCharsets.US_ASCII);
         BoundaryFinder finder = new BoundaryFinder(this.inputStream, this.boundary);
         parse(finder);
+
+        log.info("Multipart 解析完成: 文本字段={}, 文件字段={}, 文件详情={}",
+                textFields.keySet(),
+                fileFields.keySet(),
+                fileFields.entrySet().stream()
+                        .map(e -> e.getKey() + "(" + e.getValue().getFileName()
+                                + ", " + e.getValue().getSize() + "B)")
+                        .collect(Collectors.toList()));
     }
 
     private String extractBoundary(String contentType) {
@@ -56,31 +65,35 @@ public class MultipartResolver implements AutoCloseable {
 
             String dis = headers.get("content-disposition");
             if (dis == null) {
-                // ★ 缺陷：continue 但没有 finder.findBoundary() 推进到下一个边界
+                if (!finder.findBoundary()) break;
                 continue;
             }
 
             String name = extractHeaderValue(dis, "name");
             if (name == null || name.isBlank()) {
-                // ★ 缺陷：同上
+                if (!finder.findBoundary()) break;
                 continue;
             }
 
             String filename = extractHeaderValue(dis, "filename");
             if (filename != null) {
                 Path path = readFileContent(finder);
+                long size = Files.size(path);
                 fileFields.put(name, new FileItem(name, filename,
                         headers.getOrDefault("content-type", "application/octet-stream"),
-                        Files.size(path), path));
+                        size, path));
+                log.debug("Multipart 文件字段: name={}, filename={}, size={}B", name, filename, size);
             } else {
                 String text = readTextContent(finder);
                 textFields.put(name, text);
+                log.debug("Multipart 文本字段: name={}, length={}", name, text.length());
             }
 
             boolean found = finder.findBoundary();
             if (!found) break;
             if (finder.isClosingBoundary()) break;
         }
+        log.debug("Multipart 解析结束，共 {} 个 part", partCount);
     }
 
     private Map<String, String> readPartHeaders(BoundaryFinder finder) throws IOException {
@@ -199,6 +212,12 @@ public class MultipartResolver implements AutoCloseable {
     public String getParameter(String name) { return textFields.get(name); }
     public FileItem getFileItem(String name) { return fileFields.get(name); }
 
+    /** 新增：获取所有文本字段名 */
+    public Set<String> getParameterNames() { return textFields.keySet(); }
+
+    /** 新增：获取所有文件字段名 */
+    public Set<String> getFileNames() { return fileFields.keySet(); }
+
     @Override
     public void close() {
         if (closed) return;
@@ -206,6 +225,7 @@ public class MultipartResolver implements AutoCloseable {
         closed = true;
     }
 
+    // ==================== BoundaryFinder 保持不变 ====================
     private static class BoundaryFinder {
         private final InputStream input;
         private final byte[] boundary;

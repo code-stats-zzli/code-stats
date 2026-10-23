@@ -133,6 +133,13 @@ public class Request implements HttpServletRequest {
         }
 
         parseCookies();
+
+        // ====== 请求解析完成日志 ======
+        log.debug("请求解析完成: method={}, uri={}, contextPath={}, queryString={}, " +
+                        "headersCount={}, contentType={}, contentLength={}, bodyLength={}",
+                method, uri, contextPath, queryString,
+                headers.size(), contentType, contentLength,
+                body != null ? body.length() : 0);
     }
 
     private void parseQueryString(String query, Map<String, String> target) {
@@ -184,9 +191,6 @@ public class Request implements HttpServletRequest {
     @Override public String getContentType() { return contentType; }
     @Override public InputStream getInputStream() { return input; }
 
-    /**
-     * ★ 修复：解析失败不再 printStackTrace 到 stderr，而是走 Logger 打印完整堆栈
-     */
     @Override
     public MultipartResolver getMultipartResolver() {
         if (multipartResolver == null && isMultipart && contentType != null) {

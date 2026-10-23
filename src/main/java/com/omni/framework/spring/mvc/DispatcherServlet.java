@@ -12,10 +12,10 @@ import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
 import com.omni.framework.web.TraceContextHolder;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.net.SocketException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -26,6 +26,14 @@ import java.util.regex.Pattern;
 public class DispatcherServlet extends HttpServlet {
     private static final Logger log = LoggerFactory.getLogger(DispatcherServlet.class);
     private final List<HandlerMapping> handlerMappings = new ArrayList<>();
+
+    /**
+     * 敏感参数名（不打印明文值）
+     */
+    private static final Set<String> SENSITIVE_PARAM_NAMES = new HashSet<>(Arrays.asList(
+            "password", "passwd", "pwd", "secret", "token",
+            "accessToken", "apiKey", "apikey", "key", "credential"
+    ));
 
     @Override
     public void init() throws Exception {
@@ -88,10 +96,13 @@ public class DispatcherServlet extends HttpServlet {
     }
 
     private void processRequest(HttpServletRequest req, HttpServletResponse res) throws Exception {
+        long startTime = System.currentTimeMillis();
         String method = req.getMethod();
         String uri = req.getUri();
         String query = req.getQueryString();
-        log.info("收到请求: {} {} {}", method, uri, query != null ? "?" + query : "");
+
+        // ====== 1. 打印完整请求信息（方法、URI、Query、Headers、Body、参数） ======
+        logRequest(req, method, uri, query);
 
         // ====== 埋点：记录请求开始 ======
         long threadId = Thread.currentThread().getId();
@@ -102,6 +113,7 @@ public class DispatcherServlet extends HttpServlet {
         ResponseContextHolder.setResponse(res);
         MultipartResolver multipartResolver = null;
         Throwable requestError = null;
+
         try {
             for (HandlerMapping hm : handlerMappings) {
                 Pattern pattern = Pattern.compile(hm.regex);
@@ -111,8 +123,17 @@ public class DispatcherServlet extends HttpServlet {
                     for (int i = 0; i < hm.varNames.size(); i++) {
                         pathVars.put(hm.varNames.get(i), matcher.group(i + 1));
                     }
+
+                    log.info("匹配处理器: {}.{}", hm.controller.getClass().getSimpleName(), hm.method.getName());
+                    if (!pathVars.isEmpty()) {
+                        log.info("🛣️ 路径参数: {}", pathVars);
+                    }
+
                     Object[] args = ParamBinder.resolveParameters(hm.method, req, res, pathVars);
+                    log.info(" 绑定参数: {}", formatArgs(hm.method, args));
+
                     Object result = hm.method.invoke(hm.controller, args);
+
                     if (hm.isResponseBody) {
                         String outStr;
                         if (result instanceof String) {
@@ -120,19 +141,33 @@ public class DispatcherServlet extends HttpServlet {
                         } else {
                             outStr = toJson(result);
                         }
+                        log.info(" 响应体预览: {}", preview(outStr));
                         res.setContentType("application/json; charset=utf-8");
                         res.write(outStr);
                     } else {
-                        if (result != null) res.write(result.toString());
+                        if (result != null) {
+                            log.info("📤 视图响应: {}", result);
+                            res.write(result.toString());
+                        }
                     }
                     res.send();
+                    log.info(" 请求处理完成: {} {} 耗时: {}ms",
+                            method, uri, System.currentTimeMillis() - startTime);
                     return;
                 }
             }
-            if (serveStaticFile(uri, res)) return;
+
+            if (serveStaticFile(uri, res)) {
+                log.info(" 静态文件响应: {} 耗时: {}ms", uri, System.currentTimeMillis() - startTime);
+                return;
+            }
+
             res.setStatus(404, "Not Found");
             res.write("<h1>404 - Not Found</h1>");
             res.send();
+            log.warn("⚠️ 404 Not Found: {} {} 耗时: {}ms",
+                    method, uri, System.currentTimeMillis() - startTime);
+
         } catch (Throwable e) {
             requestError = e;
             // 专门处理客户端过早断开连接
@@ -140,10 +175,11 @@ public class DispatcherServlet extends HttpServlet {
                 String msg = e.getMessage();
                 if (msg != null && (msg.contains("软件中止") || msg.contains("Connection reset") || msg.contains("Broken pipe"))) {
                     log.debug("客户端已断开连接，请求详情: {} {}?{}", method, uri, query != null ? query : "");
-                    return; // 静默处理，不再向上抛出
+                    return;
                 }
             }
-            log.error("处理请求失败: {} {}", method, uri, e);
+            log.error(" 处理请求失败: {} {} 耗时: {}ms", method, uri,
+                    System.currentTimeMillis() - startTime, e);
             if (!res.isCommitted()) {
                 try {
                     res.setStatus(500, "Internal Server Error");
@@ -157,7 +193,6 @@ public class DispatcherServlet extends HttpServlet {
             // ====== 埋点：记录请求结束 ======
             String errorMsg = requestError != null ? requestError.getMessage() : null;
             TraceContextHolder.updateContext(threadId, errorMsg, null);
-            // 注意：不立即删除，供监控服务读取（可设置超时清理）
             // ===============================
 
             if (multipartResolver != null) {
@@ -166,6 +201,121 @@ public class DispatcherServlet extends HttpServlet {
             RequestContextHolder.clear();
             ResponseContextHolder.clear();
         }
+    }
+
+    /**
+     * 打印完整请求信息：方法、URI、Query、Headers、Body、参数、文件上传字段
+     */
+    private void logRequest(HttpServletRequest req, String method, String uri, String query) {
+        log.info("==========  收到请求 ==========");
+        log.info("请求方法: {}", method);
+        log.info("请求URI: {}", uri);
+        log.info("查询字符串: {}", query != null ? query : "(无)");
+
+
+        // Query / Form 参数
+        Map<String, String> params = req.getParameters();
+        if (params != null && !params.isEmpty()) {
+            Map<String, String> displayParams = new LinkedHashMap<>();
+            for (Map.Entry<String, String> e : params.entrySet()) {
+                String key = e.getKey();
+                if (isSensitive(key)) {
+                    displayParams.put(key, "***");
+                } else {
+                    String value = e.getValue();
+                    if (value != null && value.length() > 500) {
+                        value = value.substring(0, 500) + "...(截断)";
+                    }
+                    displayParams.put(key, value);
+                }
+            }
+            log.info("查询参数: {}", displayParams);
+        }
+
+        // Body
+        String body = req.getBody();
+        if (body != null && !body.isEmpty()) {
+            String bodyPreview = body.length() > 2000
+                    ? body.substring(0, 2000) + "...(截断，总长度" + body.length() + ")"
+                    : body;
+            log.info("请求Body: {}", bodyPreview);
+        }
+
+        // 文件上传字段
+        String contentType = req.getContentType();
+        if (contentType != null && contentType.startsWith("multipart/form-data")) {
+            MultipartResolver resolver = req.getMultipartResolver();
+            if (resolver != null) {
+                try {
+                    Set<String> textNames = resolver.getParameterNames();
+                    Set<String> fileNames = resolver.getFileNames();
+                    if (!textNames.isEmpty()) {
+                        log.info(" 上传文本字段: {}", textNames);
+                    }
+                    if (!fileNames.isEmpty()) {
+                        log.info(" 上传文件字段: {}", fileNames);
+                        for (String name : fileNames) {
+                            FileItem item = resolver.getFileItem(name);
+                            if (item != null) {
+                                log.info("   - {}: filename={}, size={} bytes",
+                                        name, item.getFileName(), item.getSize());
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.warn("打印 multipart 字段失败: {}", ex.getMessage());
+                }
+            }
+        }
+    }
+
+    /**
+     * 格式化方法参数，敏感字段脱敏
+     */
+    private String formatArgs(Method method, Object[] args) {
+        if (args == null || args.length == 0) return "[]";
+        Parameter[] parameters = method.getParameters();
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < args.length; i++) {
+            if (i > 0) sb.append(", ");
+            String name = parameters.length > i ? parameters[i].getName() : "arg" + i;
+            Object val = args[i];
+
+            if (val instanceof HttpServletRequest) {
+                sb.append(name).append("=HttpServletRequest");
+            } else if (val instanceof HttpServletResponse) {
+                sb.append(name).append("=HttpServletResponse");
+            } else if (val instanceof FileItem) {
+                FileItem fi = (FileItem) val;
+                sb.append(name).append("=FileItem{filename=")
+                        .append(fi.getFileName()).append(", size=")
+                        .append(fi.getSize()).append("}");
+            } else if (isSensitive(name)) {
+                sb.append(name).append("=***");
+            } else if (val instanceof String) {
+                String str = (String) val;
+                if (str.length() > 300) str = str.substring(0, 300) + "...(截断)";
+                sb.append(name).append("=\"").append(str).append("\"");
+            } else {
+                sb.append(name).append("=").append(val);
+            }
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    private boolean isSensitive(String name) {
+        if (name == null) return false;
+        String lower = name.toLowerCase();
+        for (String s : SENSITIVE_PARAM_NAMES) {
+            if (lower.contains(s)) return true;
+        }
+        return false;
+    }
+
+    private String preview(String text) {
+        if (text == null) return "(null)";
+        return text.length() > 500 ? text.substring(0, 500) + "...(截断)" : text;
     }
 
     // ---------- 原有辅助方法（保持不变） ----------

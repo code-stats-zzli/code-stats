@@ -1,6 +1,8 @@
 package com.omni.framework.spring.mvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.omni.framework.log.LoggerFactory;
+import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.PathVariable;
 import com.omni.framework.spring.annotation.RequestBody;
 import com.omni.framework.spring.annotation.RequestParam;
@@ -15,6 +17,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ParamBinder {
+    private static final Logger log = LoggerFactory.getLogger(ParamBinder.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public static Object[] resolveParameters(Method method, HttpServletRequest request, HttpServletResponse response,
@@ -29,10 +32,12 @@ public class ParamBinder {
 
             if (type == HttpServletRequest.class) {
                 args[i] = request;
+                log.debug("参数[{}] {} = HttpServletRequest", i, param.getName());
                 continue;
             }
             if (type == HttpServletResponse.class) {
                 args[i] = response;
+                log.debug("参数[{}] {} = HttpServletResponse", i, param.getName());
                 continue;
             }
 
@@ -42,6 +47,7 @@ public class ParamBinder {
                 String name = pathVar.value().isEmpty() ? param.getName() : pathVar.value();
                 String value = pathVars.get(name);
                 args[i] = convert(value, type);
+                log.debug("参数[{}] {} (@PathVariable {}) = {}", i, param.getName(), name, args[i]);
                 continue;
             }
 
@@ -57,6 +63,7 @@ public class ParamBinder {
                     value = reqParam.defaultValue();
                 }
                 args[i] = convert(value, type);
+                log.debug("参数[{}] {} (@RequestParam {}) = {}", i, param.getName(), name, args[i]);
                 continue;
             }
 
@@ -72,6 +79,7 @@ public class ParamBinder {
                 } else {
                     args[i] = null;
                 }
+                log.debug("参数[{}] {} (@RequestBody) = {}", i, param.getName(), args[i]);
                 continue;
             }
 
@@ -92,6 +100,7 @@ public class ParamBinder {
                     }
                     args[i] = item;
                 }
+                log.debug("参数[{}] {} (@RequestPart {}) = {}", i, param.getName(), partName, args[i]);
                 continue;
             }
 
@@ -103,10 +112,12 @@ public class ParamBinder {
                 } else {
                     args[i] = getDefaultValue(type);
                 }
+                log.debug("参数[{}] {} (简单类型) = {}", i, param.getName(), args[i]);
                 continue;
             }
 
             args[i] = null;
+            log.debug("参数[{}] {} = null (未识别注解)", i, param.getName());
         }
         return args;
     }

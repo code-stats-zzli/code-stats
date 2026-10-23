@@ -13,11 +13,13 @@ import java.util.Map;
 
 /**
  * 极简模式截图助手浮窗
- * - 默认窗口缩小（240x60），只显示“完整”和“关闭”两个按钮
- * - 鼠标悬浮时窗口扩展（320x140），显示完整控件
+ * - 默认窗口缩小（220×52），只显示“完整”和“关闭”两个按钮
+ * - 鼠标悬浮时窗口扩展（300×120），显示完整控件
  * - 窗口始终保持右下角对齐（边距 30/50）
- * - 结果窗口宽度与主窗口一致，紧贴主窗口**上方**
+ * - 结果窗口宽度与主窗口一致，紧贴主窗口上方
  * - 鼠标移出主窗口（且主窗口处于展开状态）且未进入结果窗口时，结果窗口立即消失，主窗口恢复缩小
+ *
+ * <p>尺寸优化：240×60 / 320×140 → 220×52 / 300×120。
  */
 public class MiniCaptureWindow extends JWindow {
     private static final Logger log = LoggerFactory.getLogger(MiniCaptureWindow.class);
@@ -41,10 +43,11 @@ public class MiniCaptureWindow extends JWindow {
     private Timer exitTimer;
     private boolean mouseInsideMain = false;
 
-    private static final int DEFAULT_WIDTH = 320;
-    private static final int DEFAULT_HEIGHT = 140;
-    private static final int MINI_WIDTH = 240;
-    private static final int MINI_HEIGHT = 60;
+    /** ★ 尺寸优化 */
+    private static final int DEFAULT_WIDTH = 300;
+    private static final int DEFAULT_HEIGHT = 120;
+    private static final int MINI_WIDTH = 220;
+    private static final int MINI_HEIGHT = 52;
 
     public MiniCaptureWindow(ScreenshotService service) {
         this.screenshotService = service;
@@ -90,7 +93,7 @@ public class MiniCaptureWindow extends JWindow {
         fullModeBtn.addActionListener(e -> switchToFullMode());
         rightBtns.add(fullModeBtn);
 
-        closeBtn = new JButton("✖");
+        closeBtn = new JButton("×");
         closeBtn.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         closeBtn.setForeground(Color.WHITE);
         closeBtn.setBackground(new Color(60, 60, 60, 200));
@@ -117,7 +120,7 @@ public class MiniCaptureWindow extends JWindow {
         pasteBtn.addActionListener(e -> pasteFromClipboard());
         inputRow.add(pasteBtn);
 
-        searchField = new JTextField(14);
+        searchField = new JTextField(12);
         searchField.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         searchField.setBackground(new Color(255, 255, 255, 220));
         searchField.setForeground(Color.BLACK);
@@ -197,7 +200,7 @@ public class MiniCaptureWindow extends JWindow {
         });
 
         resultWindow.setContentPane(panel);
-        resultWindow.setSize(320, 300);
+        resultWindow.setSize(300, 300);
         resultWindow.setVisible(false);
     }
 
@@ -216,7 +219,7 @@ public class MiniCaptureWindow extends JWindow {
     }
 
     /**
-     * 将结果窗口定位到主窗口的正上方，宽度与主窗口一致
+     * 将结果窗口定位到主窗口的正上方，宽度与主窗口一致。
      */
     private void updateResultWindowLocation() {
         if (resultWindow == null) return;
@@ -224,7 +227,6 @@ public class MiniCaptureWindow extends JWindow {
         int w = getWidth();
         int h = getHeight();
         resultWindow.setSize(w, resultWindow.getHeight());
-        // ★ 显示在主窗口上方，紧贴主窗口上边界
         resultWindow.setLocation(loc.x, loc.y - resultWindow.getHeight() - 2);
     }
 
@@ -255,7 +257,6 @@ public class MiniCaptureWindow extends JWindow {
 
             @Override
             public void mouseExited(MouseEvent e) {
-                // 使用 MouseInfo 检查鼠标是否真的离开窗口边界
                 Point mousePos = MouseInfo.getPointerInfo().getLocation();
                 if (getBounds().contains(mousePos)) {
                     return;
@@ -314,21 +315,21 @@ public class MiniCaptureWindow extends JWindow {
                 searchField.setText(text);
                 doSearch();
             } else {
-                statusLabel.setText("⚠️ 剪贴板为空");
+                statusLabel.setText("剪贴板为空");
             }
         } catch (Exception e) {
             log.warn("读取剪贴板失败", e);
-            statusLabel.setText("⚠️ 无法读取剪贴板");
+            statusLabel.setText("无法读取剪贴板");
         }
     }
 
     private void doSearch() {
         String keyword = searchField.getText().trim();
         if (keyword.isEmpty()) {
-            statusLabel.setText("⚠️ 请输入关键词");
+            statusLabel.setText("请输入关键词");
             return;
         }
-        statusLabel.setText("⏳ 搜索中...");
+        statusLabel.setText("搜索中...");
         new SwingWorker<List<Map<String, String>>, Void>() {
             @Override
             protected List<Map<String, String>> doInBackground() throws Exception {
@@ -340,24 +341,24 @@ public class MiniCaptureWindow extends JWindow {
                 try {
                     List<Map<String, String>> rows = get();
                     if (rows == null || rows.isEmpty()) {
-                        resultArea.setText("😞 未找到匹配的题目");
-                        statusLabel.setText("😞 无匹配");
+                        resultArea.setText("未找到匹配的题目");
+                        statusLabel.setText("无匹配");
                     } else {
                         Map<String, String> firstRow = rows.get(0);
                         StringBuilder sb = new StringBuilder();
-                        sb.append("📌 共匹配 ").append(rows.size()).append(" 条，显示第 1 条：\n\n");
+                        sb.append("共匹配 ").append(rows.size()).append(" 条，显示第 1 条：\n\n");
                         for (Map.Entry<String, String> entry : firstRow.entrySet()) {
                             sb.append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
                         }
                         resultArea.setText(sb.toString());
                         resultArea.setCaretPosition(0);
-                        statusLabel.setText("✅ 找到 " + rows.size() + " 条匹配");
+                        statusLabel.setText("找到 " + rows.size() + " 条匹配");
                     }
                     showResultWindow();
                 } catch (Exception e) {
                     log.error("搜索失败", e);
-                    resultArea.setText("❌ 搜索失败: " + e.getMessage());
-                    statusLabel.setText("❌ 搜索失败");
+                    resultArea.setText("搜索失败: " + e.getMessage());
+                    statusLabel.setText("搜索失败");
                     showResultWindow();
                 }
             }
@@ -366,7 +367,6 @@ public class MiniCaptureWindow extends JWindow {
 
     private void showResultWindow() {
         if (resultWindow == null) return;
-        // 设置宽度与主窗口一致
         resultWindow.setSize(getWidth(), resultWindow.getHeight());
         updateResultWindowLocation();
         resultWindow.setVisible(true);

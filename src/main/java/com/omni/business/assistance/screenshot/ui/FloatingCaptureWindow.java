@@ -1,3 +1,4 @@
+// 文件路径: src/main/java/com/omni/business/assistance/screenshot/ui/FloatingCaptureWindow.java
 package com.omni.business.assistance.screenshot.ui;
 
 import com.omni.business.assistance.screenshot.bootstrap.ScreenshotAssistantBootstrap;
@@ -20,6 +21,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 截图助手浮窗 - 完整模式
  * 支持：拖拽识别、选区识别、搜索、复制、保存截图，以及切换到极简模式
+ *
+ * <p>尺寸优化：默认 600×580 → 540×520，内边距、字体、按钮宽度统一收紧，
+ * 减少右下角遮挡面积，同时保证按钮不换行。
  */
 public class FloatingCaptureWindow extends JWindow {
     private static final Logger log = LoggerFactory.getLogger(FloatingCaptureWindow.class);
@@ -27,14 +31,14 @@ public class FloatingCaptureWindow extends JWindow {
 
     // UI 组件
     private JTextArea recognizedTextArea;
-    private JTextArea resultTextArea;          // 纯文本逐条显示匹配结果
+    private JTextArea resultTextArea;
     private JLabel statusLabel;
     private JPanel titleBar;
     private JButton closeButton, copyTextButton, saveScreenshotButton, selectAreaButton, recaptureButton;
     private JButton zoomInButton, zoomOutButton;
     private JButton pasteButton;
     private JButton searchButton;
-    private JButton miniModeButton;            // 新增：切换到极简模式
+    private JButton miniModeButton;
 
     // 状态控制
     private final AtomicBoolean isCapturing = new AtomicBoolean(false);
@@ -44,9 +48,9 @@ public class FloatingCaptureWindow extends JWindow {
     private Point dragStart = null;
     private boolean wasDragged = false;
 
-    // 窗口尺寸
-    private static final int DEFAULT_WIDTH = 600;
-    private static final int DEFAULT_HEIGHT = 580;
+    /** ★ 尺寸优化：600×580 → 540×520 */
+    private static final int DEFAULT_WIDTH = 540;
+    private static final int DEFAULT_HEIGHT = 520;
     private int currentWidth = DEFAULT_WIDTH;
     private int currentHeight = DEFAULT_HEIGHT;
 
@@ -76,84 +80,69 @@ public class FloatingCaptureWindow extends JWindow {
             }
         });
 
-        log.info("截图助手浮窗初始化完成（含极简模式切换按钮）");
+        log.info("截图助手浮窗初始化完成（尺寸 {}×{}）", DEFAULT_WIDTH, DEFAULT_HEIGHT);
     }
 
     // ==================== UI 初始化 ====================
 
     private void initComponents() {
-        JPanel mainPanel = new JPanel(new BorderLayout(5, 5));
+        JPanel mainPanel = new JPanel(new BorderLayout(4, 4));
         mainPanel.setOpaque(false);
         mainPanel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(0, 102, 255, 200), 3),
+                BorderFactory.createLineBorder(new Color(0, 102, 255, 200), 2),
                 BorderFactory.createEmptyBorder(2, 2, 2, 2)
         ));
 
         // ---- 标题栏（可拖拽） ----
         titleBar = new JPanel(new BorderLayout());
         titleBar.setOpaque(false);
-        titleBar.setBorder(BorderFactory.createEmptyBorder(8, 8, 4, 8));
+        titleBar.setBorder(BorderFactory.createEmptyBorder(6, 8, 3, 8));
         JLabel dragHandle = new JLabel("⠿");
-        dragHandle.setFont(new Font("Segoe UI", Font.PLAIN, 20));
+        dragHandle.setFont(new Font("Segoe UI", Font.PLAIN, 18));
         dragHandle.setForeground(Color.WHITE);
         dragHandle.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
         titleBar.add(dragHandle, BorderLayout.WEST);
-        JLabel titleLabel = new JLabel("📷 截图助手");
+        JLabel titleLabel = new JLabel("截图助手");
         titleLabel.setForeground(Color.WHITE);
-        titleLabel.setFont(new Font("Inter", Font.BOLD, 14));
+        titleLabel.setFont(new Font("Inter", Font.BOLD, 13));
         titleBar.add(titleLabel, BorderLayout.CENTER);
         mainPanel.add(titleBar, BorderLayout.NORTH);
 
         // ---- 识别文字展示区 ----
         recognizedTextArea = new JTextArea();
-        recognizedTextArea.setEditable(true);   // 允许用户直接编辑/粘贴
+        recognizedTextArea.setEditable(true);
         recognizedTextArea.setLineWrap(true);
         recognizedTextArea.setWrapStyleWord(true);
-        recognizedTextArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        recognizedTextArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
         recognizedTextArea.setBackground(new Color(0, 0, 0, 80));
         recognizedTextArea.setForeground(Color.WHITE);
         recognizedTextArea.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(new Color(255, 255, 255, 100)), "📝 识别文字（可编辑）",
+                BorderFactory.createLineBorder(new Color(255, 255, 255, 100)), "识别文字（可编辑）",
                 TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION,
-                new Font("Inter", Font.PLAIN, 12), Color.WHITE
+                new Font("Inter", Font.PLAIN, 11), Color.WHITE
         ));
         recognizedTextArea.setOpaque(true);
         updateTextAreaPreferredSize();
         mainPanel.add(recognizedTextArea, BorderLayout.NORTH);
 
-        // ---- 结果区域（包含标题栏 + 搜索行 + 文本区） ----
+        // ---- 结果区域（标题栏 + 搜索行 + 文本区） ----
         JPanel resultPanel = new JPanel(new BorderLayout(0, 4));
         resultPanel.setOpaque(false);
         resultPanel.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(new Color(255, 255, 255, 100)), "📚 匹配结果",
+                BorderFactory.createLineBorder(new Color(255, 255, 255, 100)), "匹配结果",
                 TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION,
-                new Font("Inter", Font.PLAIN, 12), Color.WHITE
+                new Font("Inter", Font.PLAIN, 11), Color.WHITE
         ));
 
-        // 搜索行（包含所有按钮，新增“极简”按钮）
-        JPanel searchRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 2));
+        JPanel searchRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 2));
         searchRow.setOpaque(false);
 
-        // 1. 粘贴按钮
-        pasteButton = new JButton("📋 粘贴并搜索");
-        pasteButton.setFont(new Font("Inter", Font.PLAIN, 11));
-        pasteButton.setForeground(Color.WHITE);
-        pasteButton.setBackground(new Color(60, 60, 60, 200));
-        pasteButton.setBorderPainted(false);
-        pasteButton.setFocusPainted(false);
-        pasteButton.setOpaque(true);
+        pasteButton = createSmallButton("粘贴并搜索", new Color(60, 60, 60, 200));
         pasteButton.setToolTipText("从剪贴板粘贴内容到识别文字区，并自动搜索");
         pasteButton.addActionListener(e -> pasteAndSearch());
         searchRow.add(pasteButton);
 
-        // 2. 极简模式切换按钮（新增）
-        miniModeButton = new JButton("极简");
-        miniModeButton.setFont(new Font("Inter", Font.PLAIN, 11));
-        miniModeButton.setForeground(Color.WHITE);
-        miniModeButton.setBackground(new Color(60, 60, 60, 200));
-        miniModeButton.setBorderPainted(false);
-        miniModeButton.setFocusPainted(false);
-        miniModeButton.setOpaque(true);
+        miniModeButton = createSmallButton("极简", new Color(60, 60, 60, 200));
         miniModeButton.setToolTipText("切换到极简模式");
         miniModeButton.addActionListener(e -> {
             ScreenshotAssistantBootstrap.showMiniMode();
@@ -161,50 +150,27 @@ public class FloatingCaptureWindow extends JWindow {
         });
         searchRow.add(miniModeButton);
 
-        // 3. 搜索按钮
-        searchButton = new JButton("🔍 搜索");
-        searchButton.setFont(new Font("Inter", Font.PLAIN, 11));
-        searchButton.setForeground(Color.WHITE);
-        searchButton.setBackground(new Color(0, 102, 255, 230));
-        searchButton.setBorderPainted(false);
-        searchButton.setFocusPainted(false);
-        searchButton.setOpaque(true);
+        searchButton = createSmallButton("搜索", new Color(0, 102, 255, 230));
         searchButton.setToolTipText("使用当前识别文字搜索题库");
         searchButton.addActionListener(e -> searchByKeyword());
         searchRow.add(searchButton);
 
-        // 4. 复制文本按钮
-        copyTextButton = new JButton("📋 复制文本");
-        copyTextButton.setFont(new Font("Inter", Font.PLAIN, 11));
-        copyTextButton.setForeground(Color.WHITE);
-        copyTextButton.setBackground(new Color(60, 60, 60, 200));
-        copyTextButton.setBorderPainted(false);
-        copyTextButton.setFocusPainted(false);
-        copyTextButton.setOpaque(true);
+        copyTextButton = createSmallButton("复制文本", new Color(60, 60, 60, 200));
         copyTextButton.setToolTipText("复制识别文字");
         copyTextButton.addActionListener(e -> copyRecognizedText());
         searchRow.add(copyTextButton);
 
-        // 5. 关闭按钮
-        closeButton = new JButton("✖ 关闭");
-        closeButton.setFont(new Font("Inter", Font.PLAIN, 11));
-        closeButton.setForeground(Color.WHITE);
-        closeButton.setBackground(new Color(60, 60, 60, 200));
-        closeButton.setBorderPainted(false);
-        closeButton.setFocusPainted(false);
-        closeButton.setOpaque(true);
+        closeButton = createSmallButton("关闭", new Color(60, 60, 60, 200));
         closeButton.addActionListener(e -> setVisible(false));
         searchRow.add(closeButton);
 
-        // 将搜索行添加到结果面板北部
         resultPanel.add(searchRow, BorderLayout.NORTH);
 
-        // 结果文本区（放在 CENTER）
         resultTextArea = new JTextArea();
         resultTextArea.setEditable(false);
         resultTextArea.setLineWrap(true);
         resultTextArea.setWrapStyleWord(true);
-        resultTextArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        resultTextArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
         resultTextArea.setBackground(new Color(0, 0, 0, 150));
         resultTextArea.setForeground(Color.WHITE);
         resultTextArea.setOpaque(true);
@@ -221,77 +187,45 @@ public class FloatingCaptureWindow extends JWindow {
         JPanel bottomPanel = new JPanel();
         bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS));
         bottomPanel.setOpaque(false);
-        bottomPanel.setBorder(BorderFactory.createEmptyBorder(4, 8, 8, 8));
+        bottomPanel.setBorder(BorderFactory.createEmptyBorder(3, 6, 6, 6));
 
-        // 状态行
         JPanel statusRow = new JPanel(new BorderLayout());
         statusRow.setOpaque(false);
         statusLabel = new JLabel("就绪");
-        statusLabel.setFont(new Font("Inter", Font.PLAIN, 12));
+        statusLabel.setFont(new Font("Inter", Font.PLAIN, 11));
         statusLabel.setForeground(Color.WHITE);
         statusLabel.setBackground(new Color(0, 0, 0, 180));
         statusLabel.setOpaque(true);
         statusLabel.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
         statusRow.add(statusLabel, BorderLayout.WEST);
         bottomPanel.add(statusRow);
-        bottomPanel.add(Box.createVerticalStrut(4));
+        bottomPanel.add(Box.createVerticalStrut(3));
 
-        // 功能按钮行（全部保留，保持不变）
-        JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         buttonRow.setOpaque(false);
 
-        zoomOutButton = new JButton("🔍-");
+        zoomOutButton = createSmallButton("缩小", new Color(60, 60, 60, 200));
         zoomOutButton.setToolTipText("缩小浮窗（10%）");
-        zoomOutButton.setFont(new Font("Inter", Font.PLAIN, 12));
-        zoomOutButton.setForeground(Color.WHITE);
-        zoomOutButton.setBackground(new Color(60, 60, 60, 200));
-        zoomOutButton.setBorderPainted(false);
-        zoomOutButton.setFocusPainted(false);
-        zoomOutButton.setOpaque(true);
         zoomOutButton.addActionListener(e -> zoomWindow(0.9));
         buttonRow.add(zoomOutButton);
 
-        zoomInButton = new JButton("🔍+");
+        zoomInButton = createSmallButton("放大", new Color(60, 60, 60, 200));
         zoomInButton.setToolTipText("放大浮窗（10%）");
-        zoomInButton.setFont(new Font("Inter", Font.PLAIN, 12));
-        zoomInButton.setForeground(Color.WHITE);
-        zoomInButton.setBackground(new Color(60, 60, 60, 200));
-        zoomInButton.setBorderPainted(false);
-        zoomInButton.setFocusPainted(false);
-        zoomInButton.setOpaque(true);
         zoomInButton.addActionListener(e -> zoomWindow(1.1));
         buttonRow.add(zoomInButton);
 
-        selectAreaButton = new JButton("🎯 选区识别");
+        selectAreaButton = createSmallButton("选区识别", new Color(60, 60, 60, 200));
         selectAreaButton.setToolTipText("在屏幕上拖拽选择任意区域进行识别");
-        selectAreaButton.setFont(new Font("Inter", Font.PLAIN, 12));
-        selectAreaButton.setForeground(Color.WHITE);
-        selectAreaButton.setBackground(new Color(60, 60, 60, 200));
-        selectAreaButton.setBorderPainted(false);
-        selectAreaButton.setFocusPainted(false);
-        selectAreaButton.setOpaque(true);
         selectAreaButton.addActionListener(e -> startAreaSelection());
         buttonRow.add(selectAreaButton);
 
-        recaptureButton = new JButton("🔄 重新识别");
+        recaptureButton = createSmallButton("重新识别", new Color(60, 60, 60, 200));
         recaptureButton.setToolTipText("重新识别当前浮窗内文字区域的内容");
-        recaptureButton.setFont(new Font("Inter", Font.PLAIN, 12));
-        recaptureButton.setForeground(Color.WHITE);
-        recaptureButton.setBackground(new Color(60, 60, 60, 200));
-        recaptureButton.setBorderPainted(false);
-        recaptureButton.setFocusPainted(false);
-        recaptureButton.setOpaque(true);
         recaptureButton.addActionListener(e -> doFloatingCapture());
         buttonRow.add(recaptureButton);
 
-        saveScreenshotButton = new JButton("💾 保存截图");
-        saveScreenshotButton.setToolTipText("保存本次识别的屏幕截图");
-        saveScreenshotButton.setFont(new Font("Inter", Font.PLAIN, 12));
-        saveScreenshotButton.setForeground(Color.WHITE);
-        saveScreenshotButton.setBackground(new Color(60, 60, 60, 200));
-        saveScreenshotButton.setBorderPainted(false);
-        saveScreenshotButton.setFocusPainted(false);
-        saveScreenshotButton.setOpaque(true);
+        saveScreenshotButton = createSmallButton("保存截图", new Color(60, 60, 60, 200));
+        saveScreenshotButton.setToolTipText("将本次识别的屏幕截图保存到目录（默认复制到剪贴板）");
         saveScreenshotButton.addActionListener(e -> saveScreenshotImage());
         buttonRow.add(saveScreenshotButton);
 
@@ -299,6 +233,17 @@ public class FloatingCaptureWindow extends JWindow {
         mainPanel.add(bottomPanel, BorderLayout.SOUTH);
 
         setContentPane(mainPanel);
+    }
+
+    private JButton createSmallButton(String text, Color bg) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font("Inter", Font.PLAIN, 11));
+        btn.setForeground(Color.WHITE);
+        btn.setBackground(bg);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        btn.setOpaque(true);
+        return btn;
     }
 
     // ==================== 粘贴并自动搜索 ====================
@@ -312,11 +257,11 @@ public class FloatingCaptureWindow extends JWindow {
                 recognizedTextArea.setText(clipboardText);
                 searchByKeyword();
             } else {
-                statusLabel.setText("⚠️ 剪贴板为空");
+                statusLabel.setText("剪贴板为空");
             }
         } catch (Exception e) {
             log.warn("读取剪贴板失败", e);
-            statusLabel.setText("⚠️ 无法读取剪贴板");
+            statusLabel.setText("无法读取剪贴板");
         }
     }
 
@@ -325,10 +270,10 @@ public class FloatingCaptureWindow extends JWindow {
     private void searchByKeyword() {
         String keyword = recognizedTextArea.getText().trim();
         if (keyword.isEmpty()) {
-            statusLabel.setText("⚠️ 识别文字为空，请输入或粘贴内容");
+            statusLabel.setText("识别文字为空，请输入或粘贴内容");
             return;
         }
-        statusLabel.setText("⏳ 搜索中...");
+        statusLabel.setText("搜索中...");
         new SwingWorker<List<Map<String, String>>, Void>() {
             @Override
             protected List<Map<String, String>> doInBackground() throws Exception {
@@ -340,8 +285,8 @@ public class FloatingCaptureWindow extends JWindow {
                 try {
                     List<Map<String, String>> rows = get();
                     if (rows == null || rows.isEmpty()) {
-                        resultTextArea.setText("😞 未找到匹配的题目");
-                        statusLabel.setText("😞 无匹配");
+                        resultTextArea.setText("未找到匹配的题目");
+                        statusLabel.setText("无匹配");
                     } else {
                         StringBuilder sb = new StringBuilder();
                         if (!rows.isEmpty()) {
@@ -359,12 +304,12 @@ public class FloatingCaptureWindow extends JWindow {
                             sb.append("---\n");
                         }
                         resultTextArea.setText(sb.toString());
-                        statusLabel.setText("✅ 找到 " + rows.size() + " 条匹配");
+                        statusLabel.setText("找到 " + rows.size() + " 条匹配");
                     }
                 } catch (Exception e) {
                     log.error("搜索失败", e);
-                    resultTextArea.setText("❌ 搜索失败: " + e.getMessage());
-                    statusLabel.setText("❌ 搜索失败");
+                    resultTextArea.setText("搜索失败: " + e.getMessage());
+                    statusLabel.setText("搜索失败");
                 }
             }
         }.execute();
@@ -375,13 +320,13 @@ public class FloatingCaptureWindow extends JWindow {
     private void copyRecognizedText() {
         String text = recognizedTextArea.getText();
         if (text == null || text.trim().isEmpty()) {
-            statusLabel.setText("⚠️ 没有可复制的文字");
+            statusLabel.setText("没有可复制的文字");
             return;
         }
         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
                 new java.awt.datatransfer.StringSelection(text), null
         );
-        statusLabel.setText("✅ 已复制文字");
+        statusLabel.setText("已复制文字");
     }
 
     // ==================== 窗口缩放 ====================
@@ -481,7 +426,7 @@ public class FloatingCaptureWindow extends JWindow {
                 recognizedTextArea.repaint();
             });
 
-            statusLabel.setText("⏳ 截取文字区域...");
+            statusLabel.setText("截取文字区域...");
             log.debug("浮窗模式：截取识别文字区域（内缩5px）");
 
             Point locationOnScreen = recognizedTextArea.getLocationOnScreen();
@@ -499,7 +444,7 @@ public class FloatingCaptureWindow extends JWindow {
                 capturedImage = robot.createScreenCapture(rect);
             } catch (AWTException e) {
                 log.error("截图文字区域失败", e);
-                statusLabel.setText("❌ 截图失败");
+                statusLabel.setText("截图失败");
                 isCapturing.set(false);
                 return;
             }
@@ -601,7 +546,7 @@ public class FloatingCaptureWindow extends JWindow {
                 recognizedTextArea.repaint();
             });
 
-            statusLabel.setText("⏳ 截取选区...");
+            statusLabel.setText("截取选区...");
             log.debug("选区模式截图: {}", rect);
 
             try {
@@ -610,7 +555,7 @@ public class FloatingCaptureWindow extends JWindow {
                 performRecognition(capturedImage, "选区");
             } catch (AWTException e) {
                 log.error("选区截图失败", e);
-                statusLabel.setText("❌ 选区截图失败");
+                statusLabel.setText("选区截图失败");
                 isCapturing.set(false);
             }
         }
@@ -620,12 +565,12 @@ public class FloatingCaptureWindow extends JWindow {
 
     private void performRecognition(BufferedImage image, String sourceDesc) {
         if (image == null) {
-            statusLabel.setText("❌ 无效图像");
+            statusLabel.setText("无效图像");
             isCapturing.set(false);
             return;
         }
 
-        statusLabel.setText("⏳ 识别中 (" + sourceDesc + ")...");
+        statusLabel.setText("识别中 (" + sourceDesc + ")...");
         new SwingWorker<ScreenshotResult, Void>() {
             @Override
             protected ScreenshotResult doInBackground() throws Exception {
@@ -647,14 +592,14 @@ public class FloatingCaptureWindow extends JWindow {
                     updateResultText(result);
 
                     if (result.isFound()) {
-                        statusLabel.setText("✅ 找到匹配 (" + sourceDesc + ")");
+                        statusLabel.setText("找到匹配 (" + sourceDesc + ")");
                     } else {
-                        statusLabel.setText("😞 未匹配 (" + sourceDesc + ")");
+                        statusLabel.setText("未匹配 (" + sourceDesc + ")");
                     }
                 } catch (Exception e) {
                     log.error("识别异常", e);
-                    recognizedTextArea.setText("❌ 识别失败: " + e.getMessage());
-                    statusLabel.setText("❌ 识别失败");
+                    recognizedTextArea.setText("识别失败: " + e.getMessage());
+                    statusLabel.setText("识别失败");
                 } finally {
                     isCapturing.set(false);
                 }
@@ -666,7 +611,7 @@ public class FloatingCaptureWindow extends JWindow {
 
     private void updateResultText(ScreenshotResult result) {
         if (!result.isFound() || result.getMatchedRows() == null || result.getMatchedRows().isEmpty()) {
-            resultTextArea.setText("😞 未找到匹配的题目");
+            resultTextArea.setText("未找到匹配的题目");
             return;
         }
         List<String> columns = result.getColumns();
@@ -694,23 +639,23 @@ public class FloatingCaptureWindow extends JWindow {
 
     private void saveScreenshotImage() {
         if (lastResult == null || lastResult.getImage() == null) {
-            statusLabel.setText("⚠️ 没有可保存的截图");
+            statusLabel.setText("没有可保存的截图");
             return;
         }
         try {
             File saveDir = screenshotService.getSaveDirectory();
             if (!saveDir.exists() && !saveDir.mkdirs()) {
-                statusLabel.setText("❌ 无法创建截图目录");
+                statusLabel.setText("无法创建截图目录");
                 return;
             }
             String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
             File outputFile = new File(saveDir, "screenshot_" + timestamp + ".png");
             BufferedImage image = lastResult.getImage();
             ImageIO.write(image, "png", outputFile);
-            statusLabel.setText("✅ 截图已保存: " + outputFile.getName());
+            statusLabel.setText("截图已保存: " + outputFile.getName());
             log.info("截图保存成功: {}", outputFile.getAbsolutePath());
         } catch (Exception e) {
-            statusLabel.setText("❌ 保存截图失败: " + e.getMessage());
+            statusLabel.setText("保存截图失败: " + e.getMessage());
             log.error("保存截图失败", e);
         }
     }

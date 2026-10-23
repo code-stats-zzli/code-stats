@@ -1,12 +1,22 @@
+// 文件: src/main/java/com/omni/framework/spring/mvc/DispatcherServlet.java
 package com.omni.framework.spring.mvc;
 
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
-import com.omni.framework.spring.annotation.RequestMapping;
-import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.spring.beans.factory.ConfigurableListableBeanFactory;
 import com.omni.framework.spring.context.AbstractApplicationContext;
 import com.omni.framework.spring.context.SpringContextHolder;
+import com.omni.framework.spring.mvc.argument.ArgumentResolverComposite;
+import com.omni.framework.spring.mvc.argument.ArgumentResolverFactory;
+import com.omni.framework.spring.mvc.exception.DefaultHandlerExceptionResolver;
+import com.omni.framework.spring.mvc.handler.DefaultHandlerMethodInvoker;
+import com.omni.framework.spring.mvc.mapping.RequestMappingHandlerMapping;
+import com.omni.framework.spring.mvc.returnvalue.ModelAndViewReturnValueHandler;
+import com.omni.framework.spring.mvc.returnvalue.ResponseBodyReturnValueHandler;
+import com.omni.framework.spring.mvc.returnvalue.ReturnValueHandlerComposite;
+import com.omni.framework.spring.mvc.returnvalue.VoidReturnValueHandler;
+import com.omni.framework.spring.mvc.support.HandlerExecutionChain;
+import com.omni.framework.spring.mvc.support.HandlerMethod;
 import com.omni.framework.tomcat.servlet.HttpServlet;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
@@ -20,16 +30,13 @@ import java.net.SocketException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class DispatcherServlet extends HttpServlet {
     private static final Logger log = LoggerFactory.getLogger(DispatcherServlet.class);
-    private final List<HandlerMapping> handlerMappings = new ArrayList<>();
 
-    /**
-     * 敏感参数名（不打印明文值）
-     */
+    private RequestMappingHandlerMapping handlerMapping;
+    private DefaultHandlerMethodInvoker handlerMethodInvoker;
+
     private static final Set<String> SENSITIVE_PARAM_NAMES = new HashSet<>(Arrays.asList(
             "password", "passwd", "pwd", "secret", "token",
             "accessToken", "apiKey", "apikey", "key", "credential"
@@ -41,48 +48,24 @@ public class DispatcherServlet extends HttpServlet {
 
         AbstractApplicationContext ctx = SpringContextHolder.getApplicationContext();
         ConfigurableListableBeanFactory beanFactory = ctx.getBeanFactory();
-        Map<String, Object> controllers = beanFactory.getBeansOfType(Object.class);
 
-        for (Object controller : controllers.values()) {
-            Class<?> clazz = controller.getClass();
-            String basePath = "";
-            if (clazz.isAnnotationPresent(RequestMapping.class)) {
-                basePath = clazz.getAnnotation(RequestMapping.class).value();
-                if (!basePath.startsWith("/")) basePath = "/" + basePath;
-            }
+        this.handlerMapping = new RequestMappingHandlerMapping();
+        this.handlerMapping.init(beanFactory);
 
-            for (Method method : clazz.getDeclaredMethods()) {
-                if (method.isAnnotationPresent(RequestMapping.class)) {
-                    String methodPath = method.getAnnotation(RequestMapping.class).value();
-                    String fullPath = (basePath + methodPath).replaceAll("//", "/");
-                    if (!fullPath.startsWith("/")) fullPath = "/" + fullPath;
+        ArgumentResolverComposite argumentResolverComposite = ArgumentResolverFactory.createDefault();
 
-                    List<String> varNames = new ArrayList<>();
-                    String regex = pathToRegex(fullPath, varNames);
-                    boolean isResponseBody = method.isAnnotationPresent(ResponseBody.class);
+        ReturnValueHandlerComposite returnValueHandlerComposite = new ReturnValueHandlerComposite()
+                .add(new ResponseBodyReturnValueHandler())
+                .add(new ModelAndViewReturnValueHandler())
+                .add(new VoidReturnValueHandler());
 
-                    handlerMappings.add(new HandlerMapping(regex, varNames, controller, method, isResponseBody));
-                    log.debug("Mapped {} -> {}", fullPath, method);
-                }
-            }
-        }
-        log.info("DispatcherServlet 初始化完成，共映射 {} 个处理器", handlerMappings.size());
-    }
+        this.handlerMethodInvoker = new DefaultHandlerMethodInvoker(
+                argumentResolverComposite,
+                returnValueHandlerComposite,
+                new DefaultHandlerExceptionResolver()
+        );
 
-    private String pathToRegex(String path, List<String> varNames) {
-        StringBuilder regex = new StringBuilder("^");
-        String[] segments = path.split("/");
-        for (String seg : segments) {
-            if (seg.isEmpty()) continue;
-            if (seg.startsWith("{") && seg.endsWith("}")) {
-                varNames.add(seg.substring(1, seg.length() - 1));
-                regex.append("/([^/]+)");
-            } else {
-                regex.append("/").append(seg);
-            }
-        }
-        regex.append("/?$");
-        return regex.toString();
+        log.info("DispatcherServlet 初始化完成");
     }
 
     @Override
@@ -101,13 +84,10 @@ public class DispatcherServlet extends HttpServlet {
         String uri = req.getUri();
         String query = req.getQueryString();
 
-        // ====== 1. 打印完整请求信息（方法、URI、Query、Headers、Body、参数） ======
         logRequest(req, method, uri, query);
 
-        // ====== 埋点：记录请求开始 ======
         long threadId = Thread.currentThread().getId();
         TraceContextHolder.putContext(threadId, uri);
-        // ===============================
 
         RequestContextHolder.setRequest(req);
         ResponseContextHolder.setResponse(res);
@@ -115,46 +95,27 @@ public class DispatcherServlet extends HttpServlet {
         Throwable requestError = null;
 
         try {
-            for (HandlerMapping hm : handlerMappings) {
-                Pattern pattern = Pattern.compile(hm.regex);
-                Matcher matcher = pattern.matcher(uri);
-                if (matcher.matches()) {
-                    Map<String, String> pathVars = new HashMap<>();
-                    for (int i = 0; i < hm.varNames.size(); i++) {
-                        pathVars.put(hm.varNames.get(i), matcher.group(i + 1));
-                    }
+            HandlerExecutionChain chain = handlerMapping.getHandler(uri);
+            if (chain != null) {
+                HandlerMethod handlerMethod = chain.getHandlerMethod();
+                Map<String, String> pathVars = chain.getPathVariables();
 
-                    log.info("匹配处理器: {}.{}", hm.controller.getClass().getSimpleName(), hm.method.getName());
-                    if (!pathVars.isEmpty()) {
-                        log.info(" 路径参数: {}", pathVars);
-                    }
-
-                    Object[] args = ParamBinder.resolveParameters(hm.method, req, res, pathVars);
-                    log.info(" 绑定参数: {}", formatArgs(hm.method, args));
-
-                    Object result = hm.method.invoke(hm.controller, args);
-
-                    if (hm.isResponseBody) {
-                        String outStr;
-                        if (result instanceof String) {
-                            outStr = (String) result;
-                        } else {
-                            outStr = toJson(result);
-                        }
-                        log.info(" 响应体预览: {}", preview(outStr));
-                        res.setContentType("application/json; charset=utf-8");
-                        res.write(outStr);
-                    } else {
-                        if (result != null) {
-                            log.info("📤 视图响应: {}", result);
-                            res.write(result.toString());
-                        }
-                    }
-                    res.send();
-                    log.info(" 请求处理完成: {} {} 耗时: {}ms",
-                            method, uri, System.currentTimeMillis() - startTime);
-                    return;
+                log.info("匹配处理器: {}.{}",
+                        handlerMethod.getController().getClass().getSimpleName(),
+                        handlerMethod.getMethod().getName());
+                if (!pathVars.isEmpty()) {
+                    log.info(" 路径参数: {}", pathVars);
                 }
+
+                handlerMethodInvoker.invoke(handlerMethod, req, res, pathVars);
+
+                if (!res.isCommitted()) {
+                    res.send();
+                }
+
+                log.info(" 请求处理完成: {} {} 耗时: {}ms",
+                        method, uri, System.currentTimeMillis() - startTime);
+                return;
             }
 
             if (serveStaticFile(uri, res)) {
@@ -170,30 +131,32 @@ public class DispatcherServlet extends HttpServlet {
 
         } catch (Throwable e) {
             requestError = e;
-            // 专门处理客户端过早断开连接
             if (e instanceof SocketException) {
                 String msg = e.getMessage();
-                if (msg != null && (msg.contains("软件中止") || msg.contains("Connection reset") || msg.contains("Broken pipe"))) {
-                    log.debug("客户端已断开连接，请求详情: {} {}?{}", method, uri, query != null ? query : "");
+                if (msg != null && (msg.contains("软件中止")
+                        || msg.contains("Connection reset")
+                        || msg.contains("Broken pipe"))) {
+                    log.debug("客户端已断开连接，请求详情: {} {}?{}",
+                            method, uri, query != null ? query : "");
                     return;
                 }
             }
-            log.error(" 处理请求失败: {} {} 耗时: {}ms", method, uri,
-                    System.currentTimeMillis() - startTime, e);
+
+            log.error(" 处理请求失败: {} {} 耗时: {}ms",
+                    method, uri, System.currentTimeMillis() - startTime, e);
+
             if (!res.isCommitted()) {
                 try {
                     res.setStatus(500, "Internal Server Error");
-                    res.write("<h1>500 Internal Server Error</h1><pre>" + e.toString() + "</pre>");
+                    res.write("<h1>500 Internal Server Error</h1><pre>" + e + "</pre>");
                     res.send();
                 } catch (Exception ex) {
                     log.error("发送错误响应失败", ex);
                 }
             }
         } finally {
-            // ====== 埋点：记录请求结束 ======
             String errorMsg = requestError != null ? requestError.getMessage() : null;
             TraceContextHolder.updateContext(threadId, errorMsg, null);
-            // ===============================
 
             if (multipartResolver != null) {
                 multipartResolver.close();
@@ -203,17 +166,12 @@ public class DispatcherServlet extends HttpServlet {
         }
     }
 
-    /**
-     * 打印完整请求信息：方法、URI、Query、Headers、Body、参数、文件上传字段
-     */
     private void logRequest(HttpServletRequest req, String method, String uri, String query) {
         log.info("==========  收到请求 ==========");
         log.info("请求方法: {}", method);
         log.info("请求URI: {}", uri);
         log.info("查询字符串: {}", query != null ? query : "(无)");
 
-
-        // Query / Form 参数
         Map<String, String> params = req.getParameters();
         if (params != null && !params.isEmpty()) {
             Map<String, String> displayParams = new LinkedHashMap<>();
@@ -232,7 +190,6 @@ public class DispatcherServlet extends HttpServlet {
             log.info("查询参数: {}", displayParams);
         }
 
-        // Body
         String body = req.getBody();
         if (body != null && !body.isEmpty()) {
             String bodyPreview = body.length() > 2000
@@ -241,7 +198,6 @@ public class DispatcherServlet extends HttpServlet {
             log.info("请求Body: {}", bodyPreview);
         }
 
-        // 文件上传字段
         String contentType = req.getContentType();
         if (contentType != null && contentType.startsWith("multipart/form-data")) {
             MultipartResolver resolver = req.getMultipartResolver();
@@ -269,9 +225,6 @@ public class DispatcherServlet extends HttpServlet {
         }
     }
 
-    /**
-     * 格式化方法参数，敏感字段脱敏
-     */
     private String formatArgs(Method method, Object[] args) {
         if (args == null || args.length == 0) return "[]";
         Parameter[] parameters = method.getParameters();
@@ -318,7 +271,6 @@ public class DispatcherServlet extends HttpServlet {
         return text.length() > 500 ? text.substring(0, 500) + "...(截断)" : text;
     }
 
-    // ---------- 原有辅助方法（保持不变） ----------
     private String toJson(Object obj) {
         if (obj == null) return "null";
         if (obj instanceof String) return "\"" + escapeJson((String) obj) + "\"";
@@ -352,7 +304,8 @@ public class DispatcherServlet extends HttpServlet {
 
     private String escapeJson(String s) {
         if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
+        return s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r");
     }
 
     private boolean serveStaticFile(String uri, HttpServletResponse res) {
@@ -385,21 +338,5 @@ public class DispatcherServlet extends HttpServlet {
         if (uri.endsWith(".png")) return "image/png";
         if (uri.endsWith(".jpg") || uri.endsWith(".jpeg")) return "image/jpeg";
         return "application/octet-stream";
-    }
-
-    private static class HandlerMapping {
-        final String regex;
-        final List<String> varNames;
-        final Object controller;
-        final Method method;
-        final boolean isResponseBody;
-
-        HandlerMapping(String regex, List<String> varNames, Object controller, Method method, boolean isResponseBody) {
-            this.regex = regex;
-            this.varNames = varNames;
-            this.controller = controller;
-            this.method = method;
-            this.isResponseBody = isResponseBody;
-        }
     }
 }

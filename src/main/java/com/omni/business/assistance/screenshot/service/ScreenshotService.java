@@ -11,6 +11,7 @@ import com.omni.framework.spring.context.SpringContextHolder;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.image.BufferedImage;
@@ -101,12 +102,7 @@ public class ScreenshotService {
     }
 
     /**
-     * ★ 新增：将 BufferedImage 复制到系统剪贴板（作为图片数据）。
-     *
-     * <p>截图默认走这里，而不是落盘。用户按下 Ctrl+V 即可粘贴到
-     * 微信 / Word / 画图 / 任何接受图片的应用。
-     *
-     * @return true 表示复制成功
+     * 将 BufferedImage 复制到系统剪贴板（作为图片数据）。
      */
     public boolean copyToClipboard(BufferedImage image) {
         if (image == null) {
@@ -125,16 +121,38 @@ public class ScreenshotService {
     }
 
     /**
-     * 可选：同时复制到剪贴板并保存到文件（供未来扩展，当前流程不默认调用）。
+     * ★ 新增：OCR 识别图片中的文字并写入系统剪贴板（文本形式）。
+     * 用于「文字识别」功能：选区截图后直接识别，用户 Ctrl+V 即可粘贴文字。
+     *
+     * @param image 选区截图
+     * @return true 表示识别到文字且已成功复制到剪贴板
      */
+    public boolean ocrToClipboard(BufferedImage image) {
+        if (image == null) {
+            log.warn("ocrToClipboard: image 为 null");
+            return false;
+        }
+        try {
+            String text = ocrService.recognize(image);
+            if (text == null || text.trim().isEmpty()) {
+                log.info("OCR 未识别到文字");
+                return false;
+            }
+            Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new StringSelection(text), null);
+            log.info("OCR 文字已复制到剪贴板，共 {} 字符", text.length());
+            return true;
+        } catch (Exception e) {
+            log.error("OCR 识别失败", e);
+            return false;
+        }
+    }
+
     public File copyAndSave(BufferedImage image, String prefix) throws Exception {
         copyToClipboard(image);
         return saveImage(image, prefix);
     }
 
-    /**
-     * Transferable 适配器：把 BufferedImage 包装成剪贴板可接收的图片。
-     */
     private static class ImageSelection implements Transferable {
         private final Image image;
         ImageSelection(Image image) { this.image = image; }

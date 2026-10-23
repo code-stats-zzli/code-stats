@@ -63,7 +63,7 @@ public class ScreenshotAssistantBootstrap {
 
             screenshotService = new ScreenshotService();
             toolbar = new FloatingScreenshotToolbar(screenshotService);
-            // ★ 改动1：默认不显示工具栏
+            // ★ 默认不显示工具栏
             toolbar.setVisible(false);
 
             if (SystemTray.isSupported()) {
@@ -71,8 +71,6 @@ public class ScreenshotAssistantBootstrap {
                 Image icon = createTrayIconImage();
                 trayIcon = new TrayIcon(icon, "截图助手");
                 trayIcon.setImageAutoSize(true);
-
-                // 不调用 setPopupMenu（原生菜单中文方块），改为监听右键 + Swing JPopupMenu
 
                 // 左键：切换工具栏（Windows 上通常双击触发 ActionListener）
                 trayIcon.addActionListener(e -> toolbar.setVisible(!toolbar.isVisible()));
@@ -93,7 +91,7 @@ public class ScreenshotAssistantBootstrap {
 
                 try {
                     tray.add(trayIcon);
-                    // ★ 改动2：启动时弹一次托盘提示，告诉用户快捷键
+                    // ★ 启动时弹一次托盘提示，告诉用户快捷键
                     trayIcon.displayMessage(
                             "截图助手已启动",
                             "按 Ctrl+Shift+S 显示工具栏，或双击托盘图标",
@@ -133,7 +131,8 @@ public class ScreenshotAssistantBootstrap {
         addMenuItem(trayMenu, "显示/隐藏工具栏", itemFont, () -> toolbar.setVisible(!toolbar.isVisible()));
         trayMenu.addSeparator();
         addMenuItem(trayMenu, "全屏截图", itemFont, () -> toolbar.doFullScreenCapture());
-        addMenuItem(trayMenu, "实时全屏", itemFont, () -> toolbar.startRealtimeCapture());
+        // ★ 「实时全屏」已被替换为「文字识别」
+        addMenuItem(trayMenu, "文字识别", itemFont, () -> toolbar.doOcrCapture());
         addMenuItem(trayMenu, "区域截图", itemFont, () -> toolbar.doAreaCapture());
         trayMenu.addSeparator();
         addMenuItem(trayMenu, "极简模式", itemFont, ScreenshotAssistantBootstrap::showMiniMode);

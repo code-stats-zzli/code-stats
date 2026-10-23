@@ -5,21 +5,44 @@
     const projectContent = document.getElementById('projectContent');
     let currentModuleId = null;
 
-    // 需要高亮的技术关键词（应与知识库中的 keywords 保持一致）
+    // 需要高亮的技术关键词（覆盖所有模块）
     const TECH_KEYWORDS = [
+        // 框架核心
         'IoC', 'DI', '依赖注入', '控制反转', '@Autowired', '@Component', '@Service',
         '@Controller', '@Repository', '@Mapper', '@Select', 'Mapper代理', '动态代理',
         'Connector', 'Pipeline', 'Valve', '责任链', '类加载器', 'WebappClassLoader',
         'DispatcherServlet', 'HandlerMapping', '视图解析', 'ModelAndView', 'ResponseBody',
         'JdbcTemplate', 'RowMapper', '连接池', 'SimpleDataSource', 'maxActive', '连接验证', 'Semaphore',
-        '代码分析', 'Pipeline模式', '多线程分析', 'GitIgnore', '复杂度计算', '合并文件',
-        '目录管理', '文件上传', '路径安全校验', 'ZIP打包', '根类型', '本地目录', '服务器目录',
-        'Ollama', 'DeepSeek', '自定义API', '项目助手', 'ngram', '知识库', 'CharNgramLM',
-        'DataModel', 'DatabaseMetadataService', '元数据', 'DatabaseMetaData',
         'PatternLayout', '日志级别', 'RollingFileAppender', 'AsyncAppender', 'LevelRangeFilter',
         '缓存', 'Caffeine', 'TTL', 'CacheManager', 'LocalCache',
+        '表达式引擎', 'Lexer', 'Parser', 'Evaluator', 'FunctionResolver', 'VariableResolver',
         '启动流程', 'Bootstrap', 'Catalina', 'AnnotationConfigApplicationContext', 'SpringApplication',
-        'Playwright', 'Stealth', '反爬虫', 'SimpleVue', 'V4J', '响应式', 'Watcher', 'Dep'
+        // 代码分析
+        '代码分析', 'Pipeline模式', '多线程分析', 'GitIgnore', '复杂度计算', '合并文件',
+        '依赖图', '循环依赖', 'Tarjan', '方法调用链', '调用树', 'PlantUML', 'SimpleJavaLexer',
+        // 目录管理
+        '目录管理', '文件上传', '路径安全校验', 'ZIP打包', '根类型', '本地目录', '服务器目录',
+        // Agent
+        'Ollama', 'DeepSeek', '自定义API', '项目助手', 'ngram', '知识库', 'CharNgramLM',
+        // 数据库
+        'DataModel', 'DatabaseMetadataService', '元数据', 'DatabaseMetaData',
+        '数据源管理', '驱动管理', '动态数据源', 'SQL查询', 'ER视图',
+        // 3D
+        'Three.js', 'OrbitControls', 'CSS2DRenderer', 'ECharts GL', 'SceneEngine',
+        '3D依赖图', '3D柱状图', '调用链拓扑', '实时监控', 'JVM监控', '系统监控',
+        // 脚本引擎
+        '脚本引擎', 'ScriptExecutor', 'JavaCompiler', 'PythonExecutor', 'CExecutor', 'CppExecutor',
+        // 自动化测试
+        '自动化测试', 'Pipeline', 'StepExecutor', 'ActionHandler', 'AssertionHandler',
+        'VariableResolver', '用例管理', '执行中心', '报告中心',
+        // 页面搭建
+        '页面搭建', 'CanvasManager', 'BaseElement', 'ElementRegistry', '拖拽搭建',
+        // 题库
+        '题库分析', 'Excel合并', 'OCR', 'Tesseract', 'html2canvas',
+        // 爬虫
+        '网页爬虫', 'CSDN', 'Playwright', 'Stealth', '反爬虫',
+        // 其他
+        'SimpleVue', 'V4J', '响应式', 'Watcher', 'Dep', '组件化'
     ];
 
     function escapeRegex(str) {
@@ -75,7 +98,6 @@
             const kw = this.innerText.trim();
             question = `什么是 ${kw}？它在 CodeStats 中如何工作？`;
         }
-        // 向父窗口发送消息，由父窗口的独立项目助手处理
         if (window.parent && window.parent !== window) {
             window.parent.postMessage({
                 type: 'askProjectAssistant',

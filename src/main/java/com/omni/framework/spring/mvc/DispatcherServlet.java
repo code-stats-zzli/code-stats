@@ -126,7 +126,7 @@ public class DispatcherServlet extends HttpServlet {
 
                     log.info("匹配处理器: {}.{}", hm.controller.getClass().getSimpleName(), hm.method.getName());
                     if (!pathVars.isEmpty()) {
-                        log.info("🛣️ 路径参数: {}", pathVars);
+                        log.info(" 路径参数: {}", pathVars);
                     }
 
                     Object[] args = ParamBinder.resolveParameters(hm.method, req, res, pathVars);

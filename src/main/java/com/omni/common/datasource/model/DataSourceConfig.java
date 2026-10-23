@@ -20,8 +20,25 @@ public class DataSourceConfig {
     private Date createTime;
     private Date updateTime;
 
-    // 移除 driverCode 字段
-
+    /**
+     * 若 id 为空则生成一个 UUID；若已有 id 则保持不变。
+     *
+     * @return true  —— 本次生成了新 id（说明原来为空，属于「新增」场景）；
+     *         false —— id 本来就有（属于「更新」场景）。
+     *
+     * ⚠️ 重要提醒：
+     *   调用本方法后 this.id 一定非空，因此业务层**不能**再用
+     *   `if (id == null || id.isEmpty())` 来判断新增/更新，
+     *   必须使用本方法的返回值。
+     *
+     *   正确用法：
+     *     boolean isNew = config.generateIdIfNull();
+     *     if (isNew) { INSERT } else { UPDATE }
+     *
+     *   错误用法（会导致新增永远走 UPDATE）：
+     *     config.generateIdIfNull();
+     *     if (config.getId() == null) { INSERT } else { UPDATE }
+     */
     public boolean generateIdIfNull() {
         if (id == null || id.trim().isEmpty()) {
             this.id = UUID.randomUUID().toString().replace("-", "");
@@ -30,7 +47,8 @@ public class DataSourceConfig {
         return false;
     }
 
-    // getters and setters (无 driverCode)
+    // ==================== getters / setters ====================
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getName() { return name; }

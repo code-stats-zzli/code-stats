@@ -27,9 +27,9 @@ public class ScreenshotAssistantBootstrap {
     private static FloatingScreenshotToolbar toolbar;
     private static TrayIcon trayIcon;
 
-    /** ★ Swing 自绘托盘菜单（替代 AWT 原生 PopupMenu） */
+    /** Swing 自绘托盘菜单（替代 AWT 原生 PopupMenu，避免中文方块） */
     private static JPopupMenu trayMenu;
-    /** ★ 菜单锚点窗口：1×1 透明窗口，定位到鼠标位置，供 JPopupMenu.show() 使用 */
+    /** 菜单锚点窗口：1×1 透明窗口 */
     private static JWindow menuAnchor;
 
     public static void start() {
@@ -38,7 +38,7 @@ public class ScreenshotAssistantBootstrap {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             } catch (Exception ignored) {}
 
-            // ============ 全局字体：按平台探测，禁止硬编码"微软雅黑" ============
+            // ============ 全局字体 ============
             Font defaultFont = FontUtil.getUIFont(Font.PLAIN, 12);
             log.info("截图助手 UI 字体: {}", defaultFont.getFamily());
 
@@ -63,7 +63,8 @@ public class ScreenshotAssistantBootstrap {
 
             screenshotService = new ScreenshotService();
             toolbar = new FloatingScreenshotToolbar(screenshotService);
-            toolbar.setVisible(true);
+            // ★ 改动1：默认不显示工具栏
+            toolbar.setVisible(false);
 
             if (SystemTray.isSupported()) {
                 SystemTray tray = SystemTray.getSystemTray();
@@ -71,23 +72,17 @@ public class ScreenshotAssistantBootstrap {
                 trayIcon = new TrayIcon(icon, "截图助手");
                 trayIcon.setImageAutoSize(true);
 
-                // ★★★ 关键：不调用 trayIcon.setPopupMenu(...) ★★★
-                //   Windows 下 setPopupMenu 会让系统接管右键事件，MouseListener 收不到；
-                //   且原生菜单字体不可控，中文变方块。
-                //   改为手动监听右键 + Swing JPopupMenu 自绘。
+                // 不调用 setPopupMenu（原生菜单中文方块），改为监听右键 + Swing JPopupMenu
 
-                // 左键：切换工具栏（Windows 上通常双击触发）
+                // 左键：切换工具栏（Windows 上通常双击触发 ActionListener）
                 trayIcon.addActionListener(e -> toolbar.setVisible(!toolbar.isVisible()));
 
                 // 右键：弹出 Swing 菜单
                 trayIcon.addMouseListener(new MouseAdapter() {
                     @Override
                     public void mousePressed(MouseEvent e) {
-                        if (e.isPopupTrigger()) {
-                            showTrayMenu();
-                        }
+                        if (e.isPopupTrigger()) showTrayMenu();
                     }
-
                     @Override
                     public void mouseReleased(MouseEvent e) {
                         if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
@@ -98,6 +93,12 @@ public class ScreenshotAssistantBootstrap {
 
                 try {
                     tray.add(trayIcon);
+                    // ★ 改动2：启动时弹一次托盘提示，告诉用户快捷键
+                    trayIcon.displayMessage(
+                            "截图助手已启动",
+                            "按 Ctrl+Shift+S 显示工具栏，或双击托盘图标",
+                            TrayIcon.MessageType.INFO
+                    );
                 } catch (AWTException e) {
                     log.error("托盘添加失败", e);
                 }
@@ -125,9 +126,6 @@ public class ScreenshotAssistantBootstrap {
 
     // ==================== 托盘菜单（Swing 自绘） ====================
 
-    /**
-     * 构建 Swing 托盘菜单。字体全部由 {@link FontUtil} 派生，Java2D 渲染，中文完全可控。
-     */
     private static void initTrayMenu() {
         trayMenu = new JPopupMenu();
         Font itemFont = FontUtil.deriveUIFont("MenuItem.font", Font.PLAIN, 12);
@@ -145,7 +143,6 @@ public class ScreenshotAssistantBootstrap {
         trayMenu.addSeparator();
         addMenuItem(trayMenu, "退出", itemFont, () -> System.exit(0));
 
-        // 菜单关闭后清理锚点窗口
         trayMenu.addPopupMenuListener(new PopupMenuListener() {
             @Override public void popupMenuWillBecomeVisible(PopupMenuEvent e) {}
             @Override public void popupMenuWillBecomeInvisible(PopupMenuEvent e) { disposeAnchor(); }
@@ -160,40 +157,19 @@ public class ScreenshotAssistantBootstrap {
         menu.add(item);
     }
 
-    /**
-     * 在鼠标当前位置弹出 Swing 菜单。
-     *
-     * <p>为什么要用一个 1×1 的 {@code JWindow} 作为锚点：
-     * <ul>
-     *   <li>{@code JPopupMenu.show(Component, int, int)} 的 invoker 必须是已经 visible 的组件；</li>
-     *   <li>{@code TrayIcon} 本身不是 {@code Component}，无法直接作为 invoker；</li>
-     *   <li>用一个定位到鼠标位置的透明 1×1 {@code JWindow} 作为锚点，菜单就会出现在光标处；</li>
-     *   <li>菜单关闭时通过 {@code PopupMenuListener} 销毁锚点，避免残留窗口。</li>
-     * </ul>
-     */
     private static void showTrayMenu() {
-        if (trayMenu == null) {
-            initTrayMenu();
-        }
-        // 锚点窗口可能已被 dispose，需要重建
+        if (trayMenu == null) initTrayMenu();
         if (menuAnchor == null || !menuAnchor.isDisplayable()) {
             menuAnchor = new JWindow();
             menuAnchor.setSize(1, 1);
-            // 完全透明，避免视觉干扰（JDK 21 支持 per-window translucency）
             try {
                 menuAnchor.setBackground(new Color(0, 0, 0, 0));
-                //if (menuAnchor.isTranslucent()) {
-                    menuAnchor.setOpacity(0f);
-               // }
+                menuAnchor.setOpacity(0f);
             } catch (Exception ignored) {}
         }
-        // TrayIcon 的 MouseEvent 坐标不可靠，用 MouseInfo 取屏幕绝对坐标
         Point p = MouseInfo.getPointerInfo().getLocation();
         menuAnchor.setLocation(p);
         menuAnchor.setVisible(true);
-
-        // 菜单左上角出现在光标处；若希望菜单出现在光标左上方，可改为
-        // trayMenu.show(menuAnchor, -trayMenu.getPreferredSize().width, -trayMenu.getPreferredSize().height);
         trayMenu.show(menuAnchor, 0, 0);
     }
 

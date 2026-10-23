@@ -12,15 +12,40 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 
+/**
+ * 截图助手浮动工具栏（垂直布局，默认隐藏）。
+ *
+ * <p>设计要点：
+ * <ul>
+ *   <li>垂直排列：宽 110，高 200，右下角，占用屏幕面积小、功能一目了然。</li>
+ *   <li>语义化配色：全屏=蓝、实时=翠绿、区域=琥珀、隐藏=石板灰。</li>
+ *   <li>hover 反馈：鼠标悬停按钮变亮，光标变手型。</li>
+ *   <li>默认隐藏：由 {@link ScreenshotAssistantBootstrap} 控制，需通过
+ *       {@code Ctrl+Shift+S} 或托盘唤起。</li>
+ *   <li>拖拽：仅标题栏可拖拽，避免与按钮点击冲突。用户拖拽后位置记忆。</li>
+ *   <li>截图行为：全部复制到剪贴板，不再落盘。</li>
+ * </ul>
+ */
 public class FloatingScreenshotToolbar extends JWindow {
     private static final Logger log = LoggerFactory.getLogger(FloatingScreenshotToolbar.class);
     private final ScreenshotService screenshotService;
     private JPanel contentPanel;
+    private JPanel titleBar;
     private Point dragStart = null;
+    /** 用户是否手动拖拽过（拖拽后不再重置位置） */
+    private boolean hasUserMoved = false;
 
-    /** ★ 尺寸优化：360×60 → 320×48 */
-    private static final int DEFAULT_WIDTH = 320;
-    private static final int DEFAULT_HEIGHT = 48;
+    /** 垂直工具栏尺寸 */
+    private static final int DEFAULT_WIDTH = 110;
+    private static final int DEFAULT_HEIGHT = 200;
+
+    // 语义化配色
+    private static final Color BG_COLOR         = new Color(20, 28, 45, 235);
+    private static final Color BORDER_COLOR     = new Color(0, 102, 255, 200);
+    private static final Color BTN_FULL_SCREEN  = new Color(0, 102, 255);     // 蓝
+    private static final Color BTN_REALTIME     = new Color(16, 185, 129);    // 翠绿
+    private static final Color BTN_AREA         = new Color(245, 158, 11);    // 琥珀
+    private static final Color BTN_HIDE         = new Color(100, 116, 139);   // 石板灰
 
     public FloatingScreenshotToolbar(ScreenshotService service) {
         this.screenshotService = service;
@@ -31,64 +56,88 @@ public class FloatingScreenshotToolbar extends JWindow {
         setBackground(new Color(0, 0, 0, 0));
     }
 
+    // ==================== UI 初始化 ====================
+
     private void initUI() {
         contentPanel = new JPanel();
-        contentPanel.setLayout(new BorderLayout(4, 0));
-        contentPanel.setBackground(new Color(30, 40, 60, 230));
+        contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+        contentPanel.setBackground(BG_COLOR);
         contentPanel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(0, 102, 255, 200), 2),
-                BorderFactory.createEmptyBorder(4, 10, 4, 10)
+                BorderFactory.createLineBorder(BORDER_COLOR, 2),
+                BorderFactory.createEmptyBorder(6, 6, 6, 6)
         ));
 
-        // 标题
-        JLabel titleLabel = new JLabel("截图助手");
+        // ---------- 标题栏（可拖拽） ----------
+        titleBar = new JPanel(new BorderLayout());
+        titleBar.setOpaque(false);
+        titleBar.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        titleBar.setPreferredSize(new Dimension(DEFAULT_WIDTH - 16, 24));
+        titleBar.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+
+        JLabel titleLabel = new JLabel("截图助手", SwingConstants.CENTER);
         titleLabel.setFont(FontUtil.deriveUIFont("Label.font", Font.BOLD, 13));
         titleLabel.setForeground(Color.WHITE);
-        contentPanel.add(titleLabel, BorderLayout.WEST);
+        titleBar.add(titleLabel, BorderLayout.CENTER);
+        contentPanel.add(titleBar);
 
-        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 0));
-        btnPanel.setOpaque(false);
+        // ---------- 分隔线 ----------
+        JSeparator sep = new JSeparator();
+        sep.setForeground(new Color(0, 102, 255, 150));
+        sep.setBackground(new Color(0, 102, 255, 150));
+        sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
+        contentPanel.add(Box.createVerticalStrut(6));
+        contentPanel.add(sep);
+        contentPanel.add(Box.createVerticalStrut(8));
 
-        JButton fullBtn = createButton("全屏", new Color(0, 102, 255), 45);
-        fullBtn.addActionListener(e -> doFullScreenCapture());
-        btnPanel.add(fullBtn);
-
-        JButton realtimeBtn = createButton("实时全屏", new Color(0, 200, 0), 70);
-        realtimeBtn.addActionListener(e -> startRealtimeCapture());
-        btnPanel.add(realtimeBtn);
-
-        JButton areaBtn = createButton("区域", new Color(255, 165, 0), 45);
-        areaBtn.addActionListener(e -> doAreaCapture());
-        btnPanel.add(areaBtn);
-
-        contentPanel.add(btnPanel, BorderLayout.CENTER);
-
-        // 关闭按钮：× (U+00D7)，所有字体都有
-        JButton closeBtn = new JButton("×");
-        closeBtn.setFont(FontUtil.deriveUIFont("Button.font", Font.PLAIN, 15));
-        closeBtn.setBackground(new Color(200, 50, 50));
-        closeBtn.setForeground(Color.WHITE);
-        closeBtn.setFocusPainted(false);
-        closeBtn.setBorderPainted(false);
-        closeBtn.setOpaque(true);
-        closeBtn.setPreferredSize(new Dimension(28, 24));
-        closeBtn.addActionListener(e -> setVisible(false));
-        contentPanel.add(closeBtn, BorderLayout.EAST);
+        // ---------- 功能按钮（垂直排列） ----------
+        addVerticalButton("全屏截图", BTN_FULL_SCREEN, this::doFullScreenCapture);
+        addVerticalButton("实时全屏", BTN_REALTIME,    this::startRealtimeCapture);
+        addVerticalButton("区域截图", BTN_AREA,        this::doAreaCapture);
+        addVerticalButton("隐藏工具", BTN_HIDE,        () -> setVisible(false));
 
         setContentPane(contentPanel);
     }
 
-    private JButton createButton(String text, Color bg, int width) {
+    /**
+     * 添加一个占满宽度的垂直按钮，带 hover 变亮效果。
+     */
+    private void addVerticalButton(String text, Color baseColor, Runnable action) {
         JButton btn = new JButton(text);
-        btn.setFont(FontUtil.deriveUIFont("Button.font", Font.PLAIN, 11));
-        btn.setBackground(bg);
+        btn.setFont(FontUtil.deriveUIFont("Button.font", Font.PLAIN, 12));
         btn.setForeground(Color.WHITE);
+        btn.setBackground(baseColor);
         btn.setFocusPainted(false);
         btn.setBorderPainted(false);
         btn.setOpaque(true);
-        btn.setPreferredSize(new Dimension(width, 24));
-        return btn;
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btn.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        Dimension size = new Dimension(DEFAULT_WIDTH - 20, 32);
+        btn.setMaximumSize(size);
+        btn.setPreferredSize(size);
+        btn.setMinimumSize(size);
+
+        // hover 反馈：变亮 15%
+        Color hoverColor = brighten(baseColor, 0.15f);
+        btn.addMouseListener(new MouseAdapter() {
+            @Override public void mouseEntered(MouseEvent e) { btn.setBackground(hoverColor); }
+            @Override public void mouseExited(MouseEvent e)  { btn.setBackground(baseColor); }
+        });
+        btn.addActionListener(e -> action.run());
+
+        contentPanel.add(btn);
+        contentPanel.add(Box.createVerticalStrut(6));
     }
+
+    /** 颜色变亮 */
+    private static Color brighten(Color c, float factor) {
+        int r = Math.min(255, (int) (c.getRed()   + 255 * factor));
+        int g = Math.min(255, (int) (c.getGreen() + 255 * factor));
+        int b = Math.min(255, (int) (c.getBlue()  + 255 * factor));
+        return new Color(r, g, b);
+    }
+
+    // ==================== 拖拽（仅标题栏） ====================
 
     private void setupDrag() {
         MouseAdapter dragAdapter = new MouseAdapter() {
@@ -103,6 +152,7 @@ public class FloatingScreenshotToolbar extends JWindow {
                     Point newPos = getLocation();
                     newPos.translate(e.getX() - dragStart.x, e.getY() - dragStart.y);
                     setLocation(newPos);
+                    hasUserMoved = true;
                 }
             }
 
@@ -111,15 +161,16 @@ public class FloatingScreenshotToolbar extends JWindow {
                 dragStart = null;
             }
         };
-        contentPanel.addMouseListener(dragAdapter);
-        contentPanel.addMouseMotionListener(dragAdapter);
-        for (Component comp : contentPanel.getComponents()) {
+        // 标题栏和标题 Label 都可拖拽
+        titleBar.addMouseListener(dragAdapter);
+        titleBar.addMouseMotionListener(dragAdapter);
+        for (Component comp : titleBar.getComponents()) {
             comp.addMouseListener(dragAdapter);
             comp.addMouseMotionListener(dragAdapter);
         }
     }
 
-    // ==================== 截图方法（★ 默认复制到剪贴板，不再落盘） ====================
+    // ==================== 截图方法（默认复制到剪贴板） ====================
 
     public void doFullScreenCapture() {
         setVisible(false);
@@ -128,7 +179,8 @@ public class FloatingScreenshotToolbar extends JWindow {
             Rectangle screenRect = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
             BufferedImage image = robot.createScreenCapture(screenRect);
             boolean ok = screenshotService.copyToClipboard(image);
-            showNotification(ok ? "全屏截图已复制到剪贴板\n直接 Ctrl+V 即可粘贴使用"
+            showNotification(ok
+                    ? "全屏截图已复制到剪贴板\n直接 Ctrl+V 即可粘贴使用"
                     : "全屏截图复制到剪贴板失败");
         } catch (Exception e) {
             log.error("全屏截图失败", e);
@@ -181,7 +233,8 @@ public class FloatingScreenshotToolbar extends JWindow {
             Rectangle screenRect = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
             BufferedImage image = robot.createScreenCapture(screenRect);
             boolean ok = screenshotService.copyToClipboard(image);
-            showNotification(ok ? "实时截图已复制到剪贴板\n直接 Ctrl+V 即可粘贴使用"
+            showNotification(ok
+                    ? "实时截图已复制到剪贴板\n直接 Ctrl+V 即可粘贴使用"
                     : "实时截图复制到剪贴板失败");
         } catch (Exception e) {
             log.error("实时全屏截图失败", e);
@@ -201,7 +254,8 @@ public class FloatingScreenshotToolbar extends JWindow {
                     Robot robot = new Robot();
                     BufferedImage image = robot.createScreenCapture(rect);
                     boolean ok = screenshotService.copyToClipboard(image);
-                    showNotification(ok ? "区域截图已复制到剪贴板\n直接 Ctrl+V 即可粘贴使用"
+                    showNotification(ok
+                            ? "区域截图已复制到剪贴板\n直接 Ctrl+V 即可粘贴使用"
                             : "区域截图复制到剪贴板失败");
                 } catch (Exception e) {
                     log.error("区域截图失败", e);
@@ -229,14 +283,19 @@ public class FloatingScreenshotToolbar extends JWindow {
         JOptionPane.showMessageDialog(this, msg, "截图助手", JOptionPane.INFORMATION_MESSAGE);
     }
 
+    // ==================== 显示与定位 ====================
+
     @Override
     public void setVisible(boolean visible) {
         super.setVisible(visible);
         if (visible) {
-            Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
-            int w = getWidth();
-            int h = getHeight();
-            setLocation(screen.width - w - 30, screen.height - h - 80);
+            // 仅首次显示（用户未拖拽过）时定位到右下角
+            if (!hasUserMoved) {
+                Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+                int w = getWidth();
+                int h = getHeight();
+                setLocation(screen.width - w - 30, screen.height - h - 80);
+            }
         }
     }
 }

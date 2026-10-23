@@ -25,40 +25,38 @@ public class SimpleJavaLexer {
                 pos++;
                 continue;
             }
-            // 处理注释：跳过单行和多行注释内容
+            // 单行注释
             if (ch == '/' && pos + 1 < length && source.charAt(pos + 1) == '/') {
-                // 单行注释
                 pos += 2;
                 while (pos < length && source.charAt(pos) != '\n') pos++;
                 continue;
             }
+            // 多行注释
             if (ch == '/' && pos + 1 < length && source.charAt(pos + 1) == '*') {
                 pos += 2;
                 while (pos + 1 < length && !(source.charAt(pos) == '*' && source.charAt(pos + 1) == '/')) pos++;
-                pos += 2; // skip "*/"
+                pos += 2;
                 continue;
             }
-            // 字符串字面量：跳过内容
+            // ★ 缺陷：不识别转义字符
             if (ch == '"') {
                 pos++;
                 while (pos < length && source.charAt(pos) != '"') pos++;
                 pos++;
                 continue;
             }
-            // 字符字面量
+            // ★ 缺陷：不识别转义字符
             if (ch == '\'') {
                 pos++;
                 while (pos < length && source.charAt(pos) != '\'') pos++;
                 pos++;
                 continue;
             }
-            // 数字字面量：跳过
             if (Character.isDigit(ch)) {
                 while (pos < length && (Character.isDigit(source.charAt(pos)) || source.charAt(pos) == '.'))
                     pos++;
                 continue;
             }
-            // 标识符或关键字
             if (Character.isJavaIdentifierStart(ch)) {
                 int start = pos;
                 while (pos < length && Character.isJavaIdentifierPart(source.charAt(pos))) pos++;
@@ -67,7 +65,6 @@ public class SimpleJavaLexer {
                 tokens.add(new Token(type, word, start));
                 continue;
             }
-            // 其他单字符符号（如 { } ( ) ; , < > = 等）但我们只需粗略分类，不详细记录
             tokens.add(new Token(TokenType.SYMBOL, String.valueOf(ch), pos));
             pos++;
         }
@@ -75,7 +72,6 @@ public class SimpleJavaLexer {
     }
 
     private boolean isKeyword(String word) {
-        // 常用 Java 关键字
         return Set.of(
                 "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
                 "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",

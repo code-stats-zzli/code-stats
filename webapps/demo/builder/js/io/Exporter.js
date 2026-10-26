@@ -2,16 +2,13 @@ import { ElementRegistry } from '../core/ElementRegistry.js';
 
 export class Exporter {
 
-    /** 生成干净的 HTML 字符串 */
     static toHTML(canvasManager, title = '导出的页面') {
         const instances = canvasManager.getAll();
         const bodyContent = instances.map(el => {
             const clone = el.dom.cloneNode(true);
-            // 去掉编辑期的标记
             clone.classList.remove('builder-element', 'builder-selected');
             clone.removeAttribute('data-element-id');
             clone.removeAttribute('data-element-type');
-            // 保留定位样式（已在 dom.style 上），去掉 outline 等
             clone.style.outline = '';
             clone.style.boxShadow = '';
             clone.style.zIndex = '';
@@ -22,18 +19,11 @@ export class Exporter {
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title}</title>
 <style>
     * { box-sizing: border-box; }
-    body {
-        margin: 0;
-        padding: 0;
-        min-height: 100vh;
-        position: relative;
-        font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', sans-serif;
-        color: #1e293b;
-    }
+    body { margin:0; padding:0; min-height:100vh; position:relative;
+           font-family: system-ui, -apple-system, 'PingFang SC', sans-serif; }
 </style>
 </head>
 <body>
@@ -42,26 +32,18 @@ ${bodyContent}
 </html>`;
     }
 
-    /** 下载 HTML 文件 */
     static downloadHTML(canvasManager) {
-        const html = this.toHTML(canvasManager);
-        this._download(html, 'page.html', 'text/html;charset=utf-8');
+        this._download(this.toHTML(canvasManager), 'page.html', 'text/html;charset=utf-8');
     }
 
-    /** 新窗口预览 */
     static preview(canvasManager) {
-        const html = this.toHTML(canvasManager, '预览');
         const win = window.open('', '_blank');
-        if (win) {
-            win.document.write(html);
-            win.document.close();
-        }
+        if (win) { win.document.write(this.toHTML(canvasManager, '预览')); win.document.close(); }
     }
 
-    /** 导出为 JSON */
     static toJSON(canvasManager) {
         return {
-            version: '1.0',
+            version: '1.1',
             exportedAt: new Date().toISOString(),
             elements: canvasManager.getAll().map(el => el.toJSON())
         };
@@ -72,17 +54,16 @@ ${bodyContent}
         this._download(json, 'page.json', 'application/json;charset=utf-8');
     }
 
-    /** 从 JSON 加载到画布 */
+    /** 从 JSON 恢复页面 + 自动加载数据 */
     static loadJSON(canvasManager, json) {
         canvasManager.clear();
         if (!json || !Array.isArray(json.elements)) return;
+
         json.elements.forEach(item => {
             const ElementClass = ElementRegistry.get(item.type);
-            if (!ElementClass) {
-                console.warn('未注册的元素类型，跳过:', item.type);
-                return;
-            }
-            const element = new ElementClass(item.props);
+            if (!ElementClass) { console.warn('未注册类型，跳过:', item.type); return; }
+            const element = new ElementClass(item.props || {});
+            if (item.dataBinding) element.dataBinding = item.dataBinding;
             const dom = element.render();
             dom.style.zIndex = canvasManager.zIndexCounter++;
             canvasManager.canvas.appendChild(dom);
@@ -90,9 +71,13 @@ ${bodyContent}
             canvasManager._bindElementEvents(dom, element);
         });
         canvasManager._notifyChange();
+
+        // ★ 加载完成后自动触发数据加载
+        if (window.__builder && window.__builder.dataLoader) {
+            window.__builder.dataLoader.reloadAll();
+        }
     }
 
-    /** 通过文件选择器导入 JSON */
     static importJSONFromFile(canvasManager) {
         const input = document.createElement('input');
         input.type = 'file';
@@ -102,28 +87,20 @@ ${bodyContent}
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (e) => {
-                try {
-                    const json = JSON.parse(e.target.result);
-                    this.loadJSON(canvasManager, json);
-                } catch (err) {
-                    alert('JSON 解析失败: ' + err.message);
-                }
+                try { this.loadJSON(canvasManager, JSON.parse(e.target.result)); }
+                catch (err) { alert('JSON 解析失败: ' + err.message); }
             };
             reader.readAsText(file);
         };
         input.click();
     }
 
-    /* ============ 内部工具 ============ */
     static _download(content, filename, mime) {
         const blob = new Blob([content], { type: mime });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 }

@@ -275,3 +275,57 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); overflow: 
     font-size: 13px;
 }
 .btn-danger:hover { background: #b91c1c; }
+/* ============ 数据立方 / 数据 Tab 样式 ============ */
+.pp-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+}
+.pp-tab {
+    flex: 1;
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 6px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--muted);
+    transition: 0.15s;
+}
+.pp-tab:hover { background: rgba(0,102,255,0.06); }
+.pp-tab.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+.prop-group select {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: inherit;
+    background: white;
+    color: var(--text);
+    outline: none;
+}
+.prop-group select:focus {
+    border-color: var(--accent);
+}
+.prop-group select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* 数据表格元素提示 */
+.dc-table-wrapper { box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+.dc-placeholder { user-select: none; }
+
+/* 数据元素在抽屉里的标记 */
+.element-item[data-type="DataTableElement"] {
+    background: linear-gradient(135deg, rgba(0,102,255,0.08), rgba(124,58,237,0.06));
+    border-color: rgba(0,102,255,0.35);
+}

@@ -9,70 +9,27 @@
     <link rel="stylesheet" href="files.css">
 </head>
 <body>
-<div class="files-container">
-    <aside class="files-sidebar">
+<div class="resources-container">
+    <aside class="resources-sidebar">
         <div class="sidebar-header">
-            <div class="root-selector">
-                <button id="rootResourcesBtn" class="root-btn active">🎨 资源管理</button>
-                <button id="rootLocalBtn" class="root-btn">📁 本地目录</button>
-            </div>
+            <h3>🎨 资源管理</h3>
+            <p class="sidebar-desc">项目根目录 ./resources</p>
         </div>
-
-        <!-- 本地模式：目录树（隐藏） -->
-        <div class="tree-wrapper" id="treeWrapper" style="display: none;">
-            <div id="treeContainer" class="tree"></div>
+        <div class="resource-type-list" id="resourceTypeList">
+            <div class="loading">加载中...</div>
         </div>
-
-        <!-- 资源模式：资源类型列表（默认显示） -->
-        <div class="resource-type-list" id="resourceTypeList"></div>
     </aside>
-
-    <main class="files-content">
-        <!-- 本地模式内容 -->
-        <div id="localModeContent" class="mode-content" style="display: none;">
-            <div id="pathBar" class="path-bar">
-                <span class="path-label">当前路径：</span>
-                <span id="currentPath" class="path-value">/</span>
-            </div>
-            <div id="fileListPanel" class="file-list-panel">
-                <div class="toolbar">
-                    <button id="newFolderBtn" class="btn-icon">📁 新建目录</button>
-                    <button id="newFileBtn" class="btn-icon">📄 新建文件</button>
-                    <button id="uploadBtn" class="btn-icon">📤 上传文件</button>
-                    <button id="refreshBtn" class="btn-icon">🔄 刷新</button>
-                </div>
-                <table id="fileTable">
-                    <thead>
-                    <tr><th>名称</th><th>类型</th><th>大小</th><th>修改时间</th><th>操作</th></tr>
-                    </thead>
-                    <tbody id="fileTableBody"></tbody>
-                </table>
-            </div>
-            <div id="editorPanel" class="editor-panel" style="display: none;">
-                <div class="editor-header">
-                    <span id="editFileName"></span>
-                    <button id="closeEditorBtn" class="btn-icon">✖ 关闭</button>
-                </div>
-                <textarea id="fileEditor" rows="20"></textarea>
-                <div class="editor-actions">
-                    <button id="saveFileBtn" class="btn-primary">💾 保存</button>
-                </div>
+    <main class="resources-content">
+        <div class="resource-header">
+            <div class="resource-title" id="resourceTitle">🎨 资源管理</div>
+            <div class="resource-actions">
+                <input type="file" id="resourceFileInput" multiple style="display:none;">
+                <button id="uploadResourceBtn" class="btn-primary">📤 上传资源</button>
+                <button id="refreshResourcesBtn" class="btn-secondary">🔄 刷新</button>
             </div>
         </div>
-
-        <!-- 资源模式内容（默认显示） -->
-        <div id="resourcesModeContent" class="mode-content">
-            <div class="resource-header">
-                <div class="resource-title" id="resourceTitle">🎨 资源管理</div>
-                <div class="resource-actions">
-                    <input type="file" id="resourceFileInput" multiple style="display:none;">
-                    <button id="uploadResourceBtn" class="btn-primary">📤 上传资源</button>
-                    <button id="refreshResourcesBtn" class="btn-secondary">🔄 刷新</button>
-                </div>
-            </div>
-            <div id="resourceListPanel" class="resource-list-panel">
-                <div class="loading">加载中...</div>
-            </div>
+        <div id="resourceListPanel" class="resource-list-panel">
+            <div class="loading">加载中...</div>
         </div>
     </main>
 </div>

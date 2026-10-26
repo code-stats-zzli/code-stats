@@ -3,87 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>代码分析 - CodeStats</title>
+    <title>代码分析与文件管理 - CodeStats</title>
     <link rel="stylesheet" href="../global-tech.css">
     <link rel="stylesheet" href="codeStats.css">
     <script src="../global.js"></script>
 </head>
 <body>
 <div class="layout">
+    <!-- 左侧模式菜单 -->
     <aside class="sidebar">
         <h3 class="sidebar-title">分析模式</h3>
         <ul class="mode-list" id="modeList">
             <li class="mode-item active" data-mode="server">🖥️ 服务器分析</li>
-            <li class="mode-item disabled" data-mode="local">💻 本地分析（待实现）</li>
+            <li class="mode-item" data-mode="local">💻 本地分析</li>
             <li class="mode-item" data-mode="webspider">🕷️ 网页爬虫</li>
             <li class="mode-item" data-mode="questionbank">📚 题库分析</li>
         </ul>
     </aside>
-    <main class="main">
-        <!-- 服务器代码分析配置 -->
-        <section class="config-panel" id="codeStatsConfig">
-            <h2>代码统计配置</h2>
-            <div class="config-form">
-                <div class="form-row"><label>根目录:</label><input type="text" id="rootDir" placeholder="例如: D:\work\space\CodeStats"></div>
-                <div class="form-row"><label>扩展名 (逗号分隔):</label><input type="text" id="extensions" value="java"></div>
-                <div class="form-row"><label>排除路径 (逗号分隔):</label><input type="text" id="excludePaths" placeholder="例如: test, target"></div>
-                <div class="form-row"><label>排除注释:</label><input type="checkbox" id="excludeComments" checked></div>
-                <div class="form-row"><label>线程数:</label><input type="number" id="threadCount" min="1" max="32" value="4"></div>
-                <div class="form-row"><label>排序方式:</label><select id="sortBy"><option value="lines">行数</option><option value="name">文件名</option><option value="language">语言</option><option value="complexity">复杂度</option></select></div>
-                <div class="form-row"><label>启用文件合并:</label><input type="checkbox" id="mergeEnabled"></div>
-                <div class="form-row" id="mergeRow" style="display: none;"><label>合并输出文件:</label><input type="text" id="mergeOutputFile" placeholder="例如: D:/output/merged.txt"></div>
-                <div class="form-row"><label>额外路径 (逗号分隔):</label><input type="text" id="extraPaths" placeholder="例如: D:/work/space/CodeStats/webapps/demo, C:/other"></div>
-            </div>
-            <div class="action-bar"><button id="analyzeBtn" class="btn-primary">开始分析</button><button id="resetBtn" class="btn-secondary">重置默认</button></div>
-        </section>
 
-        <!-- 代码分析结果区域 -->
-        <section class="result-section" id="codeStatsResult">
-            <div class="progress-bar" id="progressBar" style="display: none;"><div class="progress-fill" id="progressFill"></div><span id="progressText">分析中...</span></div>
-            <div class="result-tabs">
-                <button class="tab active" data-tab="files">文件列表</button>
-                <button class="tab" data-tab="summary">摘要统计</button>
-                <button class="tab" data-tab="dependency">依赖关系</button>
+    <!-- ============ 服务器分析面板 ============ -->
+    <main class="workspace" id="serverWorkspace">
+        <!-- 目录树（用于选择分析目录） -->
+        <aside class="dir-tree-panel">
+            <div class="dir-panel-header">
+                <span>📂 服务器目录</span>
+                <button id="serverRefreshTreeBtn" class="mini-btn" title="刷新">🔄</button>
             </div>
-            <div style="margin: 12px 0; display: flex; gap: 12px;" id="resultActions">
-                <button id="exportCsvBtn" class="btn-secondary" style="background:#10b981; color:white;">📎 导出表格为CSV</button>
-                <button id="downloadMergeBtn" class="btn-secondary" style="background:#3b82f6; color:white;" disabled>📥 下载合并文件</button>
+            <div class="dir-tree-wrapper" id="serverDirTree">
+                <div class="loading">加载中...</div>
             </div>
-            <div class="tab-content" id="codeStatsContent">
-                <div class="table-wrapper" id="filesTable" style="display: block;">
-                    <table><thead><tr><th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th></tr></thead><tbody id="fileTableBody"></tbody></table>
-                </div>
-                <div class="summary-content" id="summaryContent" style="display: none;">
-                    <div id="summaryInfo"></div>
-                    <div id="languageInfo"></div>
-                </div>
-                <div class="dependency-content" id="dependencyContent" style="display: none;">
-                    <div class="dependency-stats" id="depStats"></div>
-                    <div class="class-selector" style="margin: 20px 0;">
-                        <label>选择类：</label>
-                        <select id="classSelect" style="min-width: 300px;"></select>
+            <div class="dir-panel-footer">
+                <div class="dir-current-tip">点击目录填充分析根路径</div>
+            </div>
+        </aside>
+
+        <!-- 配置 + 结果 -->
+        <div class="analysis-panel">
+            <!-- 配置 -->
+            <section class="config-panel" id="codeStatsConfig">
+                <h2>代码统计配置</h2>
+                <div class="config-form">
+                    <div class="form-row">
+                        <label>根目录:</label>
+                        <input type="text" id="rootDir" placeholder="从左侧目录树选择，或手动输入">
                     </div>
-                    <div class="dependency-details" style="display: flex; gap: 30px;">
-                        <div style="flex:1;"><h4>📤 出向依赖</h4><ul id="outgoingList" class="dependency-list"></ul></div>
-                        <div style="flex:1;"><h4>📥 入向依赖</h4><ul id="incomingList" class="dependency-list"></ul></div>
+                    <div class="form-row"><label>扩展名 (逗号分隔):</label><input type="text" id="extensions" value="java"></div>
+                    <div class="form-row"><label>排除路径 (逗号分隔):</label><input type="text" id="excludePaths" placeholder="test, target"></div>
+                    <div class="form-row"><label>排除注释:</label><input type="checkbox" id="excludeComments" checked></div>
+                    <div class="form-row"><label>线程数:</label><input type="number" id="threadCount" min="1" max="32" value="4"></div>
+                    <div class="form-row"><label>排序方式:</label>
+                        <select id="sortBy">
+                            <option value="lines">行数</option>
+                            <option value="name">文件名</option>
+                            <option value="language">语言</option>
+                            <option value="complexity">复杂度</option>
+                        </select>
+                    </div>
+                    <div class="form-row"><label>启用文件合并:</label><input type="checkbox" id="mergeEnabled"></div>
+                    <div class="form-row" id="mergeRow" style="display: none;">
+                        <label>合并输出文件:</label><input type="text" id="mergeOutputFile" placeholder="例如: D:/output/merged.txt">
+                    </div>
+                    <div class="form-row"><label>额外路径 (逗号分隔):</label><input type="text" id="extraPaths" placeholder="额外需要统计的目录"></div>
+                </div>
+                <div class="action-bar">
+                    <button id="analyzeBtn" class="btn-primary">开始分析</button>
+                    <button id="resetBtn" class="btn-secondary">重置默认</button>
+                </div>
+            </section>
+
+            <!-- 结果 -->
+            <section class="result-section" id="codeStatsResult">
+                <div class="progress-bar" id="progressBar" style="display: none;">
+                    <div class="progress-fill" id="progressFill"></div>
+                    <span id="progressText">分析中...</span>
+                </div>
+                <div class="result-tabs">
+                    <button class="tab active" data-tab="files">文件列表</button>
+                    <button class="tab" data-tab="summary">摘要统计</button>
+                    <button class="tab" data-tab="dependency">依赖关系</button>
+                </div>
+                <div style="margin: 12px 0; display: flex; gap: 12px;" id="resultActions">
+                    <button id="exportCsvBtn" class="btn-secondary" style="background:#10b981; color:white;">📎 导出表格为CSV</button>
+                    <button id="downloadMergeBtn" class="btn-secondary" style="background:#3b82f6; color:white;" disabled>📥 下载合并文件</button>
+                </div>
+                <div class="tab-content" id="codeStatsContent">
+                    <div class="table-wrapper" id="filesTable" style="display: block;">
+                        <table>
+                            <thead><tr>
+                                <th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th>
+                                <th>空行</th><th>语言</th><th>复杂度</th>
+                            </tr></thead>
+                            <tbody id="fileTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="summary-content" id="summaryContent" style="display: none;">
+                        <div id="summaryInfo"></div>
+                        <div id="languageInfo"></div>
+                    </div>
+                    <div class="dependency-content" id="dependencyContent" style="display: none;">
+                        <div class="dependency-stats" id="depStats"></div>
+                        <div class="class-selector" style="margin: 20px 0;">
+                            <label>选择类：</label>
+                            <select id="classSelect" style="min-width: 300px;"></select>
+                        </div>
+                        <div class="dependency-details" style="display: flex; gap: 30px;">
+                            <div style="flex:1;"><h4>📤 出向依赖</h4><ul id="outgoingList" class="dependency-list"></ul></div>
+                            <div style="flex:1;"><h4>📥 入向依赖</h4><ul id="incomingList" class="dependency-list"></ul></div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </section>
-
-        <!-- 网页爬虫 iframe 容器 -->
-        <div id="spiderIframeContainer" class="iframe-container" style="display: none;">
-            <div class="iframe-error" style="display: none; color: #dc2626; text-align: center; padding: 40px;">⚠️ 网页爬虫加载失败，请检查网络或刷新重试</div>
-            <iframe id="spiderFrame" src="../spider/spider.html" title="网页爬虫" class="iframe-content"></iframe>
-        </div>
-
-        <!-- 题库分析 iframe 容器 -->
-        <div id="qbIframeContainer" class="iframe-container" style="display: none;">
-            <div class="iframe-error" style="display: none; color: #dc2626; text-align: center; padding: 40px;">⚠️ 题库分析加载失败，请检查网络或刷新重试</div>
-            <iframe id="qbFrame" src="../questionbank/questionbank.html" title="题库分析" class="iframe-content"></iframe>
+            </section>
         </div>
     </main>
+
+    <!-- ============ 本地分析面板（完整目录管理） ============ -->
+    <main class="workspace" id="localWorkspace" style="display: none;">
+        <aside class="dir-tree-panel">
+            <div class="dir-panel-header">
+                <span>📁 本地目录</span>
+                <button id="localRefreshTreeBtn" class="mini-btn" title="刷新">🔄</button>
+            </div>
+            <div class="dir-tree-wrapper" id="localDirTree">
+                <div class="loading">加载中...</div>
+            </div>
+        </aside>
+
+        <div class="local-file-manager">
+            <div id="localPathBar" class="path-bar">
+                <span class="path-label">当前路径：</span>
+                <span id="localCurrentPath" class="path-value">/</span>
+            </div>
+
+            <div id="localFileListPanel" class="file-list-panel">
+                <div class="toolbar">
+                    <button id="localNewFolderBtn" class="btn-icon">📁 新建目录</button>
+                    <button id="localNewFileBtn" class="btn-icon">📄 新建文件</button>
+                    <button id="localUploadBtn" class="btn-icon">📤 上传文件</button>
+                    <button id="localRefreshBtn" class="btn-icon">🔄 刷新</button>
+                </div>
+                <table class="local-file-table">
+                    <thead>
+                    <tr><th>名称</th><th>类型</th><th>大小</th><th>修改时间</th><th>操作</th></tr>
+                    </thead>
+                    <tbody id="localFileTableBody"></tbody>
+                </table>
+            </div>
+
+            <div id="localEditorPanel" class="editor-panel" style="display: none;">
+                <div class="editor-header">
+                    <span id="localEditFileName"></span>
+                    <button id="localCloseEditorBtn" class="btn-icon">✖ 关闭</button>
+                </div>
+                <textarea id="localFileEditor" rows="20"></textarea>
+                <div class="editor-actions">
+                    <button id="localSaveFileBtn" class="btn-primary">💾 保存</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ============ 网页爬虫 iframe ============ -->
+    <main class="workspace fullscreen" id="spiderWorkspace" style="display: none;">
+        <iframe id="spiderFrame" src="../spider/spider.html" title="网页爬虫"></iframe>
+    </main>
+
+    <!-- ============ 题库分析 iframe ============ -->
+    <main class="workspace fullscreen" id="qbWorkspace" style="display: none;">
+        <iframe id="qbFrame" src="../questionbank/questionbank.html" title="题库分析"></iframe>
+    </main>
 </div>
+
 <script src="codeStats.js"></script>
 </body>
 </html>

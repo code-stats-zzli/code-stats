@@ -8,31 +8,13 @@
     <link rel="stylesheet" href="project-assistant.css">
     <link rel="stylesheet" href="index.css">
     <style>
-        /* ---------- 隐藏顶部导航滚动条 ---------- */
-        .topbar-tabs {
-            overflow-x: auto;
-            overflow-y: hidden;
-            white-space: nowrap;
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-        .topbar-tabs::-webkit-scrollbar {
-            display: none;
-        }
-        .topbar-tabs .topbar-tab {
-            flex-shrink: 0;
-            display: inline-flex;
-        }
-        .topbar-tabs {
-            display: flex;
-            flex-wrap: nowrap;
-            gap: 8px;
-            padding-bottom: 4px;
-            scroll-behavior: smooth;
-        }
-        .topbar {
-            overflow: visible;
-        }
+        .topbar-tabs { overflow-x: auto; overflow-y: hidden; white-space: nowrap;
+            -ms-overflow-style: none; scrollbar-width: none; }
+        .topbar-tabs::-webkit-scrollbar { display: none; }
+        .topbar-tabs .topbar-tab { flex-shrink: 0; display: inline-flex; }
+        .topbar-tabs { display: flex; flex-wrap: nowrap; gap: 8px;
+            padding-bottom: 4px; scroll-behavior: smooth; }
+        .topbar { overflow: visible; }
     </style>
     <script src="global.js"></script>
     <script src="project-assistant.js" defer></script>
@@ -50,8 +32,9 @@
         <button class="topbar-tab" data-tab="database">
             <span class="tab-icon">⚡</span> 数据库
         </button>
+        <!-- ★ 目录管理 → 资源管理 -->
         <button class="topbar-tab" data-tab="files">
-            <span class="tab-icon">📂</span> 目录管理
+            <span class="tab-icon">🎨</span> 资源管理
         </button>
         <button class="topbar-tab" data-tab="codestats">
             <span class="tab-icon">📈</span> 代码分析
@@ -71,7 +54,6 @@
         <button class="topbar-tab" data-tab="scriptengine">
             <span class="tab-icon">⚙️</span> 脚本引擎
         </button>
-        <!-- 新增：自动化测试 -->
         <button class="topbar-tab" data-tab="autotest">
             <span class="tab-icon">⚡</span> 自动化测试
         </button>
@@ -93,7 +75,8 @@
         <iframe id="iframeDatabase" src="db/dbclient.html" title="数据库浏览器" class="panel-iframe"></iframe>
     </div>
     <div class="tab-panel" id="panel-files">
-        <iframe id="iframeFiles" src="files/files.html" title="目录管理" class="panel-iframe"></iframe>
+        <!-- ★ title 改为资源管理 -->
+        <iframe id="iframeFiles" src="files/files.html" title="资源管理" class="panel-iframe"></iframe>
     </div>
     <div class="tab-panel" id="panel-codestats">
         <iframe id="iframeCodeStats" src="code/codeStats.html" title="代码分析" class="panel-iframe"></iframe>
@@ -113,7 +96,6 @@
     <div class="tab-panel" id="panel-scriptengine">
         <iframe src="scriptengine/scriptengine.html" class="panel-iframe" title="脚本引擎"></iframe>
     </div>
-    <!-- 新增：自动化测试面板 -->
     <div class="tab-panel" id="panel-autotest">
         <iframe src="autotest/index.html" class="panel-iframe" title="自动化测试平台"></iframe>
     </div>
@@ -124,49 +106,27 @@
 
 <div class="toast-container" id="toastContainer"></div>
 
-<!-- 页签自动滚动逻辑 -->
 <script>
     (function() {
         const tabContainer = document.getElementById('topbarTabs');
         const tabButtons = tabContainer.querySelectorAll('.topbar-tab');
-
         tabButtons.forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                requestAnimationFrame(() => {
-                    this.scrollIntoView({
-                        behavior: 'smooth',
-                        inline: 'center',
-                        block: 'nearest'
-                    });
-                });
+            btn.addEventListener('click', function() {
+                requestAnimationFrame(() => this.scrollIntoView({
+                    behavior: 'smooth', inline: 'center', block: 'nearest'
+                }));
             });
         });
-
         const observer = new MutationObserver(() => {
             const activeBtn = tabContainer.querySelector('.topbar-tab.active');
-            if (activeBtn) {
-                activeBtn.scrollIntoView({
-                    behavior: 'smooth',
-                    inline: 'center',
-                    block: 'nearest'
-                });
-            }
+            if (activeBtn) activeBtn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
         });
-        tabButtons.forEach(btn => {
-            observer.observe(btn, { attributes: true, attributeFilter: ['class'] });
-        });
-
+        tabButtons.forEach(btn => observer.observe(btn, { attributes: true, attributeFilter: ['class'] }));
         window.addEventListener('load', () => {
             const activeBtn = tabContainer.querySelector('.topbar-tab.active');
-            if (activeBtn) {
-                setTimeout(() => {
-                    activeBtn.scrollIntoView({
-                        behavior: 'smooth',
-                        inline: 'center',
-                        block: 'nearest'
-                    });
-                }, 100);
-            }
+            if (activeBtn) setTimeout(() => activeBtn.scrollIntoView({
+                behavior: 'smooth', inline: 'center', block: 'nearest'
+            }), 100);
         });
     })();
 </script>

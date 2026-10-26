@@ -2,101 +2,221 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <groupId>com.codestats</groupId>
-    <artifactId>codestats</artifactId>
-    <version>1.7.1</version>
-    <packaging>jar</packaging>
+
+    <groupId>com.omni</groupId>
+    <artifactId>omni-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>omni-common</module>
+        <module>omni-framework</module>
+        <module>omni-business</module>
+        <module>omni-bootstrap</module>
+    </modules>
+
     <properties>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <java.version>17</java.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <omni.version>1.0.0-SNAPSHOT</omni.version>
+        <jackson.version>2.15.2</jackson.version>
+        <snakeyaml.version>2.0</snakeyaml.version>
+        <poi.version>5.2.3</poi.version>
+        <jsoup.version>1.16.1</jsoup.version>
+        <playwright.version>1.40.0</playwright.version>
+        <tess4j.version>5.7.0</tess4j.version>
+        <mysql.version>8.0.33</mysql.version>
+        <caffeine.version>3.1.8</caffeine.version>
     </properties>
-    <dependencies>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>2.15.2</version>
-        </dependency>
-        <dependency>
-            <groupId>org.yaml</groupId>
-            <artifactId>snakeyaml</artifactId>
-            <version>2.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <version>2.0.9</version>
-        </dependency>
-        <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
-            <version>8.0.33</version>
-        </dependency>
-        <dependency>
-            <groupId>com.microsoft.playwright</groupId>
-            <artifactId>playwright</artifactId>
-            <version>1.40.0</version>
-        </dependency>
-    </dependencies>
-     <build>
-    <plugins>
-        <!-- 1. 普通 JAR 打包插件（默认就会启用，无需特别配置） -->
-        <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-jar-plugin</artifactId>
-            <version>3.2.0</version>
-            <configuration>
-                <archive>
-                    <manifest>
-                        <!-- 指定主类（运行时的入口） -->
-                        <mainClass>com.omni.run.Bootstrap</mainClass>
-                        <!-- 将依赖添加到 classpath 中 -->
-                        <addClasspath>true</addClasspath>
-                        <classpathPrefix>lib/</classpathPrefix>
-                    </manifest>
-                </archive>
-            </configuration>
-        </plugin>
 
-        <!-- 2. 复制依赖到 lib 目录（方便 -cp 使用） -->
-        <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-dependency-plugin</artifactId>
-            <version>3.3.0</version>
-            <executions>
-                <execution>
-                    <id>copy-dependencies</id>
-                    <phase>package</phase>
-                    <goals>
-                        <goal>copy-dependencies</goal>
-                    </goals>
+    <dependencyManagement>
+        <dependencies>
+            <!-- ==================== 内部模块 ==================== -->
+            <!-- common -->
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-common-log</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-common-core</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-common-config</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-common-cache</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-common-excel</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+
+            <!-- framework -->
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-framework-jdbc</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-framework-mybatis</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-framework-web</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-framework-expression</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-framework-codestats</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-framework-spider</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-framework-scriptexec</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-framework-jstats</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-framework-v4j</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+
+            <!-- business -->
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-business-common</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-business-ai</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-business-data</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-business-devtool</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-business-analysis</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-business-file</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.omni</groupId>
+                <artifactId>omni-business-system</artifactId>
+                <version>${omni.version}</version>
+            </dependency>
+
+            <!-- ==================== 第三方 ==================== -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.yaml</groupId>
+                <artifactId>snakeyaml</artifactId>
+                <version>${snakeyaml.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi-ooxml</artifactId>
+                <version>${poi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jsoup</groupId>
+                <artifactId>jsoup</artifactId>
+                <version>${jsoup.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.microsoft.playwright</groupId>
+                <artifactId>playwright</artifactId>
+                <version>${playwright.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.sourceforge.tess4j</groupId>
+                <artifactId>tess4j</artifactId>
+                <version>${tess4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>mysql</groupId>
+                <artifactId>mysql-connector-java</artifactId>
+                <version>${mysql.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.ben-manes.caffeine</groupId>
+                <artifactId>caffeine</artifactId>
+                <version>${caffeine.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.11.0</version>
                     <configuration>
-                        <outputDirectory>${project.build.directory}/lib</outputDirectory>
-                        <includeScope>runtime</includeScope>
+                        <source>17</source>
+                        <target>17</target>
+                        <encoding>UTF-8</encoding>
                     </configuration>
-                </execution>
-            </executions>
-        </plugin>
-
-        <!-- 3. 如果需要，移除 spring-boot-maven-plugin -->
-        <!-- 若父 POM 中已定义，可在此处显式禁用它 -->
-        <plugin>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-maven-plugin</artifactId>
-            <configuration>
-                <skip>true</skip>
-            </configuration>
-        </plugin>
-        <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-compiler-plugin</artifactId>
-            <configuration>
-                <source>1.8</source>
-                <target>1.8</target>
-            </configuration>
-        </plugin>
-    </plugins>
-</build>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.3.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-assembly-plugin</artifactId>
+                    <version>3.6.0</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 </project>

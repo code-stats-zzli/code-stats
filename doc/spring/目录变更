@@ -1,8 +1,0 @@
-com/framework/spring/annotation/
-    └── Component.java                  ✨ 新增通用组件注解
-com/framework/jdbc/metadata/service/
-    └── SimpleDatabaseMetadataService.java   🔧 增加 @Component
-com/demo/business/assistance/table/mysql/controller/
-    └── DatabaseController.java            ✨ 新增元数据控制器
-com/framework/spring/ioc/
-    └── SimpleApplicationContext.java      🔧 扫描逻辑增加 @Component 支持

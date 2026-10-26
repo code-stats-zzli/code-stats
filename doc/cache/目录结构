@@ -1,9 +1,0 @@
-com.omni.common.cache
-├── Cache.java                     // 基础缓存接口
-├── CacheConfig.java               // 配置类（TTL、最大容量、类型等）
-├── CacheType.java                 // 缓存类型枚举
-├── CacheFactory.java              // 工厂类，用于创建不同缓存实例
-├── CacheManager.java              // 管理器（单例，方便全局使用）
-├── impl
-│   ├── LocalCache.java            // 基于 ConcurrentHashMap 的实现
-│   └── CaffeineCache.java         // 基于 Caffeine 的实现（可选）

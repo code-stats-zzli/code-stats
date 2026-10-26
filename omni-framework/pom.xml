@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.omni</groupId>
+        <artifactId>omni-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>omni-framework</artifactId>
+    <packaging>pom</packaging>
+    <name>omni-framework</name>
+    <description>自研框架层</description>
+
+    <modules>
+        <module>omni-framework-jdbc</module>
+        <module>omni-framework-mybatis</module>
+        <module>omni-framework-web</module>
+        <module>omni-framework-expression</module>
+        <module>omni-framework-codestats</module>
+        <module>omni-framework-spider</module>
+        <module>omni-framework-scriptexec</module>
+        <module>omni-framework-jstats</module>
+        <module>omni-framework-v4j</module>
+    </modules>
+</project>

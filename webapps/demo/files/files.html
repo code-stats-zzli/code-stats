@@ -21,9 +21,13 @@
     </aside>
     <main class="resources-content">
         <div class="resource-header">
-            <div class="resource-title" id="resourceTitle">🎨 资源管理</div>
+            <div class="resource-title-wrap">
+                <div class="resource-title" id="resourceTitle">🎨 资源管理</div>
+                <div class="breadcrumb" id="breadcrumb"></div>
+            </div>
             <div class="resource-actions">
                 <input type="file" id="resourceFileInput" multiple style="display:none;">
+                <button id="newSubDirBtn" class="btn-secondary">📁 新建子目录</button>
                 <button id="uploadResourceBtn" class="btn-primary">📤 上传资源</button>
                 <button id="refreshResourcesBtn" class="btn-secondary">🔄 刷新</button>
             </div>

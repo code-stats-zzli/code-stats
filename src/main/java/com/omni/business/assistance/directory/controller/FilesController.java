@@ -30,6 +30,8 @@ public class FilesController {
     @Autowired
     private DirectoryService directoryService;
 
+    // ==================== 本地目录（保持不变） ====================
+
     private String getRootType(Map<String, String> params) {
         String rt = params.get("rootType");
         if (rt == null || rt.isEmpty()) rt = DirectoryService.ROOT_TYPE_LOCAL;
@@ -140,10 +142,6 @@ public class FilesController {
         return successResponse();
     }
 
-    /**
-     * 本地目录上传：直接接收二进制（base64 解码后 writeBytes），
-     * 避免 new String(bytes, UTF_8) 造成图片损坏
-     */
     @RequestMapping("/upload")
     @ResponseBody
     public String upload() throws Exception {
@@ -176,8 +174,7 @@ public class FilesController {
         try {
             byte[] data = directoryService.readFileBytes(rootType, path);
             String fileName = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
-            String encoded = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name())
-                    .replaceAll("\\+", "%20");
+            String encoded = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()).replaceAll("\\+", "%20");
             response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
             response.setContentType("application/octet-stream");
             response.getRawOutputStream().write(data);
@@ -234,16 +231,38 @@ public class FilesController {
         catch (Exception e) { return errorResponse(e.getMessage()); }
     }
 
+    /** 列出某类型某路径下的资源（目录 + 文件） */
     @RequestMapping("/resources/list")
     @ResponseBody
     public String listResources() {
         Map<String, String> params = ParamUtils.parseQueryParams();
         String type = params.get("type");
+        String path = params.getOrDefault("path", "");
         if (type == null || type.isEmpty()) return errorResponse("缺少 type 参数");
-        try { return JsonUtil.toJson(directoryService.listResources(type)); }
+        try { return JsonUtil.toJson(directoryService.listResources(type, path)); }
         catch (Exception e) { return errorResponse(e.getMessage()); }
     }
 
+    /** 新增子目录 */
+    @RequestMapping("/resources/mkdir")
+    @ResponseBody
+    public String createResourceSubDir() {
+        try {
+            String body = getRequestBody();
+            Map<String, Object> req = parseJson(body);
+            String type = (String) req.get("type");
+            String path = (String) req.getOrDefault("path", "");
+            String name = (String) req.get("name");
+            if (type == null || name == null) return errorResponse("缺少 type 或 name");
+            Map<String, Object> result = directoryService.createSubDirectory(type, path, name);
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("success", true);
+            resp.put("data", result);
+            return JsonUtil.toJson(resp);
+        } catch (Exception e) { return errorResponse(e.getMessage()); }
+    }
+
+    /** 上传资源（multipart，支持 path 指定子目录） */
     @RequestMapping("/resources/upload")
     @ResponseBody
     public String uploadResource() {
@@ -254,6 +273,9 @@ public class FilesController {
 
         FileItem fileItem = multipart.getFileItem("file");
         String type = multipart.getParameter("type");
+        String path = multipart.getParameter("path");
+        if (path == null) path = "";
+
         if (fileItem == null) return errorResponse("缺少 file 字段");
         if (type == null || type.isEmpty()) return errorResponse("缺少 type 字段");
 
@@ -261,7 +283,7 @@ public class FilesController {
             String originalName = fileItem.getFileName();
             if (originalName == null || originalName.isEmpty()) return errorResponse("文件名为空");
             byte[] content = fileItem.getBytes();
-            Map<String, Object> result = directoryService.uploadResource(type, originalName, content);
+            Map<String, Object> result = directoryService.uploadResource(type, path, originalName, content);
             Map<String, Object> resp = new HashMap<>();
             resp.put("success", true);
             resp.put("data", result);
@@ -271,6 +293,7 @@ public class FilesController {
         }
     }
 
+    /** 删除资源（文件或目录，递归） */
     @RequestMapping("/resources/delete")
     @ResponseBody
     public String deleteResource() {
@@ -278,37 +301,38 @@ public class FilesController {
             String body = getRequestBody();
             Map<String, Object> req = parseJson(body);
             String type = (String) req.get("type");
-            String displayName = (String) req.get("displayName");
-            if (type == null || displayName == null) return errorResponse("缺少 type 或 displayName");
-            directoryService.deleteResource(type, displayName);
+            String path = (String) req.get("path");
+            if (type == null || path == null) return errorResponse("缺少 type 或 path");
+            directoryService.deleteResource(type, path);
             return successResponse();
         } catch (Exception e) { return errorResponse(e.getMessage()); }
     }
 
+    /** 下载资源 */
     @RequestMapping("/resources/download")
     public void downloadResource() throws Exception {
         HttpServletResponse response = ResponseContextHolder.getResponse();
         if (response == null) throw new RuntimeException("No response available");
         Map<String, String> params = ParamUtils.parseQueryParams();
         String type = params.get("type");
-        String name = params.get("name");
-        if (type == null || name == null) {
+        String path = params.get("path");
+        if (type == null || path == null) {
             response.setStatus(400, "Bad Request");
-            response.write("Missing parameters: type, name");
+            response.write("Missing parameters: type, path");
             response.send();
             return;
         }
         try {
-            Path filePath = directoryService.getResourcePath(type, name);
+            Path filePath = directoryService.getResourceFilePath(type, path);
             if (!Files.exists(filePath)) {
                 response.setStatus(404, "Not Found");
-                response.write("Resource not found");
                 response.send();
                 return;
             }
-            String encodedFileName = URLEncoder.encode(name, StandardCharsets.UTF_8.name())
-                    .replaceAll("\\+", "%20");
-            response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFileName);
+            String fileName = filePath.getFileName().toString();
+            String displayName = directoryService.parseDisplayName(fileName);
+            String encoded = URLEncoder.encode(displayName, StandardCharsets.UTF_8.name()).replaceAll("\\+", "%20");
+            response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
             response.setContentType("application/octet-stream");
             byte[] data = Files.readAllBytes(filePath);
             response.getRawOutputStream().write(data);
@@ -320,20 +344,21 @@ public class FilesController {
         }
     }
 
+    /** 预览资源（inline，用于图片/HTML） */
     @RequestMapping("/resources/preview")
     public void previewResource() throws Exception {
         HttpServletResponse response = ResponseContextHolder.getResponse();
         if (response == null) throw new RuntimeException("No response available");
         Map<String, String> params = ParamUtils.parseQueryParams();
         String type = params.get("type");
-        String name = params.get("name");
-        if (type == null || name == null) {
+        String path = params.get("path");
+        if (type == null || path == null) {
             response.setStatus(400, "Bad Request");
             response.send();
             return;
         }
         try {
-            Path filePath = directoryService.getResourcePath(type, name);
+            Path filePath = directoryService.getResourceFilePath(type, path);
             if (!Files.exists(filePath)) {
                 response.setStatus(404, "Not Found");
                 response.send();
@@ -350,6 +375,25 @@ public class FilesController {
         }
     }
 
+    /** 读取文本内容（SQL / 页面等） */
+    @RequestMapping("/resources/read")
+    @ResponseBody
+    public String readResourceContent() {
+        Map<String, String> params = ParamUtils.parseQueryParams();
+        String type = params.get("type");
+        String path = params.get("path");
+        if (type == null || path == null) return errorResponse("缺少 type 或 path");
+        try {
+            String content = directoryService.readResourceContent(type, path);
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("success", true);
+            resp.put("content", content);
+            resp.put("type", type);
+            resp.put("path", path);
+            return JsonUtil.toJson(resp);
+        } catch (Exception e) { return errorResponse(e.getMessage()); }
+    }
+
     private String detectContentType(String fileName) {
         String lower = fileName.toLowerCase();
         if (lower.endsWith(".png"))              return "image/png";
@@ -364,7 +408,7 @@ public class FilesController {
         if (lower.endsWith(".css"))              return "text/css; charset=utf-8";
         if (lower.endsWith(".js"))               return "application/javascript; charset=utf-8";
         if (lower.endsWith(".json"))             return "application/json; charset=utf-8";
-        if (lower.endsWith(".txt"))              return "text/plain; charset=utf-8";
+        if (lower.endsWith(".txt") || lower.endsWith(".sql")) return "text/plain; charset=utf-8";
         return "application/octet-stream";
     }
 

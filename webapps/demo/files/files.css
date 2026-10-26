@@ -35,7 +35,6 @@
     font-family: monospace;
 }
 
-/* 资源类型列表 */
 .resource-type-list {
     flex: 1;
     overflow-y: auto;
@@ -54,22 +53,14 @@
     color: var(--text-dark);
     font-size: 14px;
 }
-.resource-type-item:hover {
-    background: rgba(0,102,255,0.1);
-}
+.resource-type-item:hover { background: rgba(0,102,255,0.1); }
 .resource-type-item.active {
     background: var(--accent-primary);
     color: white;
     box-shadow: 0 2px 12px rgba(0,102,255,0.3);
 }
-.resource-type-item .icon {
-    font-size: 18px;
-    flex-shrink: 0;
-}
-.resource-type-item .name {
-    flex: 1;
-    font-weight: 500;
-}
+.resource-type-item .icon { font-size: 18px; flex-shrink: 0; }
+.resource-type-item .name { flex: 1; font-weight: 500; }
 .resource-type-item .count {
     background: rgba(0,0,0,0.15);
     padding: 2px 10px;
@@ -79,9 +70,7 @@
     min-width: 28px;
     text-align: center;
 }
-.resource-type-item.active .count {
-    background: rgba(255,255,255,0.3);
-}
+.resource-type-item.active .count { background: rgba(255,255,255,0.3); }
 
 /* ========== 右侧内容 ========== */
 .resources-content {
@@ -96,13 +85,22 @@
 .resource-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     margin-bottom: 16px;
     padding: 12px 16px;
     background: var(--bg-card);
     border-radius: 20px;
     border: 1px solid rgba(0,102,255,0.15);
     flex-shrink: 0;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.resource-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
 }
 .resource-title {
     font-size: 16px;
@@ -112,8 +110,31 @@
 .resource-actions {
     display: flex;
     gap: 12px;
+    flex-wrap: wrap;
 }
 
+/* ========== 面包屑 ========== */
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.breadcrumb .bc-item {
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 8px;
+    transition: 0.15s;
+    color: var(--accent-primary);
+    font-family: monospace;
+}
+.breadcrumb .bc-item:hover { background: rgba(0,102,255,0.1); }
+.breadcrumb .bc-item.bc-type { font-weight: 600; }
+.breadcrumb .bc-sep { color: #94a3b8; }
+
+/* ========== 资源列表 ========== */
 .resource-list-panel {
     flex: 1;
     background: var(--bg-card);
@@ -124,7 +145,6 @@
     border: 1px solid rgba(0,102,255,0.15);
 }
 
-/* ========== 资源卡片 ========== */
 .resource-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -140,12 +160,15 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    user-select: none;
 }
 .resource-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 20px rgba(0,102,255,0.15);
     border-color: var(--accent-primary);
+    cursor: pointer;
 }
+.resource-card.is-dir { border-style: dashed; }
 
 .res-thumb-wrap {
     width: 100%;
@@ -170,6 +193,9 @@
     font-size: 40px;
     color: var(--accent-primary);
 }
+.res-thumb-fallback.folder-icon { color: #f59e0b; }
+.res-thumb-fallback.sql-icon    { color: #7c3aed; }
+.res-thumb-fallback.page-icon   { color: #10b981; }
 
 .res-info {
     padding: 10px 12px;

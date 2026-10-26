@@ -1,6 +1,5 @@
 // ========== 增强型 SQL 编辑器（无高亮，仅保留提示+格式化+清空） ==========
 const EnhancedSqlModule = (function() {
-    // DOM 元素引用
     let textarea = null;
     let popup = null;
     let sqlResultArea = null;
@@ -9,17 +8,14 @@ const EnhancedSqlModule = (function() {
     let exampleBtn = null;
     let clearBtn = null;
 
-    // 提示相关状态
     let currentHintList = [];
     let selectedHintIndex = -1;
     let hintStartPos = { ch: 0 };
     let currentWord = '';
 
-    // 缓存数据
     let tableNames = [];
     let columnMap = new Map();
 
-    // MySQL 关键字与函数
     const MYSQL_KEYWORDS = [
         'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'REPLACE', 'FROM', 'WHERE', 'JOIN', 'LEFT JOIN', 'RIGHT JOIN',
         'INNER JOIN', 'OUTER JOIN', 'ON', 'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE',
@@ -80,7 +76,6 @@ const EnhancedSqlModule = (function() {
         }
     }
 
-    function getCursorIndex() { return textarea.selectionStart; }
     function getCurrentWordBeforeCursor() {
         const cursorPos = textarea.selectionStart;
         const text = textarea.value;
@@ -196,16 +191,12 @@ const EnhancedSqlModule = (function() {
                 showPopup(hints, start);
             } else hidePopup();
         } else hidePopup();
-        // 不再调用高亮更新
     }
 
-    // ========== SQL 格式化 ==========
     function formatSql() {
         let sql = textarea.value;
         if (!sql.trim()) return;
-
         let formatted = sql.replace(/\s+/g, ' ').trim();
-
         formatted = formatted
             .replace(/\bselect\b/gi, 'SELECT')
             .replace(/\bfrom\b/gi, 'FROM')
@@ -227,15 +218,12 @@ const EnhancedSqlModule = (function() {
             .replace(/\bcreate table\b/gi, 'CREATE TABLE')
             .replace(/\balter table\b/gi, 'ALTER TABLE')
             .replace(/\bdrop table\b/gi, 'DROP TABLE');
-
         formatted = formatted.replace(/\s(SELECT|FROM|WHERE|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|ORDER BY|GROUP BY|HAVING|LIMIT|UNION|INSERT INTO|VALUES|UPDATE|SET|DELETE FROM)\s/gi, '\n$1 ');
         formatted = formatted.replace(/\n\s*\n/g, '\n').trim();
-
         textarea.value = formatted;
         textarea.dispatchEvent(new Event('input'));
     }
 
-    // ========== 清空 SQL ==========
     function clearSql() {
         textarea.value = '';
         textarea.dispatchEvent(new Event('input'));
@@ -243,7 +231,6 @@ const EnhancedSqlModule = (function() {
         textarea.focus();
     }
 
-    // ========== 示例SQL ==========
     function setExampleSql() {
         const currentTable = getCurrentTable();
         if (currentTable) {
@@ -254,7 +241,6 @@ const EnhancedSqlModule = (function() {
         textarea.dispatchEvent(new Event('input'));
     }
 
-    // ========== 执行SQL（使用 DB.postJSON 自动附带 dsId） ==========
     async function executeSql() {
         const sql = textarea.value.trim();
         if (!sql) { alert('请输入SQL语句'); return; }
@@ -262,7 +248,6 @@ const EnhancedSqlModule = (function() {
         if (!currentDb) { alert('请先从左侧选择一个数据库'); return; }
         sqlResultArea.innerHTML = '<div class="loading">执行中...</div>';
         try {
-            // 通过 DB.postJSON 发送，会自动在 URL 上附加 dsId
             const data = await DB.postJSON(DB.apiBase + '/sqlQuery', { db: currentDb, sql: sql });
             if (data.error) {
                 sqlResultArea.innerHTML = `<div class="error">${data.error}</div>`;
@@ -297,12 +282,10 @@ const EnhancedSqlModule = (function() {
         return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
     }
 
-    // ========== UI 初始化（仅保留编辑器、按钮和提示层） ==========
     function initUI() {
         textarea = document.getElementById('sqlEditor');
         if (!textarea) return;
 
-        // 添加清空按钮到按钮栏
         const buttonContainer = document.querySelector('#tab-sql .sql-editor > div:first-child');
         if (buttonContainer && !document.getElementById('clearSqlBtn')) {
             clearBtn = document.createElement('button');
@@ -313,16 +296,14 @@ const EnhancedSqlModule = (function() {
             buttonContainer.appendChild(clearBtn);
         }
 
-        // 确保 textarea 样式干净（移除可能的高亮包装器残留）
         if (textarea.parentElement && textarea.parentElement.classList.contains('sql-editor-wrapper')) {
             const wrapper = textarea.parentElement;
             const highlighter = wrapper.querySelector('.sql-highlighter');
             if (highlighter) highlighter.remove();
-            // 解包：将 textarea 移出 wrapper 并删除 wrapper
             wrapper.parentNode.insertBefore(textarea, wrapper);
             wrapper.remove();
         }
-        // 重新设置基础样式，避免背景混乱
+
         textarea.style.backgroundColor = 'white';
         textarea.style.color = '#1e293b';
         textarea.style.fontFamily = 'monospace';
@@ -333,7 +314,6 @@ const EnhancedSqlModule = (function() {
         textarea.style.borderRadius = '16px';
         textarea.style.resize = 'vertical';
 
-        // 创建提示层
         popup = document.createElement('div');
         popup.className = 'sql-hint-popup';
         popup.style.position = 'fixed';
@@ -347,7 +327,6 @@ const EnhancedSqlModule = (function() {
         popup.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
         document.body.appendChild(popup);
 
-        // 注入必要的样式
         const style = document.createElement('style');
         style.textContent = `
             .sql-hint-popup .hint-item {
@@ -360,9 +339,7 @@ const EnhancedSqlModule = (function() {
                 background-color: #0066ff;
                 color: white;
             }
-            .sql-hint-popup .hint-item:hover {
-                background-color: #334155;
-            }
+            .sql-hint-popup .hint-item:hover { background-color: #334155; }
         `;
         document.head.appendChild(style);
 
@@ -376,6 +353,42 @@ const EnhancedSqlModule = (function() {
         await refreshDynamicHints();
     }
 
+    /**
+     * ★ 支持从 URL 参数加载 SQL 资源文件
+     * 例如：dbclient.html?loadSql=<fullRelPath>&loadSqlType=sql
+     */
+    async function loadSqlFromUrlParam() {
+        const params = new URLSearchParams(window.location.search);
+        const loadSql = params.get('loadSql');
+        const loadSqlType = params.get('loadSqlType') || 'sql';
+        if (!loadSql) return;
+
+        try {
+            // 先切到 SQL tab
+            const sqlTabBtn = document.querySelector('.tab-btn[data-tab="sql"]');
+            if (sqlTabBtn) sqlTabBtn.click();
+        } catch (e) { /* ignore */ }
+
+        try {
+            const apiUrl = (typeof window.apiUrl === 'function')
+                ? window.apiUrl('/files/api/resources/read')
+                : '/files/api/resources/read';
+            const url = `${apiUrl}?type=${encodeURIComponent(loadSqlType)}&path=${encodeURIComponent(loadSql)}`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
+            if (data.success && typeof data.content === 'string' && textarea) {
+                textarea.value = data.content;
+                textarea.dispatchEvent(new Event('input'));
+                if (sqlResultArea) sqlResultArea.innerHTML = '';
+            } else if (data.error) {
+                console.warn('[loadSql] 加载失败:', data.error);
+            }
+        } catch (e) {
+            console.error('[loadSql] 加载异常', e);
+        }
+    }
+
     async function init() {
         sqlResultArea = document.getElementById('sqlResultArea');
         executeBtn = document.getElementById('executeSqlBtn');
@@ -387,6 +400,9 @@ const EnhancedSqlModule = (function() {
         initUI();
         await refreshDynamicHints();
         window.__refreshSqlHints = refresh;
+
+        // ★ 检查 URL 是否有 loadSql 参数
+        loadSqlFromUrlParam();
     }
 
     return { init, refresh };

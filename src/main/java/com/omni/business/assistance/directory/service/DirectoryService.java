@@ -13,28 +13,19 @@ import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-/**
- * 目录与资源管理服务
- * - 本地目录管理（local）：可浏览、编辑、上传、下载
- * - 资源管理（resources）：项目根目录下的 ./resources，按类型分目录，文件名 名称_uuid.ext
- */
 @Service
 public class DirectoryService {
 
     private static final Logger log = LoggerFactory.getLogger(DirectoryService.class);
 
-    /** 本地目录类型 */
     public static final String ROOT_TYPE_LOCAL = "local";
-    /** 资源管理类型 */
     public static final String ROOT_TYPE_RESOURCES = "resources";
 
-    /** 资源类型常量 */
     public static final String RES_TYPE_IMAGES      = "images";
     public static final String RES_TYPE_PAGES       = "pages";
     public static final String RES_TYPE_ATTACHMENTS = "attachments";
     public static final String RES_TYPE_OTHERS      = "others";
 
-    /** 资源类型 -> 显示名称 */
     private static final Map<String, String> RESOURCE_TYPES = new LinkedHashMap<>();
     static {
         RESOURCE_TYPES.put(RES_TYPE_IMAGES,      "图片");
@@ -43,7 +34,6 @@ public class DirectoryService {
         RESOURCE_TYPES.put(RES_TYPE_OTHERS,      "其他");
     }
 
-    /** uuid 长度和格式 */
     private static final int UUID_LENGTH = 12;
     private static final String UUID_REGEX = "[0-9a-f]{" + UUID_LENGTH + "}";
 
@@ -51,17 +41,13 @@ public class DirectoryService {
     private Path resourcesRoot;
 
     public DirectoryService() {
-        // 本地根：当前工作目录（可配置）
         String localRootPath = ConfigLoader.getProperty("files.local.root", System.getProperty("user.dir"));
         this.localRoot = Paths.get(localRootPath).normalize().toAbsolutePath();
         ensureRootExists(localRoot);
 
-        // 资源根：固定在项目根目录 ./resources，无需配置
         this.resourcesRoot = Paths.get(System.getProperty("user.dir"), "resources")
                 .normalize().toAbsolutePath();
         ensureRootExists(resourcesRoot);
-
-        // 确保所有资源类型子目录存在
         for (String type : RESOURCE_TYPES.keySet()) {
             ensureRootExists(resourcesRoot.resolve(type));
         }
@@ -70,21 +56,15 @@ public class DirectoryService {
 
     private void ensureRootExists(Path root) {
         if (!Files.exists(root)) {
-            try {
-                Files.createDirectories(root);
-            } catch (IOException e) {
-                throw new RuntimeException("无法创建目录: " + root, e);
-            }
+            try { Files.createDirectories(root); }
+            catch (IOException e) { throw new RuntimeException("无法创建目录: " + root, e); }
         }
     }
 
-    // ==================== 本地目录管理（保留原有功能） ====================
+    // ==================== 本地目录 ====================
 
     public Path getRootPath(String rootType) {
-        if (ROOT_TYPE_RESOURCES.equals(rootType)) {
-            return resourcesRoot;
-        }
-        return localRoot;
+        return ROOT_TYPE_RESOURCES.equals(rootType) ? resourcesRoot : localRoot;
     }
 
     public Map<String, Object> getRootInfo(String rootType) {
@@ -113,52 +93,38 @@ public class DirectoryService {
         Path root = getRootPath(rootType);
         Path parent = FileUtils.resolveSafePath(root, parentPath);
         Path newDir = parent.resolve(dirName).normalize();
-        if (!newDir.startsWith(root)) {
-            throw new SecurityException("创建路径越界");
-        }
+        if (!newDir.startsWith(root)) throw new SecurityException("创建路径越界");
         FileUtils.createDirectories(newDir);
     }
 
     public void createFile(String rootType, String parentPath, String fileName) throws IOException {
-        if (fileName == null || fileName.trim().isEmpty()) {
-            throw new IllegalArgumentException("文件名不能为空");
-        }
+        if (fileName == null || fileName.trim().isEmpty()) throw new IllegalArgumentException("文件名不能为空");
         Path root = getRootPath(rootType);
         Path parent = FileUtils.resolveSafePath(root, parentPath);
         Path newFile = parent.resolve(fileName).normalize();
-        if (!newFile.startsWith(root)) {
-            throw new SecurityException("创建路径越界");
-        }
+        if (!newFile.startsWith(root)) throw new SecurityException("创建路径越界");
         FileUtils.createNewFile(newFile);
     }
 
     public void deletePath(String rootType, String targetPath) throws IOException {
         Path root = getRootPath(rootType);
         Path target = FileUtils.resolveSafePath(root, targetPath);
-        if (target.equals(root)) {
-            throw new SecurityException("根目录不可删除");
-        }
+        if (target.equals(root)) throw new SecurityException("根目录不可删除");
         FileUtils.deletePath(target);
     }
 
     public void rename(String rootType, String sourcePath, String newName) throws IOException {
-        if (newName == null || newName.trim().isEmpty()) {
-            throw new IllegalArgumentException("新名称不能为空");
-        }
+        if (newName == null || newName.trim().isEmpty()) throw new IllegalArgumentException("新名称不能为空");
         Path root = getRootPath(rootType);
         Path source = FileUtils.resolveSafePath(root, sourcePath);
-        if (source.equals(root)) {
-            throw new SecurityException("根目录不可重命名");
-        }
+        if (source.equals(root)) throw new SecurityException("根目录不可重命名");
         FileUtils.rename(source, newName);
     }
 
     public String readFile(String rootType, String filePath) throws IOException {
         Path root = getRootPath(rootType);
         Path target = FileUtils.resolveSafePath(root, filePath);
-        if (!Files.isRegularFile(target)) {
-            throw new IOException("不是文件: " + target);
-        }
+        if (!Files.isRegularFile(target)) throw new IOException("不是文件: " + target);
         return FileUtils.readFile(target);
     }
 
@@ -168,63 +134,52 @@ public class DirectoryService {
         FileUtils.writeFile(target, content);
     }
 
+    /** 二进制写入，避免图片等文件被 UTF-8 转码损坏 */
+    public void writeBytes(String rootType, String filePath, byte[] content) throws IOException {
+        Path root = getRootPath(rootType);
+        Path target = FileUtils.resolveSafePath(root, filePath);
+        Path parent = target.getParent();
+        if (parent != null && !Files.exists(parent)) Files.createDirectories(parent);
+        Files.write(target, content);
+    }
+
     public byte[] readFileBytes(String rootType, String filePath) throws IOException {
         Path root = getRootPath(rootType);
         Path target = FileUtils.resolveSafePath(root, filePath);
-        if (!Files.isRegularFile(target)) {
-            throw new IOException("不是文件: " + target);
-        }
+        if (!Files.isRegularFile(target)) throw new IOException("不是文件: " + target);
         return Files.readAllBytes(target);
     }
 
     public void zipDirectory(String rootType, String dirPath, OutputStream out) throws IOException {
         Path root = getRootPath(rootType);
         Path targetDir = FileUtils.resolveSafePath(root, dirPath);
-        if (!Files.isDirectory(targetDir)) {
-            throw new IOException("路径不是目录: " + targetDir);
-        }
+        if (!Files.isDirectory(targetDir)) throw new IOException("路径不是目录: " + targetDir);
         try (ZipOutputStream zos = new ZipOutputStream(out)) {
-            Files.walk(targetDir)
-                    .filter(Files::isRegularFile)
-                    .forEach(file -> {
-                        String relativePath = targetDir.relativize(file).toString().replace('\\', '/');
-                        try {
-                            zos.putNextEntry(new ZipEntry(relativePath));
-                            Files.copy(file, zos);
-                            zos.closeEntry();
-                        } catch (IOException e) {
-                            throw new RuntimeException("打包失败: " + relativePath, e);
-                        }
-                    });
+            Files.walk(targetDir).filter(Files::isRegularFile).forEach(file -> {
+                String relativePath = targetDir.relativize(file).toString().replace('\\', '/');
+                try {
+                    zos.putNextEntry(new ZipEntry(relativePath));
+                    Files.copy(file, zos);
+                    zos.closeEntry();
+                } catch (IOException e) { throw new RuntimeException("打包失败: " + relativePath, e); }
+            });
         } catch (RuntimeException e) {
-            if (e.getCause() instanceof IOException) {
-                throw (IOException) e.getCause();
-            }
+            if (e.getCause() instanceof IOException) throw (IOException) e.getCause();
             throw e;
         }
     }
 
     // ==================== 资源管理 ====================
 
-    /** 获取资源类型映射（key -> 中文名） */
-    public Map<String, String> getResourceTypes() {
-        return new LinkedHashMap<>(RESOURCE_TYPES);
-    }
+    public Map<String, String> getResourceTypes() { return new LinkedHashMap<>(RESOURCE_TYPES); }
 
-    /** 获取资源类型目录（自动创建） */
     public Path getResourceTypePath(String type) {
-        if (!RESOURCE_TYPES.containsKey(type)) {
-            throw new IllegalArgumentException("未知资源类型: " + type);
-        }
+        if (!RESOURCE_TYPES.containsKey(type)) throw new IllegalArgumentException("未知资源类型: " + type);
         Path path = resourcesRoot.resolve(type);
         ensureRootExists(path);
         return path;
     }
 
-    /**
-     * 生成存储文件名：名称_uuid.ext
-     * uuid 为 12 位十六进制，足够唯一
-     */
     private String generateStoredName(String originalName) {
         String baseName = originalName;
         String ext = "";
@@ -233,23 +188,15 @@ public class DirectoryService {
             baseName = originalName.substring(0, dotIdx);
             ext = originalName.substring(dotIdx);
         }
-        String uuid = UUID.randomUUID().toString().replace("-", "")
-                .substring(0, UUID_LENGTH);
+        String uuid = UUID.randomUUID().toString().replace("-", "").substring(0, UUID_LENGTH);
         return baseName + "_" + uuid + ext;
     }
 
-    /**
-     * 从存储文件名解析显示名（去掉 uuid 后缀）
-     * 例如: logo_a1b2c3d4e5f6.png -> logo.png
-     * 若文件名不符合 名称_uuid.ext 格式，原样返回
-     */
     public String parseDisplayName(String storedName) {
         if (storedName == null || storedName.isEmpty()) return storedName;
-
         int dotIdx = storedName.lastIndexOf('.');
         String baseName = dotIdx > 0 ? storedName.substring(0, dotIdx) : storedName;
         String ext = dotIdx > 0 ? storedName.substring(dotIdx) : "";
-
         int underscoreIdx = baseName.lastIndexOf('_');
         if (underscoreIdx > 0) {
             String uuidPart = baseName.substring(underscoreIdx + 1);
@@ -260,20 +207,11 @@ public class DirectoryService {
         return storedName;
     }
 
-    /**
-     * 根据显示名查找实际存储名
-     * 优先精确匹配，再匹配 名称_uuid.ext 模式
-     */
     public String findStoredName(String type, String displayName) throws IOException {
         Path typePath = getResourceTypePath(type);
-
-        // 1. 精确匹配（兼容老数据或非规范命名）
         Path direct = typePath.resolve(displayName);
-        if (Files.isRegularFile(direct)) {
-            return displayName;
-        }
+        if (Files.isRegularFile(direct)) return displayName;
 
-        // 2. 匹配 名称_uuid.ext 模式
         String baseName = displayName;
         String ext = "";
         int dotIdx = displayName.lastIndexOf('.');
@@ -293,9 +231,7 @@ public class DirectoryService {
                     int end = stored.length() - finalExt.length();
                     if (end > start) {
                         String middle = stored.substring(start, end);
-                        if (middle.matches(UUID_REGEX)) {
-                            return stored;
-                        }
+                        if (middle.matches(UUID_REGEX)) return stored;
                     }
                 }
             }
@@ -303,18 +239,15 @@ public class DirectoryService {
         throw new IOException("资源不存在: " + displayName);
     }
 
-    /** 列出某类型的所有资源 */
     public List<Map<String, Object>> listResources(String type) throws IOException {
         Path typePath = getResourceTypePath(type);
         List<Map<String, Object>> list = new ArrayList<>();
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(typePath)) {
             for (Path p : stream) {
                 if (!Files.isRegularFile(p)) continue;
                 String storedName = p.getFileName().toString();
                 String displayName = parseDisplayName(storedName);
-
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("storedName", storedName);
                 item.put("displayName", displayName);
@@ -324,14 +257,10 @@ public class DirectoryService {
                 list.add(item);
             }
         }
-        // 按修改时间倒序（最新在前）
         list.sort((a, b) -> ((String) b.get("modified")).compareTo((String) a.get("modified")));
         return list;
     }
 
-    /**
-     * 上传资源：以 名称_uuid.ext 格式保存
-     */
     public Map<String, Object> uploadResource(String type, String originalName, byte[] content) throws IOException {
         Path typePath = getResourceTypePath(type);
         String storedName = generateStoredName(originalName);
@@ -348,7 +277,6 @@ public class DirectoryService {
         return result;
     }
 
-    /** 删除资源（按显示名） */
     public void deleteResource(String type, String displayName) throws IOException {
         String storedName = findStoredName(type, displayName);
         Path target = getResourceTypePath(type).resolve(storedName);
@@ -356,13 +284,11 @@ public class DirectoryService {
         log.info("删除资源: type={}, displayName={}, storedName={}", type, displayName, storedName);
     }
 
-    /** 获取资源物理路径（按显示名） */
     public Path getResourcePath(String type, String displayName) throws IOException {
         String storedName = findStoredName(type, displayName);
         return getResourceTypePath(type).resolve(storedName);
     }
 
-    /** 统计各类型资源数量 */
     public Map<String, Integer> countResources() {
         Map<String, Integer> counts = new LinkedHashMap<>();
         for (String type : RESOURCE_TYPES.keySet()) {
@@ -370,14 +296,10 @@ public class DirectoryService {
                 Path typePath = getResourceTypePath(type);
                 int count = 0;
                 try (DirectoryStream<Path> stream = Files.newDirectoryStream(typePath)) {
-                    for (Path p : stream) {
-                        if (Files.isRegularFile(p)) count++;
-                    }
+                    for (Path p : stream) if (Files.isRegularFile(p)) count++;
                 }
                 counts.put(type, count);
-            } catch (Exception e) {
-                counts.put(type, 0);
-            }
+            } catch (Exception e) { counts.put(type, 0); }
         }
         return counts;
     }

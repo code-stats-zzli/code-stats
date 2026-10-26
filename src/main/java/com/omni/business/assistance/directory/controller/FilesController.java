@@ -30,14 +30,9 @@ public class FilesController {
     @Autowired
     private DirectoryService directoryService;
 
-    // ==================== 本地目录管理 ====================
-
     private String getRootType(Map<String, String> params) {
         String rt = params.get("rootType");
-        if (rt == null || rt.isEmpty()) {
-            rt = DirectoryService.ROOT_TYPE_LOCAL;
-        }
-        // 兼容旧参数：server -> resources（走资源管理专用接口，本地接口保持 local）
+        if (rt == null || rt.isEmpty()) rt = DirectoryService.ROOT_TYPE_LOCAL;
         return rt;
     }
 
@@ -45,8 +40,7 @@ public class FilesController {
     @ResponseBody
     public String getRootInfo() throws Exception {
         Map<String, String> params = parseQueryParams();
-        String rootType = getRootType(params);
-        return JsonUtil.toJson(directoryService.getRootInfo(rootType));
+        return JsonUtil.toJson(directoryService.getRootInfo(getRootType(params)));
     }
 
     @RequestMapping("/tree")
@@ -56,8 +50,7 @@ public class FilesController {
         String rootType = getRootType(params);
         String path = params.getOrDefault("path", "");
         boolean withChildren = !"false".equalsIgnoreCase(params.get("withChildren"));
-        var node = directoryService.getTreeNode(rootType, path, withChildren);
-        return JsonUtil.toJson(node);
+        return JsonUtil.toJson(directoryService.getTreeNode(rootType, path, withChildren));
     }
 
     @RequestMapping("/list")
@@ -66,8 +59,7 @@ public class FilesController {
         Map<String, String> params = parseQueryParams();
         String rootType = getRootType(params);
         String path = params.getOrDefault("path", "");
-        var list = directoryService.listDirectory(rootType, path);
-        return JsonUtil.toJson(list);
+        return JsonUtil.toJson(directoryService.listDirectory(rootType, path));
     }
 
     @RequestMapping("/read")
@@ -148,6 +140,10 @@ public class FilesController {
         return successResponse();
     }
 
+    /**
+     * 本地目录上传：直接接收二进制（base64 解码后 writeBytes），
+     * 避免 new String(bytes, UTF_8) 造成图片损坏
+     */
     @RequestMapping("/upload")
     @ResponseBody
     public String upload() throws Exception {
@@ -159,8 +155,8 @@ public class FilesController {
         String base64Content = (String) req.get("content");
         if (fileName == null || base64Content == null) return errorResponse("缺少参数");
         byte[] bytes = java.util.Base64.getDecoder().decode(base64Content);
-        String content = new String(bytes, StandardCharsets.UTF_8);
-        directoryService.writeFile(rootType, parentPath + (parentPath.isEmpty() ? "" : "/") + fileName, content);
+        String fullPath = parentPath.isEmpty() ? fileName : parentPath + "/" + fileName;
+        directoryService.writeBytes(rootType, fullPath, bytes);
         return successResponse();
     }
 
@@ -180,7 +176,9 @@ public class FilesController {
         try {
             byte[] data = directoryService.readFileBytes(rootType, path);
             String fileName = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
-            response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+            String encoded = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name())
+                    .replaceAll("\\+", "%20");
+            response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
             response.setContentType("application/octet-stream");
             response.getRawOutputStream().write(data);
             response.getRawOutputStream().flush();
@@ -207,7 +205,8 @@ public class FilesController {
         String zipName = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
         if (zipName.isEmpty()) zipName = "root";
         zipName += ".zip";
-        response.setHeader("Content-Disposition", "attachment; filename=\"" + zipName + "\"");
+        String encoded = URLEncoder.encode(zipName, StandardCharsets.UTF_8.name()).replaceAll("\\+", "%20");
+        response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
         response.setContentType("application/zip");
         response.setStatus(200, "OK");
         try {
@@ -221,43 +220,30 @@ public class FilesController {
 
     // ==================== 资源管理 API ====================
 
-    /** 资源类型列表（含中文名） */
     @RequestMapping("/resources/types")
     @ResponseBody
     public String listResourceTypes() {
-        try {
-            return JsonUtil.toJson(directoryService.getResourceTypes());
-        } catch (Exception e) {
-            return errorResponse(e.getMessage());
-        }
+        try { return JsonUtil.toJson(directoryService.getResourceTypes()); }
+        catch (Exception e) { return errorResponse(e.getMessage()); }
     }
 
-    /** 各类型资源数量统计 */
     @RequestMapping("/resources/count")
     @ResponseBody
     public String countResources() {
-        try {
-            return JsonUtil.toJson(directoryService.countResources());
-        } catch (Exception e) {
-            return errorResponse(e.getMessage());
-        }
+        try { return JsonUtil.toJson(directoryService.countResources()); }
+        catch (Exception e) { return errorResponse(e.getMessage()); }
     }
 
-    /** 列出某类型的资源（显示名已剥离 uuid） */
     @RequestMapping("/resources/list")
     @ResponseBody
     public String listResources() {
         Map<String, String> params = ParamUtils.parseQueryParams();
         String type = params.get("type");
         if (type == null || type.isEmpty()) return errorResponse("缺少 type 参数");
-        try {
-            return JsonUtil.toJson(directoryService.listResources(type));
-        } catch (Exception e) {
-            return errorResponse(e.getMessage());
-        }
+        try { return JsonUtil.toJson(directoryService.listResources(type)); }
+        catch (Exception e) { return errorResponse(e.getMessage()); }
     }
 
-    /** 上传资源（multipart） */
     @RequestMapping("/resources/upload")
     @ResponseBody
     public String uploadResource() {
@@ -273,12 +259,9 @@ public class FilesController {
 
         try {
             String originalName = fileItem.getFileName();
-            if (originalName == null || originalName.isEmpty()) {
-                return errorResponse("文件名为空");
-            }
+            if (originalName == null || originalName.isEmpty()) return errorResponse("文件名为空");
             byte[] content = fileItem.getBytes();
             Map<String, Object> result = directoryService.uploadResource(type, originalName, content);
-
             Map<String, Object> resp = new HashMap<>();
             resp.put("success", true);
             resp.put("data", result);
@@ -288,7 +271,6 @@ public class FilesController {
         }
     }
 
-    /** 删除资源 */
     @RequestMapping("/resources/delete")
     @ResponseBody
     public String deleteResource() {
@@ -300,12 +282,9 @@ public class FilesController {
             if (type == null || displayName == null) return errorResponse("缺少 type 或 displayName");
             directoryService.deleteResource(type, displayName);
             return successResponse();
-        } catch (Exception e) {
-            return errorResponse(e.getMessage());
-        }
+        } catch (Exception e) { return errorResponse(e.getMessage()); }
     }
 
-    /** 下载资源（按显示名） */
     @RequestMapping("/resources/download")
     public void downloadResource() throws Exception {
         HttpServletResponse response = ResponseContextHolder.getResponse();
@@ -329,8 +308,7 @@ public class FilesController {
             }
             String encodedFileName = URLEncoder.encode(name, StandardCharsets.UTF_8.name())
                     .replaceAll("\\+", "%20");
-            response.setHeader("Content-Disposition",
-                    "attachment; filename*=UTF-8''" + encodedFileName);
+            response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFileName);
             response.setContentType("application/octet-stream");
             byte[] data = Files.readAllBytes(filePath);
             response.getRawOutputStream().write(data);
@@ -342,7 +320,6 @@ public class FilesController {
         }
     }
 
-    /** 预览资源（inline，用于图片缩略图等） */
     @RequestMapping("/resources/preview")
     public void previewResource() throws Exception {
         HttpServletResponse response = ResponseContextHolder.getResponse();
@@ -391,7 +368,7 @@ public class FilesController {
         return "application/octet-stream";
     }
 
-    // ==================== 辅助方法 ====================
+    // ==================== 辅助 ====================
 
     private Map<String, String> parseQueryParams() {
         HttpServletRequest request = RequestContextHolder.getRequest();
@@ -438,9 +415,7 @@ public class FilesController {
         return map;
     }
 
-    private HttpServletResponse getResponse() {
-        return ResponseContextHolder.getResponse();
-    }
+    private HttpServletResponse getResponse() { return ResponseContextHolder.getResponse(); }
 
     private String successResponse() {
         Map<String, Object> res = new HashMap<>();

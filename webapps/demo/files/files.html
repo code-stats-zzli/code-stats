@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>目录与资源管理 - CodeStats</title>
+    <title>资源管理 - CodeStats</title>
     <script src="../global.js"></script>
     <link rel="stylesheet" href="../global-tech.css">
     <link rel="stylesheet" href="files.css">
@@ -13,23 +13,23 @@
     <aside class="files-sidebar">
         <div class="sidebar-header">
             <div class="root-selector">
-                <button id="rootLocalBtn" class="root-btn active">📁 本地目录</button>
-                <button id="rootResourcesBtn" class="root-btn">🎨 资源管理</button>
+                <button id="rootResourcesBtn" class="root-btn active">🎨 资源管理</button>
+                <button id="rootLocalBtn" class="root-btn">📁 本地目录</button>
             </div>
         </div>
 
-        <!-- 本地模式：目录树 -->
-        <div class="tree-wrapper" id="treeWrapper">
+        <!-- 本地模式：目录树（隐藏） -->
+        <div class="tree-wrapper" id="treeWrapper" style="display: none;">
             <div id="treeContainer" class="tree"></div>
         </div>
 
-        <!-- 资源模式：资源类型列表 -->
-        <div class="resource-type-list" id="resourceTypeList" style="display: none;"></div>
+        <!-- 资源模式：资源类型列表（默认显示） -->
+        <div class="resource-type-list" id="resourceTypeList"></div>
     </aside>
 
     <main class="files-content">
-        <!-- ============ 本地模式内容 ============ -->
-        <div id="localModeContent" class="mode-content">
+        <!-- 本地模式内容 -->
+        <div id="localModeContent" class="mode-content" style="display: none;">
             <div id="pathBar" class="path-bar">
                 <span class="path-label">当前路径：</span>
                 <span id="currentPath" class="path-value">/</span>
@@ -60,8 +60,8 @@
             </div>
         </div>
 
-        <!-- ============ 资源模式内容 ============ -->
-        <div id="resourcesModeContent" class="mode-content" style="display: none;">
+        <!-- 资源模式内容（默认显示） -->
+        <div id="resourcesModeContent" class="mode-content">
             <div class="resource-header">
                 <div class="resource-title" id="resourceTitle">🎨 资源管理</div>
                 <div class="resource-actions">

@@ -4,6 +4,7 @@ import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 
 import java.io.*;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -53,9 +54,7 @@ public class MultipartResolver implements AutoCloseable {
     }
 
     private void parse(BoundaryFinder finder) throws IOException {
-        if (!finder.findBoundary()) {
-            throw new IOException("找不到起始边界");
-        }
+        if (!finder.findBoundary()) throw new IOException("找不到起始边界");
         int partCount = 0;
         while (true) {
             if (finder.isClosingBoundary()) break;
@@ -96,6 +95,10 @@ public class MultipartResolver implements AutoCloseable {
         log.debug("Multipart 解析结束，共 {} 个 part", partCount);
     }
 
+    /**
+     * 读 part 头，用 ISO-8859-1 解码保留原始字节（后续按需按 UTF-8 还原）。
+     * key 转小写，value 保持原样。
+     */
     private Map<String, String> readPartHeaders(BoundaryFinder finder) throws IOException {
         Map<String, String> headers = new HashMap<>();
         while (true) {
@@ -104,7 +107,7 @@ public class MultipartResolver implements AutoCloseable {
             if (line.isEmpty()) break;
             int colon = line.indexOf(':');
             if (colon > 0) {
-                String key = line.substring(0, colon).trim().toLowerCase();
+                String key = line.substring(0, colon).trim().toLowerCase(Locale.ROOT);
                 String value = line.substring(colon + 1).trim();
                 headers.put(key, value);
             }
@@ -112,13 +115,18 @@ public class MultipartResolver implements AutoCloseable {
         return headers;
     }
 
+    /**
+     * 用 ISO-8859-1 读行：保证原始字节 1:1 映射到 char，避免中文被替换为 ?
+     */
     private String readLine(BoundaryFinder finder) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream(256);
         byte[] buf = new byte[CONTENT_BUFFER];
         int consecutiveZeroReads = 0;
         while (true) {
             int r = finder.readBuffer(buf);
-            if (r == -1) return baos.size() == 0 ? null : baos.toString(StandardCharsets.US_ASCII);
+            if (r == -1) {
+                return baos.size() == 0 ? null : baos.toString(StandardCharsets.ISO_8859_1);
+            }
             if (r == 0) {
                 consecutiveZeroReads++;
                 if (consecutiveZeroReads > 10) return null;
@@ -131,7 +139,7 @@ public class MultipartResolver implements AutoCloseable {
                     baos.write(buf, 0, i);
                     int remain = r - i - 1;
                     if (remain > 0) finder.unread(buf, i + 1, remain);
-                    String line = baos.toString(StandardCharsets.US_ASCII);
+                    String line = baos.toString(StandardCharsets.ISO_8859_1);
                     return line.endsWith("\r") ? line.substring(0, line.length() - 1) : line;
                 }
             }
@@ -195,27 +203,102 @@ public class MultipartResolver implements AutoCloseable {
         return text;
     }
 
+    /**
+     * 从 content-disposition 中提取参数（支持 RFC 5987 编码 filename*=UTF-8''xxx）。
+     * 注意：绝不 lowercase 整个 header（会破坏 UTF-8 字节），只 lowercase key 部分。
+     */
     private String extractHeaderValue(String header, String paramName) {
         if (header == null) return null;
-        for (String part : header.split(";")) {
-            part = part.trim().toLowerCase();
-            String key = paramName + "=";
-            if (part.startsWith(key)) {
-                String val = part.substring(key.length()).trim();
-                if (val.startsWith("\"") && val.endsWith("\"")) val = val.substring(1, val.length() - 1);
-                return val;
+
+        List<String> parts = splitParams(header);
+        String lowerParam = paramName.toLowerCase(Locale.ROOT);
+
+        // 1) 优先 RFC 5987: filename*=UTF-8''%E4%B8%AD.png
+        for (String part : parts) {
+            String trimmed = part.trim();
+            int eq = trimmed.indexOf('=');
+            if (eq <= 0) continue;
+            String key = trimmed.substring(0, eq).trim().toLowerCase(Locale.ROOT);
+            if (!key.equals(lowerParam + "*")) continue;
+            String val = trimmed.substring(eq + 1).trim();
+            return parseRfc5987Value(val);
+        }
+
+        // 2) 标准格式 filename="xxx"，用 UTF-8 还原原始字节
+        for (String part : parts) {
+            String trimmed = part.trim();
+            int eq = trimmed.indexOf('=');
+            if (eq <= 0) continue;
+            String key = trimmed.substring(0, eq).trim().toLowerCase(Locale.ROOT);
+            if (!key.equals(lowerParam)) continue;
+            String val = trimmed.substring(eq + 1).trim();
+            if (val.startsWith("\"") && val.endsWith("\"") && val.length() >= 2) {
+                val = val.substring(1, val.length() - 1);
             }
+            return decodeIfUtf8(val);
         }
         return null;
     }
 
+    /**
+     * 按分号拆分，但要忽略引号内的分号
+     */
+    private List<String> splitParams(String header) {
+        List<String> result = new ArrayList<>();
+        boolean inQuote = false;
+        int start = 0;
+        for (int i = 0; i < header.length(); i++) {
+            char c = header.charAt(i);
+            if (c == '"') {
+                inQuote = !inQuote;
+            } else if (c == ';' && !inQuote) {
+                result.add(header.substring(start, i));
+                start = i + 1;
+            }
+        }
+        result.add(header.substring(start));
+        return result;
+    }
+
+    /**
+     * 解析 RFC 5987: UTF-8''%E4%B8%AD.png
+     */
+    private String parseRfc5987Value(String val) {
+        if (val.startsWith("\"") && val.endsWith("\"") && val.length() >= 2) {
+            val = val.substring(1, val.length() - 1);
+        }
+        int quoteIdx = val.indexOf("''");
+        if (quoteIdx >= 0) {
+            String encoded = val.substring(quoteIdx + 2);
+            try {
+                return URLDecoder.decode(encoded, "UTF-8");
+            } catch (Exception e) {
+                log.warn("RFC5987 解码失败: {}", encoded, e);
+                return encoded;
+            }
+        }
+        return val;
+    }
+
+    /**
+     * 用 ISO-8859-1 读到的字符串，如果原始字节是合法 UTF-8 则还原，否则原样返回
+     */
+    private String decodeIfUtf8(String s) {
+        if (s == null || s.isEmpty()) return s;
+        try {
+            byte[] raw = s.getBytes(StandardCharsets.ISO_8859_1);
+            String utf8 = new String(raw, StandardCharsets.UTF_8);
+            // 检查是否无损（合法 UTF-8）
+            if (Arrays.equals(utf8.getBytes(StandardCharsets.UTF_8), raw)) {
+                return utf8;
+            }
+        } catch (Exception ignored) {}
+        return s;
+    }
+
     public String getParameter(String name) { return textFields.get(name); }
     public FileItem getFileItem(String name) { return fileFields.get(name); }
-
-    /** 新增：获取所有文本字段名 */
     public Set<String> getParameterNames() { return textFields.keySet(); }
-
-    /** 新增：获取所有文件字段名 */
     public Set<String> getFileNames() { return fileFields.keySet(); }
 
     @Override
@@ -225,7 +308,7 @@ public class MultipartResolver implements AutoCloseable {
         closed = true;
     }
 
-    // ==================== BoundaryFinder 保持不变 ====================
+    // ==================== BoundaryFinder（保持不变） ====================
     private static class BoundaryFinder {
         private final InputStream input;
         private final byte[] boundary;
@@ -261,7 +344,7 @@ public class MultipartResolver implements AutoCloseable {
                         if (peekLen >= 2 && peek[0] == '-' && peek[1] == '-') {
                             pos += 2;
                             if (peekLen >= 4 && peek[2] == '\r' && peek[3] == '\n') pos += 2;
-                            else if (peekLen >= 1 && peek[2] == '\n') pos += 1;
+                            else if (peekLen >= 3 && peek[2] == '\n') pos += 1;
                             lastBoundaryFound = true;
                         } else if (peekLen >= 2 && peek[0] == '\r' && peek[1] == '\n') {
                             pos += 2;

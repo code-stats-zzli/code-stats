@@ -1,18 +1,14 @@
 (function() {
     const API_BASE = window.apiUrl('/files/api');
 
-    // 当前模式：local | resources
-    let currentMode = 'local';
-    // 本地目录
+    let currentMode = 'resources';   // 默认资源模式
     let currentRootType = 'local';
     let currentPath = '';
     let currentEditPath = null;
     let rootPathInfo = {};
-    // 资源管理
     let currentResourceType = 'images';
     let resourceTypes = {};
 
-    // DOM 引用
     const treeContainer       = document.getElementById('treeContainer');
     const treeWrapper         = document.getElementById('treeWrapper');
     const resourceTypeList    = document.getElementById('resourceTypeList');
@@ -33,18 +29,15 @@
     const rootLocalBtn        = document.getElementById('rootLocalBtn');
     const rootResourcesBtn    = document.getElementById('rootResourcesBtn');
 
-    // 资源模式 DOM
     const resourceTitle       = document.getElementById('resourceTitle');
     const resourceListPanel   = document.getElementById('resourceListPanel');
     const uploadResourceBtn   = document.getElementById('uploadResourceBtn');
     const refreshResourcesBtn = document.getElementById('refreshResourcesBtn');
     const resourceFileInput   = document.getElementById('resourceFileInput');
 
-    function showMsg(msg, isError = false) {
-        alert(msg);
-    }
+    function showMsg(msg, isError = false) { alert(msg); }
 
-    // ==================== 本地目录逻辑（保留原有） ====================
+    // ==================== 本地目录逻辑 ====================
 
     async function fetchRootInfo() {
         try {
@@ -102,9 +95,7 @@
         const nameSpan = document.createElement('span');
         nameSpan.className = 'name';
         nameSpan.textContent = node.name;
-        div.appendChild(toggle);
-        div.appendChild(icon);
-        div.appendChild(nameSpan);
+        div.appendChild(toggle); div.appendChild(icon); div.appendChild(nameSpan);
 
         div.onclick = () => {
             if (node.type === 'directory') {
@@ -239,9 +230,7 @@
                 showMsg('保存成功');
                 navigateTo(currentPath);
                 renderTree();
-            } else {
-                showMsg(data.error || '保存失败', true);
-            }
+            } else { showMsg(data.error || '保存失败', true); }
         } catch (err) { showMsg(err.message, true); }
     }
 
@@ -259,9 +248,7 @@
                 showMsg('重命名成功');
                 await navigateTo(currentPath);
                 await renderTree();
-            } else {
-                showMsg(data.error || '重命名失败', true);
-            }
+            } else { showMsg(data.error || '重命名失败', true); }
         } catch (err) { showMsg(err.message, true); }
     }
 
@@ -278,9 +265,7 @@
                 showMsg('删除成功');
                 await navigateTo(currentPath);
                 await renderTree();
-            } else {
-                showMsg(data.error || '删除失败', true);
-            }
+            } else { showMsg(data.error || '删除失败', true); }
         } catch (err) { showMsg(err.message, true); }
     }
 
@@ -328,15 +313,26 @@
         } catch (err) { showMsg(err.message, true); }
     }
 
+    /**
+     * 本地目录上传：用 readAsArrayBuffer 读取，Base64 编码后上传，
+     * 避免 readAsText 破坏图片等二进制文件
+     */
     function uploadFile() {
         const input = document.createElement('input');
         input.type = 'file';
-        input.onchange = async () => {
+        input.onchange = () => {
             const file = input.files[0];
             if (!file) return;
             const reader = new FileReader();
             reader.onload = async (e) => {
-                const base64 = btoa(unescape(encodeURIComponent(e.target.result)));
+                // ArrayBuffer -> Uint8Array -> binary string -> Base64
+                const bytes = new Uint8Array(e.target.result);
+                let binary = '';
+                const CHUNK = 0x8000;
+                for (let i = 0; i < bytes.length; i += CHUNK) {
+                    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+                }
+                const base64 = btoa(binary);
                 try {
                     const res = await fetch(`${API_BASE}/upload`, {
                         method: 'POST',
@@ -356,7 +352,7 @@
                     } else { showMsg(data.error || '上传失败', true); }
                 } catch (err) { showMsg(err.message, true); }
             };
-            reader.readAsText(file);
+            reader.readAsArrayBuffer(file);   // ★ 关键：用 ArrayBuffer 而非 Text
         };
         input.click();
     }
@@ -369,10 +365,7 @@
         attachments: '📎',
         others:      '📦'
     };
-
-    function getTypeIcon(type) {
-        return TYPE_ICONS[type] || '📦';
-    }
+    function getTypeIcon(type) { return TYPE_ICONS[type] || '📦'; }
 
     async function loadResourceTypes() {
         try {
@@ -400,7 +393,6 @@
                 el.addEventListener('click', () => switchResourceType(el.dataset.type));
             });
 
-            // 若已有选中类型，高亮
             if (currentResourceType && resourceTypes[currentResourceType]) {
                 highlightResourceType(currentResourceType);
             }
@@ -452,7 +444,7 @@
 
             let thumbHtml = '';
             if (isImage) {
-                thumbHtml = `<img class="res-thumb" src="${previewUrl}&t=${Date.now()}" 
+                thumbHtml = `<img class="res-thumb" src="${previewUrl}&t=${Date.now()}"
                                   alt="${escapeHtml(displayName)}"
                                   onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                              <div class="res-thumb-fallback" style="display:none;">🖼️</div>`;
@@ -477,7 +469,6 @@
         html += '</div>';
         resourceListPanel.innerHTML = html;
 
-        // 绑定事件
         resourceListPanel.querySelectorAll('.res-action-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -509,12 +500,8 @@
                 await loadResources(type);
                 await loadResourceTypes();
                 highlightResourceType(type);
-            } else {
-                showMsg(data.error || '删除失败', true);
-            }
-        } catch (err) {
-            showMsg(err.message, true);
-        }
+            } else { showMsg(data.error || '删除失败', true); }
+        } catch (err) { showMsg(err.message, true); }
     }
 
     async function uploadResources(files) {
@@ -556,23 +543,20 @@
             rootResourcesBtn.classList.remove('active');
             treeWrapper.style.display = 'block';
             resourceTypeList.style.display = 'none';
-            localModeContent.style.display = 'block';
+            localModeContent.style.display = 'flex';
             resourcesModeContent.style.display = 'none';
-            // 加载本地目录
             fetchRootInfo().then(() => {
                 renderTree();
                 navigateTo('');
             });
-        } else if (mode === 'resources') {
+        } else {
             rootResourcesBtn.classList.add('active');
             rootLocalBtn.classList.remove('active');
             treeWrapper.style.display = 'none';
             resourceTypeList.style.display = 'block';
             localModeContent.style.display = 'none';
-            resourcesModeContent.style.display = 'block';
-            // 加载资源类型
+            resourcesModeContent.style.display = 'flex';
             loadResourceTypes().then(() => {
-                // 默认选第一个类型
                 if (!currentResourceType || !resourceTypes[currentResourceType]) {
                     const firstType = Object.keys(resourceTypes)[0] || 'images';
                     switchResourceType(firstType);
@@ -588,7 +572,6 @@
     rootLocalBtn.addEventListener('click', () => switchMode('local'));
     rootResourcesBtn.addEventListener('click', () => switchMode('resources'));
 
-    // 本地模式
     newFolderBtn.addEventListener('click', newFolder);
     newFileBtn.addEventListener('click', newFile);
     uploadBtn.addEventListener('click', uploadFile);
@@ -600,7 +583,6 @@
     });
     saveFileBtn.addEventListener('click', saveFile);
 
-    // 资源模式
     uploadResourceBtn.addEventListener('click', () => {
         resourceFileInput.value = '';
         resourceFileInput.click();
@@ -614,8 +596,6 @@
         await switchResourceType(currentResourceType);
     });
 
-    // ==================== 工具函数 ====================
-
     function escapeHtml(str) {
         if (!str) return '';
         return str.replace(/[&<>]/g, m => {
@@ -626,6 +606,6 @@
         });
     }
 
-    // 启动：默认进入本地目录模式
-    switchMode('local');
+    // 启动：默认进入资源管理模式
+    switchMode('resources');
 })();

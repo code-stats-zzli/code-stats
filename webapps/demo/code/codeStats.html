@@ -33,7 +33,7 @@
                 <div class="loading">加载中...</div>
             </div>
             <div class="dir-panel-footer">
-                <div class="dir-current-tip">点击目录填充分析根路径</div>
+                <div class="dir-current-tip" id="serverDirTip">点击目录填充分析根路径</div>
             </div>
         </aside>
 
@@ -43,9 +43,10 @@
             <section class="config-panel" id="codeStatsConfig">
                 <h2>代码统计配置</h2>
                 <div class="config-form">
-                    <div class="form-row">
+                    <div class="form-row full-width">
                         <label>根目录:</label>
-                        <input type="text" id="rootDir" placeholder="从左侧目录树选择，或手动输入">
+                        <input type="text" id="rootDir" placeholder="点击右侧 📁 从目录树选择，或手动输入">
+                        <button class="dir-picker-btn" data-target="rootDir" title="点击后在左侧目录树选择目录">📁</button>
                     </div>
                     <div class="form-row"><label>扩展名 (逗号分隔):</label><input type="text" id="extensions" value="java"></div>
                     <div class="form-row"><label>排除路径 (逗号分隔):</label><input type="text" id="excludePaths" placeholder="test, target"></div>
@@ -60,14 +61,19 @@
                         </select>
                     </div>
                     <div class="form-row"><label>启用文件合并:</label><input type="checkbox" id="mergeEnabled"></div>
-                    <div class="form-row" id="mergeRow" style="display: none;">
+                    <div class="form-row full-width" id="mergeRow" style="display: none;">
                         <label>合并输出文件:</label><input type="text" id="mergeOutputFile" placeholder="例如: D:/output/merged.txt">
                     </div>
-                    <div class="form-row"><label>额外路径 (逗号分隔):</label><input type="text" id="extraPaths" placeholder="额外需要统计的目录"></div>
+                    <div class="form-row full-width">
+                        <label>额外路径 (逗号分隔):</label>
+                        <input type="text" id="extraPaths" placeholder="点击右侧 📁 追加目录，可多次添加">
+                        <button class="dir-picker-btn" data-target="extraPaths" title="点击后在左侧目录树选择目录（可连续添加）">📁</button>
+                    </div>
                 </div>
                 <div class="action-bar">
-                    <button id="analyzeBtn" class="btn-primary">开始分析</button>
-                    <button id="resetBtn" class="btn-secondary">重置默认</button>
+                    <button id="analyzeBtn" class="btn-primary">🚀 开始分析</button>
+                    <button id="defaultConfigBtn" class="btn-secondary">📋 默认配置</button>
+                    <button id="clearConfigBtn" class="btn-secondary">🗑️ 清空</button>
                 </div>
             </section>
 

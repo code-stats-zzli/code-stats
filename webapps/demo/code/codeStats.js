@@ -3,7 +3,6 @@
     const API_CODE = window.apiUrl('/code/api');
     const API_FILES = window.apiUrl('/files/api');
 
-    // 分析相关
     let dependencyData = null;
     let classInfoMap = null;
     let currentMergeFilePath = null;
@@ -11,6 +10,10 @@
     // 本地目录管理状态
     let localCurrentPath = '';
     let localCurrentEditPath = null;
+    let localInited = false;
+
+    // 目录拾取状态：null | 'rootDir' | 'extraPaths'
+    let activePicker = null;
 
     // ==================== DOM 引用 ====================
     const modeList = document.getElementById('modeList');
@@ -22,6 +25,7 @@
     // 服务器分析
     const serverDirTree = document.getElementById('serverDirTree');
     const serverRefreshTreeBtn = document.getElementById('serverRefreshTreeBtn');
+    const serverDirTip = document.getElementById('serverDirTip');
     const rootDirInput = document.getElementById('rootDir');
     const extensionsInput = document.getElementById('extensions');
     const excludePathsInput = document.getElementById('excludePaths');
@@ -33,7 +37,8 @@
     const mergeRow = document.getElementById('mergeRow');
     const mergeOutputFileInput = document.getElementById('mergeOutputFile');
     const analyzeBtn = document.getElementById('analyzeBtn');
-    const resetBtn = document.getElementById('resetBtn');
+    const defaultConfigBtn = document.getElementById('defaultConfigBtn');
+    const clearConfigBtn = document.getElementById('clearConfigBtn');
     const progressBar = document.getElementById('progressBar');
     const progressFill = document.getElementById('progressFill');
     const progressText = document.getElementById('progressText');
@@ -76,6 +81,9 @@
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
+    function normalizePath(p) {
+        return (p || '').replace(/\\/g, '/');
+    }
     function showMsg(msg, isError = false) { alert(msg); }
 
     // ==================== 模式切换 ====================
@@ -108,169 +116,15 @@
         if (mode) switchMode(mode);
     });
 
-    // ==================== 通用目录树渲染 ====================
-    /**
-     * 渲染目录树
-     * @param {HTMLElement} container 树容器
-     * @param {Object} rootNode 根节点
-     * @param {Function} onDirectoryClick 目录点击回调 (node, fullPath)
-     * @param {Function} onFileClick 文件点击回调 (node, fullPath)
-     * @param {Object} pathContext { absolutePath: string } 用于拼接完整路径
-     */
-    function renderDirectoryTree(container, rootNode, onDirectoryClick, onFileClick, pathContext) {
-        container.innerHTML = '';
-        if (!rootNode) return;
+    // ==================== 目录树渲染（toggle 独立处理） ====================
 
-        const rootLi = createTreeNode(rootNode, 0, onDirectoryClick, onFileClick, pathContext);
-        container.appendChild(rootLi);
-
-        // 自动展开根
-        const rootToggle = rootLi.querySelector(':scope > .tree-item > .toggle');
-        if (rootToggle && rootToggle.textContent === '▶') rootToggle.click();
-    }
-
-    function createTreeNode(node, level, onDirectoryClick, onFileClick, pathContext) {
-        const li = document.createElement('li');
-        li.className = 'tree-node';
-
-        const div = document.createElement('div');
-        div.className = 'tree-item';
-        div.style.paddingLeft = (level * 16 + 8) + 'px';
-
-        const isDir = node.type === 'directory';
-        const hasChildren = node.hasChildren === true;
-
-        const toggle = document.createElement('span');
-        toggle.className = 'toggle';
-        if (isDir && hasChildren) {
-            toggle.textContent = node.expanded ? '▼' : '▶';
-        } else {
-            toggle.textContent = ' ';
-            toggle.style.opacity = '0';
+    function containerHighlight(targetDiv) {
+        if (!targetDiv) return;
+        const container = targetDiv.closest('.dir-tree-wrapper');
+        if (container) {
+            container.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
         }
-
-        const icon = document.createElement('span');
-        icon.className = 'icon';
-        icon.textContent = isDir ? '📁' : '📄';
-
-        const nameSpan = document.createElement('span');
-        nameSpan.className = 'name';
-        nameSpan.textContent = node.name;
-
-        div.appendChild(toggle);
-        div.appendChild(icon);
-        div.appendChild(nameSpan);
-        li.appendChild(div);
-
-        // 子节点容器（懒加载）
-        let childrenUl = null;
-        if (isDir && hasChildren) {
-            childrenUl = document.createElement('ul');
-            childrenUl.className = 'tree-children';
-            if (node.expanded) childrenUl.classList.add('open');
-            li.appendChild(childrenUl);
-        }
-
-        // 点击事件
-        div.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            if (isDir) {
-                if (onDirectoryClick) onDirectoryClick(node, pathContext);
-                // 展开/收起
-                if (hasChildren && toggle.textContent !== ' ') {
-                    const isOpen = childrenUl.classList.contains('open');
-                    if (!isOpen && childrenUl.children.length === 0) {
-                        // 懒加载
-                        try {
-                            const url = `${API_FILES}/tree?rootType=local&path=${encodeURIComponent(node.path)}&withChildren=true`;
-                            const res = await fetch(url);
-                            if (res.ok) {
-                                const data = await res.json();
-                                node.children = data.children || [];
-                                node.hasChildren = data.hasChildren;
-                                childrenUl.innerHTML = '';
-                                node.children.forEach(child =>
-                                    childrenUl.appendChild(createTreeNode(child, level + 1, onDirectoryClick, onFileClick, pathContext))
-                                );
-                            }
-                        } catch (err) { console.error('懒加载失败', err); }
-                    }
-                    childrenUl.classList.toggle('open');
-                    toggle.textContent = childrenUl.classList.contains('open') ? '▼' : '▶';
-                    node.expanded = childrenUl.classList.contains('open');
-                }
-            } else {
-                if (onFileClick) onFileClick(node, pathContext);
-            }
-        });
-
-        // 预渲染子节点（如果已有）
-        if (node.children && node.children.length && childrenUl) {
-            node.children.forEach(child =>
-                childrenUl.appendChild(createTreeNode(child, level + 1, onDirectoryClick, onFileClick, pathContext))
-            );
-        }
-
-        return li;
-    }
-
-    // ==================== 服务器目录树 ====================
-    async function loadServerDirectoryTree() {
-        serverDirTree.innerHTML = '<div class="loading">加载中...</div>';
-        try {
-            // 先获取根信息，拿到绝对路径
-            const rootRes = await fetch(`${API_FILES}/root?rootType=local`);
-            const rootInfo = await rootRes.json();
-            const absolutePath = rootInfo.absolutePath || '';
-
-            const res = await fetch(`${API_FILES}/tree?rootType=local&path=&withChildren=true`);
-            if (!res.ok) throw new Error('获取目录树失败');
-            const rootNode = await res.json();
-
-            const pathContext = { absolutePath };
-            renderDirectoryTree(
-                serverDirTree,
-                rootNode,
-                // 点击目录：填充 rootDir
-                (node, ctx) => {
-                    const fullPath = node.path
-                        ? ctx.absolutePath + '/' + node.path
-                        : ctx.absolutePath;
-                    rootDirInput.value = fullPath;
-                    // 高亮选中
-                    serverDirTree.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
-                    const item = serverDirTree.querySelector(`.tree-item[data-path="${CSS.escape(node.path || '')}"]`);
-                    if (item) item.classList.add('selected');
-                },
-                // 点击文件：不处理
-                null,
-                pathContext
-            );
-
-            // 给每个 tree-item 加上 data-path
-            serverDirTree.querySelectorAll('.tree-item').forEach(el => {
-                const nameEl = el.querySelector('.name');
-                if (nameEl) {
-                    // 通过位置找节点比较复杂，这里简化：点击时通过 name 反查不方便
-                    // 所以高亮方式改为：直接给当前选中的 div 添加 selected 类
-                    // 由于我们在渲染时没有保存 node.path 到 DOM，改用另一种方式
-                }
-            });
-        } catch (err) {
-            serverDirTree.innerHTML = `<div class="error-tip">❌ ${escapeHtml(err.message)}</div>`;
-        }
-    }
-
-    // 修正：改进目录树点击回调，直接操作 DOM 高亮
-    function renderDirectoryTreeWithHighlight(container, rootNode, onDirectoryClick, onFileClick, pathContext) {
-        container.innerHTML = '';
-        if (!rootNode) return;
-
-        const rootLi = createTreeNodeWithHighlight(rootNode, 0, onDirectoryClick, onFileClick, pathContext);
-        container.appendChild(rootLi);
-
-        const rootToggle = rootLi.querySelector(':scope > .tree-item > .toggle');
-        if (rootToggle && rootToggle.textContent === '▶') rootToggle.click();
+        targetDiv.classList.add('selected');
     }
 
     function createTreeNodeWithHighlight(node, level, onDirectoryClick, onFileClick, pathContext) {
@@ -289,7 +143,7 @@
         const toggle = document.createElement('span');
         toggle.className = 'toggle';
         if (isDir && hasChildren) {
-            toggle.textContent = node.expanded ? '▼' : '▶';
+            toggle.textContent = '▶';   // 初始总是收起
         } else {
             toggle.textContent = ' ';
             toggle.style.opacity = '0';
@@ -312,82 +166,156 @@
         if (isDir && hasChildren) {
             childrenUl = document.createElement('ul');
             childrenUl.className = 'tree-children';
-            if (node.expanded) childrenUl.classList.add('open');
             li.appendChild(childrenUl);
         }
 
-        div.addEventListener('click', async (e) => {
+        // 展开 / 收起（含懒加载）
+        async function expandOrCollapse() {
+            if (!isDir || !hasChildren || !childrenUl) return;
+            const isOpen = childrenUl.classList.contains('open');
+            if (!isOpen) {
+                if (childrenUl.children.length === 0) {
+                    try {
+                        const url = `${API_FILES}/tree?rootType=local&path=${encodeURIComponent(node.path)}&withChildren=true`;
+                        const res = await fetch(url);
+                        if (res.ok) {
+                            const data = await res.json();
+                            node.children = data.children || [];
+                            node.hasChildren = data.hasChildren;
+                            childrenUl.innerHTML = '';
+                            node.children.forEach(child =>
+                                childrenUl.appendChild(createTreeNodeWithHighlight(
+                                    child, level + 1, onDirectoryClick, onFileClick, pathContext
+                                ))
+                            );
+                        }
+                    } catch (err) { console.error('懒加载失败', err); }
+                }
+                childrenUl.classList.add('open');
+                toggle.textContent = '▼';
+            } else {
+                childrenUl.classList.remove('open');
+                toggle.textContent = '▶';
+            }
+            node.expanded = !isOpen;
+        }
+
+        // ★ toggle 单独处理，避免冒泡到 div 触发 onDirectoryClick
+        toggle.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await expandOrCollapse();
+        });
+
+        // div 主体：选中 / 打开
+        div.addEventListener('click', (e) => {
             e.stopPropagation();
             if (isDir) {
-                // 高亮
-                containerHighlight(container, div);
+                containerHighlight(div);
                 if (onDirectoryClick) onDirectoryClick(node, pathContext);
-                // 展开/收起
-                if (hasChildren && toggle.textContent !== ' ') {
-                    const isOpen = childrenUl.classList.contains('open');
-                    if (!isOpen && childrenUl.children.length === 0) {
-                        try {
-                            const url = `${API_FILES}/tree?rootType=local&path=${encodeURIComponent(node.path)}&withChildren=true`;
-                            const res = await fetch(url);
-                            if (res.ok) {
-                                const data = await res.json();
-                                node.children = data.children || [];
-                                node.hasChildren = data.hasChildren;
-                                childrenUl.innerHTML = '';
-                                node.children.forEach(child =>
-                                    childrenUl.appendChild(createTreeNodeWithHighlight(child, level + 1, onDirectoryClick, onFileClick, pathContext))
-                                );
-                            }
-                        } catch (err) { console.error('懒加载失败', err); }
-                    }
-                    childrenUl.classList.toggle('open');
-                    toggle.textContent = childrenUl.classList.contains('open') ? '▼' : '▶';
-                    node.expanded = childrenUl.classList.contains('open');
-                }
             } else {
                 if (onFileClick) onFileClick(node, pathContext);
             }
         });
 
-        if (node.children && node.children.length && childrenUl) {
-            node.children.forEach(child =>
-                childrenUl.appendChild(createTreeNodeWithHighlight(child, level + 1, onDirectoryClick, onFileClick, pathContext))
-            );
-        }
-
         return li;
     }
 
-    // 高亮工具（按容器查当前选中的 div）
-    function containerHighlight(container, targetDiv) {
-        container.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
-        if (targetDiv) targetDiv.classList.add('selected');
+    /**
+     * 渲染目录树，返回根 li（供调用方自动展开根）
+     */
+    function renderDirectoryTreeWithHighlight(container, rootNode, onDirectoryClick, onFileClick, pathContext) {
+        container.innerHTML = '';
+        if (!rootNode) return null;
+        const rootLi = createTreeNodeWithHighlight(rootNode, 0, onDirectoryClick, onFileClick, pathContext);
+        container.appendChild(rootLi);
+        return rootLi;
     }
 
-    // 重新实现服务器目录树加载
+    /**
+     * 自动展开某个 li 的 toggle（不触发 onDirectoryClick）
+     */
+    function autoExpandNode(li) {
+        if (!li) return;
+        const rootToggle = li.querySelector(':scope > .tree-item > .toggle');
+        if (rootToggle && rootToggle.textContent === '▶') {
+            rootToggle.click();
+        }
+    }
+
+    // ==================== 目录拾取（根目录 / 额外目录） ====================
+
+    function setPickerTarget(target) {
+        activePicker = target;
+        document.querySelectorAll('.dir-picker-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.target === target);
+        });
+        if (target === 'rootDir') {
+            serverDirTree.classList.add('picking-mode');
+            serverDirTip.textContent = '👉 请点击下方目录树选择根目录';
+        } else if (target === 'extraPaths') {
+            serverDirTree.classList.add('picking-mode');
+            serverDirTip.textContent = '👉 连续点击可追加多个额外目录（自动去重）';
+        } else {
+            serverDirTree.classList.remove('picking-mode');
+            serverDirTip.textContent = '点击目录填充分析根路径';
+        }
+    }
+
+    // 绑定所有 📁 按钮
+    document.querySelectorAll('.dir-picker-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.target;
+            setPickerTarget(activePicker === target ? null : target);
+        });
+    });
+
+    // 服务器目录树点击统一处理
+    function handleServerDirectoryClick(node, pathContext) {
+        const absolutePath = normalizePath(pathContext.absolutePath);
+        const fullPath = node.path
+            ? normalizePath(absolutePath + '/' + node.path)
+            : absolutePath;
+
+        if (activePicker === 'rootDir') {
+            rootDirInput.value = fullPath;
+            setPickerTarget(null);
+        } else if (activePicker === 'extraPaths') {
+            const current = extraPathsInput.value.trim();
+            const items = current ? current.split(',').map(s => s.trim()).filter(s => s) : [];
+            if (!items.includes(fullPath)) {
+                items.push(fullPath);
+                extraPathsInput.value = items.join(',');
+            }
+            // 保持拾取模式，允许连续点击
+        } else {
+            // 默认填充根目录
+            rootDirInput.value = fullPath;
+        }
+    }
+
+    // ==================== 服务器目录树加载 ====================
+
     async function initServerDirectoryTree() {
         serverDirTree.innerHTML = '<div class="loading">加载中...</div>';
         try {
             const rootRes = await fetch(`${API_FILES}/root?rootType=local`);
             const rootInfo = await rootRes.json();
-            const absolutePath = rootInfo.absolutePath || '';
+            const absolutePath = normalizePath(rootInfo.absolutePath || '');
 
             const res = await fetch(`${API_FILES}/tree?rootType=local&path=&withChildren=true`);
             if (!res.ok) throw new Error('获取目录树失败');
             const rootNode = await res.json();
 
-            renderDirectoryTreeWithHighlight(
+            const rootLi = renderDirectoryTreeWithHighlight(
                 serverDirTree,
                 rootNode,
-                (node, ctx) => {
-                    const fullPath = node.path
-                        ? ctx.absolutePath + '/' + node.path
-                        : ctx.absolutePath;
-                    rootDirInput.value = fullPath;
-                },
+                handleServerDirectoryClick,
                 null,
                 { absolutePath }
             );
+
+            // ★ 默认展开根目录（不触发 onDirectoryClick）
+            autoExpandNode(rootLi);
         } catch (err) {
             serverDirTree.innerHTML = `<div class="error-tip">❌ ${escapeHtml(err.message)}</div>`;
         }
@@ -400,18 +328,32 @@
             const resp = await fetch(API_CODE + '/config');
             if (resp.ok) {
                 const config = await resp.json();
-                rootDirInput.value = config.rootDir || '';
+                rootDirInput.value = normalizePath(config.rootDir || '');
                 extensionsInput.value = config.extensions || 'java';
                 excludePathsInput.value = config.excludePaths || '';
-                extraPathsInput.value = config.extraPaths || '';
+                extraPathsInput.value = normalizePath(config.extraPaths || '');
                 excludeCommentsCheck.checked = config.excludeComments !== false;
                 threadCountInput.value = config.threadCount || 4;
                 sortBySelect.value = config.sortBy || 'lines';
                 mergeEnabledCheck.checked = config.mergeEnabled !== false;
-                mergeOutputFileInput.value = config.mergeOutputFile || '';
+                mergeOutputFileInput.value = normalizePath(config.mergeOutputFile || '');
                 toggleMergeRow();
             }
         } catch (e) { console.error('加载默认配置失败', e); }
+    }
+
+    function clearAllConfig() {
+        rootDirInput.value = '';
+        extensionsInput.value = 'java';
+        excludePathsInput.value = '';
+        extraPathsInput.value = '';
+        excludeCommentsCheck.checked = true;
+        threadCountInput.value = 4;
+        sortBySelect.value = 'lines';
+        mergeEnabledCheck.checked = false;
+        mergeOutputFileInput.value = '';
+        toggleMergeRow();
+        setPickerTarget(null);
     }
 
     function toggleMergeRow() {
@@ -660,25 +602,23 @@
     }
 
     analyzeBtn.addEventListener('click', analyze);
-    resetBtn.addEventListener('click', loadDefaultConfig);
+    defaultConfigBtn.addEventListener('click', loadDefaultConfig);
+    clearConfigBtn.addEventListener('click', clearAllConfig);
     serverRefreshTreeBtn.addEventListener('click', initServerDirectoryTree);
     if (exportCsvBtn) exportCsvBtn.addEventListener('click', exportToCsv);
     if (downloadMergeBtn) downloadMergeBtn.addEventListener('click', downloadMergeFile);
 
-    // ==================== 本地目录管理（完整功能） ====================
-
-    let localInited = false;
+    // ==================== 本地目录管理 ====================
 
     async function initLocalFileManager() {
         if (localInited) {
-            // 已初始化，直接刷新
             await loadLocalDirectoryTree();
-            await loadLocalFileList('');
+            await loadLocalFileListAndRender(localCurrentPath);
             return;
         }
         localInited = true;
         await loadLocalDirectoryTree();
-        await loadLocalFileList('');
+        await loadLocalFileListAndRender('');
     }
 
     async function loadLocalDirectoryTree() {
@@ -688,19 +628,15 @@
             if (!res.ok) throw new Error('获取目录树失败');
             const rootNode = await res.json();
 
-            renderDirectoryTreeWithHighlight(
+            const rootLi = renderDirectoryTreeWithHighlight(
                 localDirTree,
                 rootNode,
-                // 点击目录：切换当前路径
-                (node) => {
-                    navigateLocalTo(node.path || '');
-                },
-                // 点击文件：打开编辑器
-                (node) => {
-                    openLocalEditor(node.path);
-                },
+                (node) => navigateLocalTo(node.path || ''),
+                (node) => openLocalEditor(node.path),
                 {}
             );
+            // ★ 默认展开根目录
+            autoExpandNode(rootLi);
         } catch (err) {
             localDirTree.innerHTML = `<div class="error-tip">❌ ${escapeHtml(err.message)}</div>`;
         }
@@ -710,18 +646,18 @@
         localCurrentPath = path;
         localCurrentPathSpan.textContent = path === '' ? '/' : '/' + path;
         try {
-            const list = await loadLocalFileList(path);
-            renderLocalFileList(list);
+            await loadLocalFileListAndRender(path);
             localEditorPanel.style.display = 'none';
             localFileListPanel.style.display = 'block';
         } catch (err) { showMsg(err.message, true); }
     }
 
-    async function loadLocalFileList(path) {
+    async function loadLocalFileListAndRender(path) {
         const url = `${API_FILES}/list?rootType=local&path=${encodeURIComponent(path)}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error('获取文件列表失败');
-        return await res.json();
+        const list = await res.json();
+        renderLocalFileList(list);
     }
 
     function renderLocalFileList(files) {
@@ -881,9 +817,7 @@
         } catch (err) { showMsg(err.message, true); }
     }
 
-    /**
-     * 本地文件上传：用 ArrayBuffer 读取，避免二进制损坏
-     */
+    /** 本地文件上传：ArrayBuffer 读取，二进制保真 */
     function localUploadFile() {
         const input = document.createElement('input');
         input.type = 'file';

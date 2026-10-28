@@ -8,8 +8,6 @@
     let taskStartTime = 0;
     let lastStatus = null;
     let collapsedGroups = new Set();
-
-    // ★ 记录每个模块每个字段的初始序列化值（用于"无改动使用默认配置"判断）
     let initialFieldValues = {};
 
     const DOM = {
@@ -42,14 +40,13 @@
         backToConfigBtn: document.getElementById('backToConfigBtn')
     };
 
-    // ==================== Tab 切换 ====================
     function switchTab(id) {
         DOM.tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === id));
         Object.keys(DOM.panes).forEach(k => DOM.panes[k].classList.toggle('active', k === id));
     }
     DOM.tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
 
-    // ==================== 序列化 / 归一化（供前后对比用） ====================
+    // ==================== 序列化归一化 ====================
     function serializeFieldValue(value, type) {
         if (value == null) return '';
         if (type === 'number') {
@@ -57,9 +54,7 @@
             return isNaN(n) ? String(value) : String(n);
         }
         if (type === 'list') {
-            if (Array.isArray(value)) {
-                return value.map(v => String(v).trim()).filter(v => v).join(',');
-            }
+            if (Array.isArray(value)) return value.map(v => String(v).trim()).filter(v => v).join(',');
             return String(value).split(',').map(s => s.trim()).filter(s => s).join(',');
         }
         return String(value);
@@ -67,9 +62,7 @@
 
     // ==================== 加载配置 ====================
     async function loadConfig() {
-        if (DOM.moduleList) {
-            DOM.moduleList.innerHTML = '<div class="loading">加载配置中...</div>';
-        }
+        if (DOM.moduleList) DOM.moduleList.innerHTML = '<div class="loading">加载配置中...</div>';
         try {
             const resp = await fetch(API + '/config', { cache: 'no-store' });
             if (!resp.ok) {
@@ -77,21 +70,13 @@
                 throw new Error(`HTTP ${resp.status} ${errText.substring(0, 300)}`);
             }
             const cfg = await resp.json();
-
-            if (!cfg || typeof cfg !== 'object') {
-                throw new Error('返回数据为空或格式异常');
-            }
-            if (cfg.error) {
-                throw new Error('服务端错误: ' + cfg.error);
-            }
-            if (!Array.isArray(cfg.checks)) {
-                throw new Error('返回数据缺少 checks 数组: ' + JSON.stringify(cfg).substring(0, 200));
-            }
+            if (!cfg || typeof cfg !== 'object') throw new Error('返回数据为空');
+            if (cfg.error) throw new Error('服务端错误: ' + cfg.error);
+            if (!Array.isArray(cfg.checks)) throw new Error('缺少 checks 数组');
 
             allModules = cfg.checks;
             if (DOM.threadCount) DOM.threadCount.value = cfg.threadCount || 4;
 
-            // ★ 记录每字段的初始序列化值
             initialFieldValues = {};
             allModules.forEach(m => {
                 const map = {};
@@ -117,25 +102,21 @@
         }
     }
 
-    // ==================== 渲染模块 ====================
+    // ==================== 渲染模块列表 ====================
     function renderModules() {
         if (!DOM.moduleList) return;
         if (!Array.isArray(allModules) || allModules.length === 0) {
             DOM.moduleList.innerHTML = '<div class="sys-empty">未配置任何检查模块</div>';
             return;
         }
-
         let html = '';
         allModules.forEach(m => {
-            try {
-                html += renderModule(m);
-            } catch (e) {
+            try { html += renderModule(m); }
+            catch (e) {
                 console.error('渲染模块失败:', m && m.id, e);
-                html += `<div class="module-item disabled">
-                    <div class="module-header">
-                        <span class="name">${escapeHtml((m && m.id) || '未知模块')} 渲染失败</span>
-                    </div>
-                </div>`;
+                html += `<div class="module-item disabled"><div class="module-header">
+                    <span class="name">${escapeHtml((m && m.id) || '未知模块')} 渲染失败</span>
+                </div></div>`;
             }
         });
         DOM.moduleList.innerHTML = html;
@@ -159,10 +140,7 @@
         const fieldsHtml = hasConfig
             ? m.configFields.map(f => {
                 try { return renderConfigField(m.id, f); }
-                catch (e) {
-                    console.warn('渲染字段失败:', m.id, f && f.key, e);
-                    return '';
-                }
+                catch (e) { console.warn('渲染字段失败:', m.id, f && f.key, e); return ''; }
             }).join('')
             : '<div class="config-field"><span style="color:#94a3b8;font-size:12px;">该模块无额外配置项</span></div>';
 
@@ -189,38 +167,23 @@
 
         if (f.type === 'list') {
             const display = Array.isArray(value) ? value.join(', ') : String(value || '');
-            return `
-                <div class="config-field">
-                    <label>${escapeHtml(f.label)}</label>
-                    <input type="text" class="field-input" ${attrs}
-                           value="${escapeHtml(display)}" placeholder="逗号分隔">
-                    ${hint}
-                </div>`;
+            return `<div class="config-field"><label>${escapeHtml(f.label)}</label>
+                <input type="text" class="field-input" ${attrs} value="${escapeHtml(display)}" placeholder="逗号分隔">
+                ${hint}</div>`;
         }
         if (f.type === 'number') {
-            return `
-                <div class="config-field">
-                    <label>${escapeHtml(f.label)}</label>
-                    <input type="number" class="field-input" ${attrs}
-                           value="${value != null ? value : ''}">
-                    ${hint}
-                </div>`;
+            return `<div class="config-field"><label>${escapeHtml(f.label)}</label>
+                <input type="number" class="field-input" ${attrs} value="${value != null ? value : ''}">
+                ${hint}</div>`;
         }
         if (f.type === 'textarea') {
-            return `
-                <div class="config-field">
-                    <label>${escapeHtml(f.label)}</label>
-                    <textarea class="field-input" ${attrs} rows="4">${escapeHtml(value != null ? String(value) : '')}</textarea>
-                    ${hint}
-                </div>`;
+            return `<div class="config-field"><label>${escapeHtml(f.label)}</label>
+                <textarea class="field-input" ${attrs} rows="4">${escapeHtml(value != null ? String(value) : '')}</textarea>
+                ${hint}</div>`;
         }
-        return `
-            <div class="config-field">
-                <label>${escapeHtml(f.label)}</label>
-                <input type="text" class="field-input" ${attrs}
-                       value="${escapeHtml(value != null ? String(value) : '')}">
-                ${hint}
-            </div>`;
+        return `<div class="config-field"><label>${escapeHtml(f.label)}</label>
+            <input type="text" class="field-input" ${attrs} value="${escapeHtml(value != null ? String(value) : '')}">
+            ${hint}</div>`;
     }
 
     // ==================== 预估总耗时 ====================
@@ -230,11 +193,7 @@
             const cb = item.querySelector('.check-box');
             if (cb && cb.checked) {
                 const m = allModules.find(x => x.id === item.dataset.moduleId);
-                if (m) {
-                    total += m.estimatedSeconds || 5;
-                    count++;
-                    item.classList.remove('disabled');
-                }
+                if (m) { total += m.estimatedSeconds || 5; count++; item.classList.remove('disabled'); }
             } else {
                 item.classList.add('disabled');
             }
@@ -243,11 +202,10 @@
         if (DOM.selectedCount) DOM.selectedCount.textContent = count;
     }
 
-    // ==================== 收集配置（★ 无改动使用系统默认） ====================
+    // ==================== 收集配置 ====================
     function collectConfig() {
         const checks = [];
         const moduleConfig = {};
-
         DOM.moduleList.querySelectorAll('.module-item').forEach(item => {
             const cb = item.querySelector('.check-box');
             if (!cb || !cb.checked) return;
@@ -259,22 +217,11 @@
                 const fieldKey = input.dataset.field;
                 const type = input.dataset.type || 'text';
                 const raw = input.value;
+                let currentSerialized, parsedValue;
 
-                // 当前输入归一化序列化
-                let currentSerialized;
-                let parsedValue;
                 if (type === 'number') {
-                    if (raw === '') {
-                        currentSerialized = '';
-                        parsedValue = undefined;
-                    } else if (isNaN(parseFloat(raw))) {
-                        currentSerialized = raw;
-                        parsedValue = undefined;
-                    } else {
-                        const n = parseFloat(raw);
-                        currentSerialized = String(n);
-                        parsedValue = n;
-                    }
+                    if (raw === '' || isNaN(parseFloat(raw))) { currentSerialized = raw; parsedValue = undefined; }
+                    else { const n = parseFloat(raw); currentSerialized = String(n); parsedValue = n; }
                 } else if (type === 'list') {
                     const arr = raw.split(',').map(s => s.trim()).filter(s => s);
                     currentSerialized = arr.join(',');
@@ -284,7 +231,6 @@
                     parsedValue = raw;
                 }
 
-                // ★ 仅当与初始值不同才提交，未改动则让后端继续使用默认
                 const initialSerialized = (initialFieldValues[moduleId] || {})[fieldKey];
                 if (parsedValue !== undefined && currentSerialized !== initialSerialized) {
                     fields[fieldKey] = parsedValue;
@@ -293,20 +239,21 @@
 
             if (Object.keys(fields).length) moduleConfig[moduleId] = fields;
         });
-
-        return {
-            checks,
-            threadCount: parseInt(DOM.threadCount.value) || 4,
-            moduleConfig
-        };
+        return { checks, threadCount: parseInt(DOM.threadCount.value) || 4, moduleConfig };
     }
 
-    // ==================== 开始检查 ====================
+    // ==================== 开始检查（★ 拦截空任务） ====================
     async function startCheck() {
-        const payload = collectConfig();
+        let payload = collectConfig();
         if (payload.checks.length === 0) {
-            alert('请至少勾选一个检查模块');
-            return;
+            // ★ 自动全选兜底
+            DOM.moduleList.querySelectorAll('.check-box').forEach(cb => cb.checked = true);
+            updateEstimate();
+            payload = collectConfig();
+            if (payload.checks.length === 0) {
+                alert('没有可执行的检查模块');
+                return;
+            }
         }
 
         DOM.runBtn.disabled = true;
@@ -329,14 +276,15 @@
             DOM.emptyState.style.display = 'none';
             DOM.resultPanel.style.display = 'none';
             DOM.runningPanel.style.display = 'block';
-            DOM.runningModules.innerHTML = '';
+            DOM.runningModules.innerHTML = '<div class="loading">等待模块启动...</div>';
             DOM.progressFill.style.width = '0%';
             DOM.runningTimer.textContent = '00:00';
             DOM.cancelBtn.disabled = false;
             DOM.cancelBtn.textContent = '⏹ 停止检查';
 
-            startPolling();
+            // ★ 先启动计时器，再开始轮询，保证时间一定走
             startTimer();
+            startPolling();
         } catch (e) {
             alert('启动失败：' + e.message);
         } finally {
@@ -345,16 +293,16 @@
         }
     }
 
-    // ==================== 计时器 ====================
+    // ==================== 计时器（★ 绝对走） ====================
     function startTimer() {
         stopTimer();
         timerTick = setInterval(() => {
-            if (!currentTaskId) return;
+            if (!taskStartTime) return;
             const elapsed = (Date.now() - taskStartTime) / 1000;
             const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
             const ss = String(Math.floor(elapsed % 60)).padStart(2, '0');
-            DOM.runningTimer.textContent = `${mm}:${ss}`;
-            DOM.elapsedText.textContent = elapsed.toFixed(1) + 's';
+            if (DOM.runningTimer) DOM.runningTimer.textContent = `${mm}:${ss}`;
+            if (DOM.elapsedText) DOM.elapsedText.textContent = elapsed.toFixed(1) + 's';
         }, 200);
     }
     function stopTimer() {
@@ -364,7 +312,7 @@
     // ==================== 轮询 ====================
     function startPolling() {
         stopPolling();
-        pollTimer = setInterval(pollStatus, 1000);   // 1s 一次，降低序列化峰值
+        pollTimer = setInterval(pollStatus, 1000);
         pollStatus();
     }
     function stopPolling() {
@@ -375,13 +323,18 @@
         if (!currentTaskId) return;
         try {
             const resp = await fetch(API + '/status?taskId=' + encodeURIComponent(currentTaskId));
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
             const data = await resp.json();
             if (!data.success) {
+                // 任务丢失或过期，直接结束
+                console.warn('[SystemCheck] 状态获取失败:', data.error);
                 stopPolling();
                 stopTimer();
                 return;
             }
             lastStatus = data;
+
+            // ★ 先渲染模块列表（实时显示检查项）
             renderRunning(data);
 
             if (data.state !== 'RUNNING') {
@@ -391,48 +344,45 @@
             }
         } catch (e) {
             console.error('轮询失败', e);
+            // 不停止轮询，等待下一次
         }
     }
 
-    // ==================== 渲染运行状态 ====================
+    // ==================== 渲染运行状态（★ 实时显示检查项） ====================
     function renderRunning(s) {
-        const elapsed = (s.elapsedMs || 0) / 1000;
-        const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
-        const ss = String(Math.floor(elapsed % 60)).padStart(2, '0');
-        DOM.runningTimer.textContent = `${mm}:${ss}`;
-        DOM.elapsedText.textContent = elapsed.toFixed(1) + 's';
-        DOM.progressText.textContent = `${s.completedModules} / ${s.totalModules}`;
-        DOM.estimatedText.textContent = s.estimatedTotalSeconds || 0;
+        if (DOM.progressText) DOM.progressText.textContent = `${s.completedModules} / ${s.totalModules}`;
+        if (DOM.estimatedText) DOM.estimatedText.textContent = s.estimatedTotalSeconds || 0;
 
         const pct = s.totalModules > 0 ? (s.completedModules / s.totalModules) * 100 : 0;
-        DOM.progressFill.style.width = pct + '%';
+        if (DOM.progressFill) DOM.progressFill.style.width = pct + '%';
 
-        DOM.runningModules.innerHTML = (s.modules || []).map(m => {
-            let icon = '⏳', timeText = '';
-            if (m.state === 'PENDING') icon = '⚪';
-            else if (m.state === 'RUNNING') {
-                icon = '🔄';
-                timeText = ((Date.now() - m.startTime) / 1000).toFixed(1) + 's';
-            } else if (m.state === 'SUCCESS') {
-                icon = '✅';
-                timeText = (m.durationMs / 1000).toFixed(2) + 's';
-            } else if (m.state === 'FAILED') {
-                icon = '❌';
-                timeText = (m.durationMs / 1000).toFixed(2) + 's';
-            } else if (m.state === 'CANCELLED') {
-                icon = '⏹';
-                timeText = (m.durationMs / 1000).toFixed(2) + 's';
+        // ★ 实时模块卡片
+        const modules = s.modules || [];
+        if (DOM.runningModules) {
+            if (modules.length === 0) {
+                DOM.runningModules.innerHTML = '<div style="color:#94a3b8;padding:12px;">⚠️ 未收到任何模块信息</div>';
+            } else {
+                DOM.runningModules.innerHTML = modules.map(m => {
+                    let icon = '⏳', timeText = '';
+                    if (m.state === 'PENDING') icon = '⚪';
+                    else if (m.state === 'RUNNING') {
+                        icon = '🔄';
+                        timeText = ((Date.now() - m.startTime) / 1000).toFixed(1) + 's';
+                    } else if (m.state === 'SUCCESS') { icon = '✅'; timeText = (m.durationMs / 1000).toFixed(2) + 's'; }
+                    else if (m.state === 'FAILED') { icon = '❌'; timeText = (m.durationMs / 1000).toFixed(2) + 's'; }
+                    else if (m.state === 'CANCELLED') { icon = '⏹'; timeText = (m.durationMs / 1000).toFixed(2) + 's'; }
+                    return `
+                        <div class="run-module state-${m.state}">
+                            <span class="state-icon">${icon}</span>
+                            <span class="mod-name">${escapeHtml(m.checkName)}</span>
+                            <span class="mod-time">${timeText}</span>
+                        </div>`;
+                }).join('');
             }
-            return `
-                <div class="run-module state-${m.state}">
-                    <span class="state-icon">${icon}</span>
-                    <span class="mod-name">${escapeHtml(m.checkName)}</span>
-                    <span class="mod-time">${timeText}</span>
-                </div>`;
-        }).join('');
+        }
     }
 
-    // ==================== 结束状态处理 ====================
+    // ==================== 结束处理 ====================
     function handleFinalState(s) {
         DOM.runningPanel.style.display = 'none';
         DOM.resultPanel.style.display = 'flex';
@@ -551,7 +501,6 @@
         });
     }
 
-    // ==================== 取消 ====================
     async function cancelCheck() {
         if (!currentTaskId) return;
         if (!confirm('确定停止检查吗？已完成的模块结果会保留。')) return;
@@ -591,12 +540,8 @@
     DOM.exportCsvBtn.addEventListener('click',  () => window.open(API + '/export/csv',  '_blank'));
     DOM.exportJsonBtn.addEventListener('click', () => window.open(API + '/export/json', '_blank'));
 
-    window.addEventListener('beforeunload', () => {
-        stopPolling();
-        stopTimer();
-    });
+    window.addEventListener('beforeunload', () => { stopPolling(); stopTimer(); });
 
-    // ==================== 启动 ====================
     console.log('[SystemCheck] 页面脚本已加载, API =', API);
     loadConfig();
 })();

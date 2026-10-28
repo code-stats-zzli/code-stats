@@ -27,26 +27,18 @@ public class SystemCheckController {
     @Autowired
     private SystemCheckService service;
 
-    /** 获取默认配置（含每模块详细配置字段）— ★ 增加兜底，避免静默失败 */
     @RequestMapping("/config")
     @ResponseBody
     public String getConfig() {
         try {
-            if (service == null) {
-                throw new IllegalStateException("SystemCheckService 未注入（Spring 扫描或依赖问题）");
-            }
+            if (service == null) throw new IllegalStateException("SystemCheckService 未注入");
             CheckConfig cfg = CheckConfig.load();
             List<SystemCheckCommand> commands = service.getCommands();
-            if (commands == null || commands.isEmpty()) {
-                throw new IllegalStateException("检查命令列表为空（SystemCheckService 初始化失败）");
-            }
+            if (commands == null || commands.isEmpty()) throw new IllegalStateException("检查命令列表为空");
             Map<String, Object> meta = cfg.toMetaMap(commands);
-            if (meta.get("checks") == null) {
-                meta.put("checks", new ArrayList<>());
-            }
+            if (meta.get("checks") == null) meta.put("checks", new ArrayList<>());
             return JsonUtil.toJson(meta);
         } catch (Throwable e) {
-            // 把真实异常打到服务端日志，前端拿到结构化错误而不是 500 HTML
             e.printStackTrace();
             Map<String, Object> err = new LinkedHashMap<>();
             err.put("threadCount", 4);
@@ -56,10 +48,7 @@ public class SystemCheckController {
         }
     }
 
-    /**
-     * 启动检查任务（异步）
-     * 返回 { success, taskId }
-     */
+    /** 启动检查任务 — ★ 显式判空，失败返回明确错误 */
     @RequestMapping("/run")
     @ResponseBody
     @SuppressWarnings("unchecked")
@@ -73,9 +62,7 @@ public class SystemCheckController {
                     catch (Exception ignored) {}
                 }
                 Object mc = req.get("moduleConfig");
-                if (mc instanceof Map) {
-                    cfg.mergeModuleConfig((Map<String, Map<String, Object>>) mc);
-                }
+                if (mc instanceof Map) cfg.mergeModuleConfig((Map<String, Map<String, Object>>) mc);
             }
 
             Set<String> selected = null;
@@ -83,15 +70,28 @@ public class SystemCheckController {
                 selected = new HashSet<>();
                 for (Object o : (List<Object>) req.get("checks")) selected.add(String.valueOf(o));
             }
+            if (selected == null || selected.isEmpty()) {
+                return JsonUtil.toJson(Map.of("success", false, "error", "未选择任何检查模块"));
+            }
 
-            String taskId = SystemCheckTaskManager.createTask(cfg, service.getCommands(), selected);
+            if (service == null) {
+                return JsonUtil.toJson(Map.of("success", false, "error", "SystemCheckService 未注入"));
+            }
+            List<SystemCheckCommand> commands = service.getCommands();
+            if (commands == null || commands.isEmpty()) {
+                return JsonUtil.toJson(Map.of("success", false, "error", "后端未注册任何检查模块"));
+            }
+
+            String taskId = SystemCheckTaskManager.createTask(cfg, commands, selected);
             return JsonUtil.toJson(Map.of("success", true, "taskId", taskId));
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             return JsonUtil.toJson(Map.of("success", false, "error", e.getMessage()));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return JsonUtil.toJson(Map.of("success", false, "error", "启动失败: " + e.getMessage()));
         }
     }
 
-    /** 查询任务状态（含运行中实时耗时、各模块状态、完成时结果） */
     @RequestMapping("/status")
     @ResponseBody
     public String status(String taskId) {
@@ -106,7 +106,6 @@ public class SystemCheckController {
         return JsonUtil.toJson(s);
     }
 
-    /** 取消任务 */
     @RequestMapping("/cancel")
     @ResponseBody
     public String cancel(String taskId) {
@@ -117,7 +116,7 @@ public class SystemCheckController {
         return JsonUtil.toJson(Map.of("success", ok, "message", ok ? "已取消" : "无法取消（已完成或不存在）"));
     }
 
-    // ==================== 导出 ====================
+    // ==================== 导出（保持不变） ====================
 
     @RequestMapping("/export/html")
     public void exportHtml() throws Exception {
@@ -216,7 +215,6 @@ public class SystemCheckController {
         resp.getRawOutputStream().flush();
     }
 
-    /** 导出用同步执行（阻塞等待完成） */
     private Map<String, Object> runSync(CheckConfig cfg) throws Exception {
         String taskId = SystemCheckTaskManager.createTask(cfg, service.getCommands(), null);
         long t0 = System.currentTimeMillis();

@@ -14,15 +14,18 @@ public class SystemCheckTaskManager {
     private static final Logger log = LoggerFactory.getLogger(SystemCheckTaskManager.class);
 
     private static final Map<String, TaskContext> TASKS = new ConcurrentHashMap<>();
-    /** 任务保留时间：1 小时 */
-    private static final long RETENTION_MS = 60 * 60 * 1000L;
+    private static final long RETENTION_MS = 2 * 60 * 1000L;
+
+    private static final int MAX_FINDINGS_PER_CHECK = 200;
+    private static final int MAX_DETAIL_LENGTH = 1000;
+    private static final int MAX_SUGGESTION_LENGTH = 300;
 
     /** 单个任务上下文 */
     public static class TaskContext {
         public final String taskId;
         public final long startTime;
         public volatile long endTime = 0;
-        public volatile String state = "RUNNING";  // RUNNING / COMPLETED / CANCELLED / ERROR
+        public volatile String state = "RUNNING";
         public volatile String errorMessage;
         public final List<CheckResult> results = Collections.synchronizedList(new ArrayList<>());
         public final Map<String, ModuleState> modules = new LinkedHashMap<>();
@@ -51,7 +54,7 @@ public class SystemCheckTaskManager {
     public static class ModuleState {
         public final String checkId;
         public final String checkName;
-        public volatile String state = "PENDING";  // PENDING / RUNNING / SUCCESS / FAILED / CANCELLED
+        public volatile String state = "PENDING";
         public volatile long startTime = 0;
         public volatile long endTime = 0;
         public volatile int findingCount = 0;
@@ -72,17 +75,26 @@ public class SystemCheckTaskManager {
     /** 创建任务，返回 taskId */
     public static String createTask(CheckConfig config, List<SystemCheckCommand> commands, Set<String> selectedIds) {
         cleanupOld();
-        String taskId = UUID.randomUUID().toString().replace("-", "");
-        TaskContext tc = new TaskContext(taskId, config);
-        TASKS.put(taskId, tc);
+        if (commands == null || commands.isEmpty()) {
+            throw new IllegalArgumentException("后端未注册任何检查命令 (commands 为空)");
+        }
 
-        // 过滤启用的命令
+        // ★ 先构建 toRun 列表并判空
         List<SystemCheckCommand> toRun = new ArrayList<>();
         for (SystemCheckCommand cmd : commands) {
+            if (cmd == null) continue;
             boolean enabled = config.getCheckEnabled().getOrDefault(cmd.getId(), true);
             if (selectedIds != null) enabled = selectedIds.contains(cmd.getId());
             if (enabled) toRun.add(cmd);
         }
+        if (toRun.isEmpty()) {
+            throw new IllegalArgumentException("没有有效的检查模块被选中，请检查前端传递的 checks 参数");
+        }
+
+        String taskId = UUID.randomUUID().toString().replace("-", "");
+        TaskContext tc = new TaskContext(taskId, config);
+        TASKS.put(taskId, tc);
+
         tc.totalModules = toRun.size();
         for (SystemCheckCommand cmd : toRun) {
             ModuleState ms = new ModuleState(cmd.getId(), cmd.getName());
@@ -91,14 +103,10 @@ public class SystemCheckTaskManager {
             tc.estimatedTotalSeconds += ms.estimatedSeconds;
         }
 
-        // 提交每个模块到线程池
         for (SystemCheckCommand cmd : toRun) {
             ModuleState ms = tc.modules.get(cmd.getId());
             Future<?> f = tc.pool.submit(() -> {
-                if (tc.ctx.isCancelled()) {
-                    ms.state = "CANCELLED";
-                    return;
-                }
+                if (tc.ctx.isCancelled()) { ms.state = "CANCELLED"; return; }
                 ms.state = "RUNNING";
                 ms.startTime = System.currentTimeMillis();
                 long t0 = ms.startTime;
@@ -107,9 +115,9 @@ public class SystemCheckTaskManager {
                 try {
                     List<Finding> findings = cmd.execute(tc.ctx);
                     for (Finding fi : findings) fi.setSuggestion(suggestionFor(fi));
-                    r.setFindings(findings);
+                    r.setFindings(trimFindings(findings));
                     r.setSuccess(true);
-                    ms.findingCount = findings.size();
+                    ms.findingCount = r.getFindings().size();
                     ms.state = tc.ctx.isCancelled() ? "CANCELLED" : "SUCCESS";
                 } catch (Exception e) {
                     if (tc.ctx.isCancelled() || e instanceof InterruptedException) {
@@ -133,7 +141,6 @@ public class SystemCheckTaskManager {
             tc.futures.add(f);
         }
 
-        // 监控线程：全部完成后标记状态
         new Thread(() -> {
             try {
                 while (!tc.ctx.isCancelled()) {
@@ -162,8 +169,34 @@ public class SystemCheckTaskManager {
         return taskId;
     }
 
-    /** 获取任务状态快照 */
+    private static List<Finding> trimFindings(List<Finding> raw) {
+        if (raw == null) return new ArrayList<>();
+        List<Finding> src = raw;
+        if (src.size() > MAX_FINDINGS_PER_CHECK) {
+            int total = src.size();
+            src = new ArrayList<>(src.subList(0, MAX_FINDINGS_PER_CHECK));
+            Finding f = new Finding();
+            f.setCategory("summary");
+            f.setItem("已截断");
+            f.setStatus("信息");
+            f.setRisk("信息");
+            f.setDetail("检查共产生 " + total + " 条结果，仅保留前 "
+                    + MAX_FINDINGS_PER_CHECK + " 条以节省内存");
+            src.add(f);
+        }
+        for (Finding f : src) {
+            if (f.getDetail() != null && f.getDetail().length() > MAX_DETAIL_LENGTH) {
+                f.setDetail(f.getDetail().substring(0, MAX_DETAIL_LENGTH) + "...(已截断)");
+            }
+            if (f.getSuggestion() != null && f.getSuggestion().length() > MAX_SUGGESTION_LENGTH) {
+                f.setSuggestion(f.getSuggestion().substring(0, MAX_SUGGESTION_LENGTH) + "...");
+            }
+        }
+        return src;
+    }
+
     public static Map<String, Object> getStatus(String taskId) {
+        cleanupOld();
         TaskContext tc = TASKS.get(taskId);
         if (tc == null) return null;
 
@@ -179,7 +212,6 @@ public class SystemCheckTaskManager {
         m.put("completedModules", tc.completedModules);
         m.put("errorMessage", tc.errorMessage);
 
-        // 模块状态列表
         List<Map<String, Object>> modules = new ArrayList<>();
         for (ModuleState ms : tc.modules.values()) {
             Map<String, Object> mm = new LinkedHashMap<>();
@@ -196,13 +228,11 @@ public class SystemCheckTaskManager {
         }
         m.put("modules", modules);
 
-        // 完成时汇总结果
         if (!"RUNNING".equals(tc.state)) {
             List<CheckResult> results;
             synchronized (tc.results) {
                 results = new ArrayList<>(tc.results);
             }
-            // 排序：按原顺序（命令列表顺序）
             results.sort(Comparator.comparingInt(r -> {
                 int i = 0;
                 for (String id : tc.modules.keySet()) {
@@ -232,7 +262,6 @@ public class SystemCheckTaskManager {
         return m;
     }
 
-    /** 取消任务 */
     public static boolean cancel(String taskId) {
         TaskContext tc = TASKS.get(taskId);
         if (tc == null) return false;
@@ -246,7 +275,6 @@ public class SystemCheckTaskManager {
         return true;
     }
 
-    /** 清理过期任务 */
     public static void cleanupOld() {
         long now = System.currentTimeMillis();
         TASKS.entrySet().removeIf(e -> {

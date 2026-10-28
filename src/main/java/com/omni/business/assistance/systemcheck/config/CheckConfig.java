@@ -2,7 +2,10 @@ package com.omni.business.assistance.systemcheck.config;
 
 import com.omni.business.assistance.systemcheck.command.SystemCheckCommand;
 
+import java.io.BufferedReader;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /** 系统检查配置（读取自 system-check.properties，支持模块级详细配置） */
@@ -43,7 +46,6 @@ public class CheckConfig {
     // 实例字段
     private int threadCount = 4;
     private final Map<String, Boolean> checkEnabled = new LinkedHashMap<>();
-    /** moduleId → { 配置 key → 值 }（值类型：List<String>/Number/String/Boolean） */
     private final Map<String, Map<String, Object>> moduleConfig = new LinkedHashMap<>();
 
     public CheckConfig() {
@@ -102,8 +104,6 @@ public class CheckConfig {
         getModuleConfig(moduleId).put(key, value);
     }
 
-    /** 合并前端传入的模块配置 */
-    @SuppressWarnings("unchecked")
     public void mergeModuleConfig(Map<String, Map<String, Object>> overrides) {
         if (overrides == null) return;
         for (Map.Entry<String, Map<String, Object>> e : overrides.entrySet()) {
@@ -112,7 +112,6 @@ public class CheckConfig {
             Map<String, Object> target = getModuleConfig(e.getKey());
             for (Map.Entry<String, Object> f : incoming.entrySet()) {
                 Object v = f.getValue();
-                // 前端 list 类型可能传成 List 或逗号字符串
                 if (v instanceof String) {
                     String s = (String) v;
                     if (s.contains(",") && !f.getKey().matches("(?i).*pattern.*|.*regex.*")) {
@@ -157,15 +156,24 @@ public class CheckConfig {
     public void setThreadCount(int threadCount) { this.threadCount = threadCount; }
     public Map<String, Boolean> getCheckEnabled() { return checkEnabled; }
 
-    // ==================== 加载 ====================
+    // ==================== 加载（★ 修复乱码：UTF-8 读取） ====================
 
     public static CheckConfig load() {
         CheckConfig cfg = new CheckConfig();
-        try (InputStream is = CheckConfig.class.getClassLoader()
-                .getResourceAsStream("system-check.properties")) {
-            if (is == null) return cfg;
+        InputStream is = CheckConfig.class.getClassLoader()
+                .getResourceAsStream("system-check.properties");
+        if (is == null) return cfg;
+
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(is, StandardCharsets.UTF_8))) {
+            // ★ 跳过 UTF-8 BOM（部分 Windows 编辑器会写入 BOM）
+            reader.mark(1);
+            int first = reader.read();
+            if (first != 0xFEFF) reader.reset();
+
             Properties p = new Properties();
-            p.load(is);
+            // ★ 使用 Reader 重载，避免 Properties.load(InputStream) 默认 ISO-8859-1 导致中文乱码
+            p.load(reader);
 
             String tc = p.getProperty("system-check.thread-count");
             if (tc != null) {
@@ -213,7 +221,8 @@ public class CheckConfig {
                 String s = p.getProperty("system-check.check." + id + ".enabled");
                 if (s != null) cfg.checkEnabled.put(id, Boolean.parseBoolean(s.trim()));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return cfg;
     }
 
@@ -234,22 +243,37 @@ public class CheckConfig {
         if (s != null) cfg.setModuleValue(module, cfgKey, s.trim());
     }
 
-    // ==================== 输出元数据（含详细配置字段） ====================
+    // ==================== 输出元数据（单模块容错） ====================
 
     public Map<String, Object> toMetaMap(List<SystemCheckCommand> commands) {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("threadCount", threadCount);
 
         List<Map<String, Object>> checks = new ArrayList<>();
-        for (SystemCheckCommand cmd : commands) {
-            Map<String, Object> c = new LinkedHashMap<>();
-            c.put("id", cmd.getId());
-            c.put("name", cmd.getName());
-            c.put("icon", CHECK_ICONS.getOrDefault(cmd.getId(), "📦"));
-            c.put("enabled", checkEnabled.getOrDefault(cmd.getId(), true));
-            c.put("estimatedSeconds", cmd.getEstimatedSeconds(this));
-            c.put("configFields", cmd.getConfigFields(this));
-            checks.add(c);
+        if (commands != null) {
+            for (SystemCheckCommand cmd : commands) {
+                if (cmd == null) continue;
+                try {
+                    Map<String, Object> c = new LinkedHashMap<>();
+                    c.put("id", cmd.getId());
+                    c.put("name", cmd.getName());
+                    c.put("icon", CHECK_ICONS.getOrDefault(cmd.getId(), "📦"));
+                    c.put("enabled", checkEnabled.getOrDefault(cmd.getId(), true));
+                    c.put("estimatedSeconds", cmd.getEstimatedSeconds(this));
+
+                    List<Map<String, Object>> fields;
+                    try {
+                        fields = cmd.getConfigFields(this);
+                    } catch (Throwable ex) {
+                        ex.printStackTrace();
+                        fields = new ArrayList<>();
+                    }
+                    c.put("configFields", fields);
+                    checks.add(c);
+                } catch (Throwable ex) {
+                    ex.printStackTrace();
+                }
+            }
         }
         root.put("checks", checks);
         return root;

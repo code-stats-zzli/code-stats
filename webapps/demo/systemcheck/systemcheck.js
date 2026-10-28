@@ -9,6 +9,9 @@
     let lastStatus = null;
     let collapsedGroups = new Set();
 
+    // ★ 记录每个模块每个字段的初始序列化值（用于"无改动使用默认配置"判断）
+    let initialFieldValues = {};
+
     const DOM = {
         tabs:           document.querySelectorAll('.sys-tab'),
         panes: {
@@ -20,7 +23,6 @@
         estimatedTotal: document.getElementById('estimatedTotal'),
         selectedCount:  document.getElementById('selectedCount'),
         runBtn:         document.getElementById('runBtn'),
-        // 运行中
         runningPanel:   document.getElementById('runningPanel'),
         runningTimer:   document.getElementById('runningTimer'),
         elapsedText:    document.getElementById('elapsedText'),
@@ -29,7 +31,6 @@
         progressFill:   document.getElementById('progressFill'),
         runningModules: document.getElementById('runningModules'),
         cancelBtn:      document.getElementById('cancelBtn'),
-        // 结果
         resultPanel:    document.getElementById('resultPanel'),
         emptyState:     document.getElementById('emptyState'),
         summaryStats:   document.getElementById('summaryStats'),
@@ -48,29 +49,100 @@
     }
     DOM.tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
 
+    // ==================== 序列化 / 归一化（供前后对比用） ====================
+    function serializeFieldValue(value, type) {
+        if (value == null) return '';
+        if (type === 'number') {
+            const n = Number(value);
+            return isNaN(n) ? String(value) : String(n);
+        }
+        if (type === 'list') {
+            if (Array.isArray(value)) {
+                return value.map(v => String(v).trim()).filter(v => v).join(',');
+            }
+            return String(value).split(',').map(s => s.trim()).filter(s => s).join(',');
+        }
+        return String(value);
+    }
+
     // ==================== 加载配置 ====================
     async function loadConfig() {
+        if (DOM.moduleList) {
+            DOM.moduleList.innerHTML = '<div class="loading">加载配置中...</div>';
+        }
         try {
-            const resp = await fetch(API + '/config');
+            const resp = await fetch(API + '/config', { cache: 'no-store' });
+            if (!resp.ok) {
+                const errText = await resp.text().catch(() => '');
+                throw new Error(`HTTP ${resp.status} ${errText.substring(0, 300)}`);
+            }
             const cfg = await resp.json();
-            allModules = cfg.checks || [];
-            DOM.threadCount.value = cfg.threadCount || 4;
+
+            if (!cfg || typeof cfg !== 'object') {
+                throw new Error('返回数据为空或格式异常');
+            }
+            if (cfg.error) {
+                throw new Error('服务端错误: ' + cfg.error);
+            }
+            if (!Array.isArray(cfg.checks)) {
+                throw new Error('返回数据缺少 checks 数组: ' + JSON.stringify(cfg).substring(0, 200));
+            }
+
+            allModules = cfg.checks;
+            if (DOM.threadCount) DOM.threadCount.value = cfg.threadCount || 4;
+
+            // ★ 记录每字段的初始序列化值
+            initialFieldValues = {};
+            allModules.forEach(m => {
+                const map = {};
+                (m.configFields || []).forEach(f => {
+                    map[f.key] = serializeFieldValue(f.value, f.type);
+                });
+                initialFieldValues[m.id] = map;
+            });
+
             renderModules();
             updateEstimate();
+            console.log('[SystemCheck] 配置加载成功，模块数 =', allModules.length);
         } catch (e) {
-            DOM.moduleList.innerHTML = `<div class="sys-error">❌ 加载配置失败：${escapeHtml(e.message)}</div>`;
+            console.error('[SystemCheck] 加载配置失败', e);
+            if (DOM.moduleList) {
+                DOM.moduleList.innerHTML = `
+                    <div class="sys-error">
+                        ❌ 加载配置失败：${escapeHtml(e.message)}
+                        <br><br>
+                        <button class="btn-secondary" onclick="location.reload()">🔄 重试</button>
+                    </div>`;
+            }
         }
     }
 
     // ==================== 渲染模块 ====================
     function renderModules() {
-        if (!allModules.length) {
+        if (!DOM.moduleList) return;
+        if (!Array.isArray(allModules) || allModules.length === 0) {
             DOM.moduleList.innerHTML = '<div class="sys-empty">未配置任何检查模块</div>';
             return;
         }
-        DOM.moduleList.innerHTML = allModules.map(renderModule).join('');
+
+        let html = '';
+        allModules.forEach(m => {
+            try {
+                html += renderModule(m);
+            } catch (e) {
+                console.error('渲染模块失败:', m && m.id, e);
+                html += `<div class="module-item disabled">
+                    <div class="module-header">
+                        <span class="name">${escapeHtml((m && m.id) || '未知模块')} 渲染失败</span>
+                    </div>
+                </div>`;
+            }
+        });
+        DOM.moduleList.innerHTML = html;
+
         DOM.moduleList.querySelectorAll('.module-header .check-box')
             .forEach(cb => cb.addEventListener('change', updateEstimate));
+
         DOM.moduleList.querySelectorAll('.expand-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const item = btn.closest('.module-item');
@@ -85,7 +157,13 @@
     function renderModule(m) {
         const hasConfig = Array.isArray(m.configFields) && m.configFields.length > 0;
         const fieldsHtml = hasConfig
-            ? m.configFields.map(f => renderConfigField(m.id, f)).join('')
+            ? m.configFields.map(f => {
+                try { return renderConfigField(m.id, f); }
+                catch (e) {
+                    console.warn('渲染字段失败:', m.id, f && f.key, e);
+                    return '';
+                }
+            }).join('')
             : '<div class="config-field"><span style="color:#94a3b8;font-size:12px;">该模块无额外配置项</span></div>';
 
         return `
@@ -93,7 +171,7 @@
                 <div class="module-header">
                     <input type="checkbox" class="check-box" data-id="${escapeHtml(m.id)}" ${m.enabled ? 'checked' : ''}>
                     <span class="icon">${m.icon || '📦'}</span>
-                    <span class="name">${escapeHtml(m.name)}</span>
+                    <span class="name">${escapeHtml(m.name || m.id)}</span>
                     <span class="id">${escapeHtml(m.id)}</span>
                     <span class="estimated">⏱ ~${m.estimatedSeconds || 5}s</span>
                     <button class="expand-btn ${hasConfig ? '' : 'no-config'}" title="展开/收起配置">
@@ -107,7 +185,7 @@
     function renderConfigField(moduleId, f) {
         const value = f.value;
         const hint = f.hint ? `<div class="field-hint">💡 ${escapeHtml(f.hint)}</div>` : '';
-        const attrs = `data-module="${escapeHtml(moduleId)}" data-field="${escapeHtml(f.key)}"`;
+        const attrs = `data-module="${escapeHtml(moduleId)}" data-field="${escapeHtml(f.key)}" data-type="${escapeHtml(f.type || 'text')}"`;
 
         if (f.type === 'list') {
             const display = Array.isArray(value) ? value.join(', ') : String(value || '');
@@ -161,36 +239,61 @@
                 item.classList.add('disabled');
             }
         });
-        DOM.estimatedTotal.textContent = total;
-        DOM.selectedCount.textContent = count;
+        if (DOM.estimatedTotal) DOM.estimatedTotal.textContent = total;
+        if (DOM.selectedCount) DOM.selectedCount.textContent = count;
     }
 
-    // ==================== 收集配置 ====================
+    // ==================== 收集配置（★ 无改动使用系统默认） ====================
     function collectConfig() {
         const checks = [];
         const moduleConfig = {};
+
         DOM.moduleList.querySelectorAll('.module-item').forEach(item => {
             const cb = item.querySelector('.check-box');
             if (!cb || !cb.checked) return;
             const moduleId = item.dataset.moduleId;
             checks.push(moduleId);
+
             const fields = {};
             item.querySelectorAll('.field-input').forEach(input => {
                 const fieldKey = input.dataset.field;
-                const m = allModules.find(x => x.id === moduleId);
-                const fieldDef = m && m.configFields && m.configFields.find(f => f.key === fieldKey);
-                const type = fieldDef ? fieldDef.type : 'text';
+                const type = input.dataset.type || 'text';
                 const raw = input.value;
+
+                // 当前输入归一化序列化
+                let currentSerialized;
+                let parsedValue;
                 if (type === 'number') {
-                    if (raw !== '' && !isNaN(parseFloat(raw))) fields[fieldKey] = parseFloat(raw);
+                    if (raw === '') {
+                        currentSerialized = '';
+                        parsedValue = undefined;
+                    } else if (isNaN(parseFloat(raw))) {
+                        currentSerialized = raw;
+                        parsedValue = undefined;
+                    } else {
+                        const n = parseFloat(raw);
+                        currentSerialized = String(n);
+                        parsedValue = n;
+                    }
                 } else if (type === 'list') {
-                    fields[fieldKey] = raw.split(',').map(s => s.trim()).filter(s => s);
+                    const arr = raw.split(',').map(s => s.trim()).filter(s => s);
+                    currentSerialized = arr.join(',');
+                    parsedValue = arr;
                 } else {
-                    fields[fieldKey] = raw;
+                    currentSerialized = raw;
+                    parsedValue = raw;
+                }
+
+                // ★ 仅当与初始值不同才提交，未改动则让后端继续使用默认
+                const initialSerialized = (initialFieldValues[moduleId] || {})[fieldKey];
+                if (parsedValue !== undefined && currentSerialized !== initialSerialized) {
+                    fields[fieldKey] = parsedValue;
                 }
             });
+
             if (Object.keys(fields).length) moduleConfig[moduleId] = fields;
         });
+
         return {
             checks,
             threadCount: parseInt(DOM.threadCount.value) || 4,
@@ -198,7 +301,7 @@
         };
     }
 
-    // ==================== 开始检查（异步） ====================
+    // ==================== 开始检查 ====================
     async function startCheck() {
         const payload = collectConfig();
         if (payload.checks.length === 0) {
@@ -222,7 +325,6 @@
             taskStartTime = Date.now();
             lastStatus = null;
 
-            // 切到结果 Tab 显示运行面板
             switchTab('result');
             DOM.emptyState.style.display = 'none';
             DOM.resultPanel.style.display = 'none';
@@ -259,10 +361,10 @@
         if (timerTick) { clearInterval(timerTick); timerTick = null; }
     }
 
-    // ==================== 轮询状态 ====================
+    // ==================== 轮询 ====================
     function startPolling() {
         stopPolling();
-        pollTimer = setInterval(pollStatus, 500);
+        pollTimer = setInterval(pollStatus, 1000);   // 1s 一次，降低序列化峰值
         pollStatus();
     }
     function stopPolling() {
@@ -275,7 +377,6 @@
             const resp = await fetch(API + '/status?taskId=' + encodeURIComponent(currentTaskId));
             const data = await resp.json();
             if (!data.success) {
-                // 任务过期
                 stopPolling();
                 stopTimer();
                 return;
@@ -359,7 +460,6 @@
             return;
         }
 
-        // COMPLETED
         renderResult(s);
         DOM.exportHtmlBtn.disabled = false;
         DOM.exportCsvBtn.disabled = false;
@@ -491,12 +591,12 @@
     DOM.exportCsvBtn.addEventListener('click',  () => window.open(API + '/export/csv',  '_blank'));
     DOM.exportJsonBtn.addEventListener('click', () => window.open(API + '/export/json', '_blank'));
 
-    // 页面卸载时清理定时器
     window.addEventListener('beforeunload', () => {
         stopPolling();
         stopTimer();
     });
 
-    // 启动
+    // ==================== 启动 ====================
+    console.log('[SystemCheck] 页面脚本已加载, API =', API);
     loadConfig();
 })();

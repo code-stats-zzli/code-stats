@@ -27,13 +27,33 @@ public class SystemCheckController {
     @Autowired
     private SystemCheckService service;
 
-    /** 获取默认配置（含每模块详细配置字段） */
+    /** 获取默认配置（含每模块详细配置字段）— ★ 增加兜底，避免静默失败 */
     @RequestMapping("/config")
     @ResponseBody
     public String getConfig() {
-        CheckConfig cfg = CheckConfig.load();
-        List<SystemCheckCommand> commands = service.getCommands();
-        return JsonUtil.toJson(cfg.toMetaMap(commands));
+        try {
+            if (service == null) {
+                throw new IllegalStateException("SystemCheckService 未注入（Spring 扫描或依赖问题）");
+            }
+            CheckConfig cfg = CheckConfig.load();
+            List<SystemCheckCommand> commands = service.getCommands();
+            if (commands == null || commands.isEmpty()) {
+                throw new IllegalStateException("检查命令列表为空（SystemCheckService 初始化失败）");
+            }
+            Map<String, Object> meta = cfg.toMetaMap(commands);
+            if (meta.get("checks") == null) {
+                meta.put("checks", new ArrayList<>());
+            }
+            return JsonUtil.toJson(meta);
+        } catch (Throwable e) {
+            // 把真实异常打到服务端日志，前端拿到结构化错误而不是 500 HTML
+            e.printStackTrace();
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("threadCount", 4);
+            err.put("checks", new ArrayList<>());
+            err.put("error", e.getClass().getSimpleName() + ": " + e.getMessage());
+            return JsonUtil.toJson(err);
+        }
     }
 
     /**
@@ -104,7 +124,6 @@ public class SystemCheckController {
         HttpServletResponse resp = ResponseContextHolder.getResponse();
         if (resp == null) return;
         CheckConfig cfg = CheckConfig.load();
-        // 同步执行（导出场景可接受阻塞）
         Map<String, Object> result = runSync(cfg);
         @SuppressWarnings("unchecked")
         List<CheckResult> results = (List<CheckResult>) result.get("results");

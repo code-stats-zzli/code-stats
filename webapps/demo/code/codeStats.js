@@ -21,6 +21,8 @@
     const localWorkspace = document.getElementById('localWorkspace');
     const spiderWorkspace = document.getElementById('spiderWorkspace');
     const qbWorkspace = document.getElementById('qbWorkspace');
+    // ★ 新增：系统检查 workspace
+    const systemcheckWorkspace = document.getElementById('systemcheckWorkspace');
 
     // 服务器分析
     const serverDirTree = document.getElementById('serverDirTree');
@@ -96,6 +98,8 @@
         localWorkspace.style.display = 'none';
         spiderWorkspace.style.display = 'none';
         qbWorkspace.style.display = 'none';
+        // ★ 新增：系统检查 workspace 隐藏
+        if (systemcheckWorkspace) systemcheckWorkspace.style.display = 'none';
 
         if (mode === 'server') {
             serverWorkspace.style.display = 'flex';
@@ -106,6 +110,9 @@
             spiderWorkspace.style.display = 'flex';
         } else if (mode === 'questionbank') {
             qbWorkspace.style.display = 'flex';
+        } else if (mode === 'systemcheck') {
+            // ★ 新增：系统检查
+            systemcheckWorkspace.style.display = 'flex';
         }
     }
 

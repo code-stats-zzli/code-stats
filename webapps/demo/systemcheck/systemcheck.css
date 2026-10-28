@@ -282,27 +282,50 @@ body { overflow: hidden; }
     max-height: 200px;
     overflow-y: auto;
 }
+
+/* ★ 本次改动：run-module 改为列布局，容纳「模块行 + 当前文件行」 */
 .run-module {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    gap: 4px;
     padding: 8px 12px;
     background: white;
     border-radius: 10px;
     border: 1px solid rgba(0,102,255,0.15);
     font-size: 13px;
+    transition: 0.15s;
+}
+.run-module .mod-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
 }
 .run-module .state-icon { font-size: 16px; flex-shrink: 0; width: 20px; text-align: center; }
-.run-module .mod-name { flex: 1; font-weight: 500; }
+.run-module .mod-name { flex: 1; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .run-module .mod-time {
     font-size: 12px;
     font-family: 'JetBrains Mono', monospace;
     color: #64748b;
+    flex-shrink: 0;
 }
 .run-module.state-RUNNING { border-color: var(--accent-primary); box-shadow: 0 0 0 2px rgba(0,102,255,0.1); }
 .run-module.state-SUCCESS { border-color: #22c55e; }
 .run-module.state-FAILED { border-color: #ef4444; }
 .run-module.state-CANCELLED { opacity: 0.6; }
+
+/* ★ 本次新增：当前检查文件样式 */
+.run-module .mod-file {
+    font-size: 11px;
+    color: #64748b;
+    font-family: 'JetBrains Mono', monospace;
+    padding-left: 30px;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
 
 /* ============ 结果面板 ============ */
 .result-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }

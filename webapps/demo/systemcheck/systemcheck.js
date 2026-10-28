@@ -210,7 +210,7 @@
         return { checks, threadCount: parseInt(DOM.threadCount.value) || 4, moduleConfig };
     }
 
-    // ==================== 开始检查（核心修改） ====================
+    // ==================== 开始检查 ====================
     async function startCheck() {
         let payload = collectConfig();
         if (payload.checks.length === 0) {
@@ -226,7 +226,6 @@
         DOM.runBtn.disabled = true;
         DOM.runBtn.textContent = '⏳ 启动中...';
 
-        // ★ 核心修复：在发送请求前，先根据前端选中的模块预渲染界面，避免“假死”
         switchTab('result');
         DOM.emptyState.style.display = 'none';
         DOM.resultPanel.style.display = 'none';
@@ -241,9 +240,11 @@
         const selectedModules = allModules.filter(m => payload.checks.includes(m.id));
         DOM.runningModules.innerHTML = selectedModules.map(m => `
             <div class="run-module state-PENDING">
-                <span class="state-icon">⚪</span>
-                <span class="mod-name">${escapeHtml(m.name || m.id)}</span>
-                <span class="mod-time">等待中</span>
+                <div class="mod-row">
+                    <span class="state-icon">⚪</span>
+                    <span class="mod-name">${escapeHtml(m.name || m.id)}</span>
+                    <span class="mod-time">等待中</span>
+                </div>
             </div>
         `).join('');
 
@@ -265,7 +266,6 @@
             startTimer();
             startPolling();
         } catch (e) {
-            // 如果启动失败，退回结果面板并显示错误
             DOM.runningModules.innerHTML = `<div class="sys-error" style="padding:20px;">
                 ❌ 启动失败：${escapeHtml(e.message)}<br>
                 <button class="btn-secondary" style="margin-top:15px;" onclick="location.reload()">🔄 重新开始</button>
@@ -331,7 +331,6 @@
         } catch (e) {
             pollErrorCount++;
             console.error('轮询异常，尝试次数:', pollErrorCount, e);
-            // 如果连续 3 次网络异常，判定为卡死，停止轮询并提示
             if (pollErrorCount >= 3) {
                 stopPolling(); stopTimer();
                 DOM.runningModules.innerHTML = `<div class="sys-error" style="padding:20px;color:#f59e0b;">
@@ -342,7 +341,7 @@
         }
     }
 
-    // ==================== 渲染运行状态 ====================
+    // ==================== 渲染运行状态（★ 本次核心改动） ====================
     function renderRunning(s) {
         if (DOM.progressText) DOM.progressText.textContent = `${s.completedModules} / ${s.totalModules}`;
         if (DOM.estimatedText) DOM.estimatedText.textContent = s.estimatedTotalSeconds || 0;
@@ -361,11 +360,23 @@
                 } else if (m.state === 'SUCCESS') { icon = '✅'; timeText = (m.durationMs / 1000).toFixed(2) + 's'; }
                 else if (m.state === 'FAILED') { icon = '❌'; timeText = (m.durationMs / 1000).toFixed(2) + 's'; }
                 else if (m.state === 'CANCELLED') { icon = '⏹'; timeText = (m.durationMs / 1000).toFixed(2) + 's'; }
+
+                // ★ 新增：正在检查的文件（仅 RUNNING 且有 currentFile 时显示）
+                let fileHtml = '';
+                if (m.state === 'RUNNING' && m.currentFile) {
+                    const display = m.currentFile.length > 60
+                        ? '…' + m.currentFile.slice(-57) : m.currentFile;
+                    fileHtml = `<div class="mod-file" title="${escapeHtml(m.currentFile)}">📄 ${escapeHtml(display)}</div>`;
+                }
+
                 return `
                     <div class="run-module state-${m.state}">
-                        <span class="state-icon">${icon}</span>
-                        <span class="mod-name">${escapeHtml(m.checkName)}</span>
-                        <span class="mod-time">${timeText}</span>
+                        <div class="mod-row">
+                            <span class="state-icon">${icon}</span>
+                            <span class="mod-name">${escapeHtml(m.checkName)}</span>
+                            <span class="mod-time">${timeText}</span>
+                        </div>
+                        ${fileHtml}
                     </div>`;
             }).join('');
         }

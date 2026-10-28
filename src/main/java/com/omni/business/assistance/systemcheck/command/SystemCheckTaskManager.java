@@ -9,7 +9,7 @@ import com.omni.framework.log.core.Logger;
 import java.util.*;
 import java.util.concurrent.*;
 
-/** 系统检查异步任务管理器（支持实时状态、取消） */
+/** 系统检查异步任务管理器（支持实时状态、取消、当前文件进度） */
 public class SystemCheckTaskManager {
     private static final Logger log = LoggerFactory.getLogger(SystemCheckTaskManager.class);
 
@@ -61,6 +61,9 @@ public class SystemCheckTaskManager {
         public volatile int estimatedSeconds = 5;
         public volatile String errorMessage;
 
+        /** ★ 新增：当前正在检查的文件名（仅 RUNNING 状态时非空） */
+        public volatile String currentFile;
+
         ModuleState(String checkId, String checkName) {
             this.checkId = checkId;
             this.checkName = checkName;
@@ -79,7 +82,6 @@ public class SystemCheckTaskManager {
             throw new IllegalArgumentException("后端未注册任何检查命令 (commands 为空)");
         }
 
-        // ★ 先构建 toRun 列表并判空
         List<SystemCheckCommand> toRun = new ArrayList<>();
         for (SystemCheckCommand cmd : commands) {
             if (cmd == null) continue;
@@ -110,6 +112,10 @@ public class SystemCheckTaskManager {
                 ms.state = "RUNNING";
                 ms.startTime = System.currentTimeMillis();
                 long t0 = ms.startTime;
+
+                // ★ 新增：绑定当前模块的进度回调（ThreadLocal 线程隔离，互不影响）
+                tc.ctx.setProgressCallback(file -> ms.currentFile = file);
+
                 CheckResult r = new CheckResult(cmd.getId(), cmd.getName());
                 r.setEstimatedSeconds(ms.estimatedSeconds);
                 try {
@@ -132,6 +138,9 @@ public class SystemCheckTaskManager {
                         ms.errorMessage = e.getMessage();
                     }
                 } finally {
+                    // ★ 新增：清理 ThreadLocal，并清空 currentFile，避免完成后仍显示旧文件名
+                    tc.ctx.clearProgressCallback();
+                    ms.currentFile = null;
                     ms.endTime = System.currentTimeMillis();
                     r.setDurationMs(ms.endTime - t0);
                     tc.results.add(r);
@@ -224,6 +233,7 @@ public class SystemCheckTaskManager {
             mm.put("findingCount", ms.findingCount);
             mm.put("estimatedSeconds", ms.estimatedSeconds);
             mm.put("errorMessage", ms.errorMessage);
+            mm.put("currentFile", ms.currentFile);   // ★ 新增
             modules.add(mm);
         }
         m.put("modules", modules);

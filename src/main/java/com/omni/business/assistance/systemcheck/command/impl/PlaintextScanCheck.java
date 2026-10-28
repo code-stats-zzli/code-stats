@@ -65,7 +65,6 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
             return list;
         }
 
-        // 全部从配置读取
         long maxFile = cfg.getModuleLong("plaintext-scan", "maxFileSize", 15L * 1024 * 1024);
         long maxDoc = cfg.getModuleLong("plaintext-scan", "maxDocSize", 3L * 1024 * 1024);
         Set<String> textExts = new HashSet<>(cfg.getModuleList("plaintext-scan", "textExtensions", defaultTextExts()));
@@ -108,6 +107,9 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
                     try {
                         if (textExts.contains(ext)) {
                             if (len > maxFile) return FileVisitResult.CONTINUE;
+                            // ★ 新增：上报当前正在检查的文件（仅真正会被读取的文件才上报）
+                            ctx.reportProgress(file.getFileName().toString());
+
                             String content = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
                             Matcher m = finalPattern.matcher(content);
                             int cnt = 0;
@@ -129,6 +131,9 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
                             }
                         } else if (docExts.contains(ext)) {
                             if (len > maxDoc) return FileVisitResult.CONTINUE;
+                            // ★ 新增：上报当前正在检查的文档
+                            ctx.reportProgress(file.getFileName().toString());
+
                             byte[] b = Files.readAllBytes(file);
                             String text = extractPrintable(b);
                             if (text.matches("(?i).*(password|passwd|pwd|密码|口令).*")) {

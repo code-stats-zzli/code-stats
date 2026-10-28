@@ -2,6 +2,7 @@ package com.omni.business.assistance.systemcheck.command.impl;
 
 import com.omni.business.assistance.systemcheck.command.AbstractSystemCheckCommand;
 import com.omni.business.assistance.systemcheck.command.SystemCheckContext;
+import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.Finding;
 
 import java.nio.charset.StandardCharsets;
@@ -10,12 +11,6 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * 明文密码扫描（简化版）
- * - 只扫描用户主目录下的常见配置/文本文件
- * - 对 Office 文档只做关键词检查
- * - 大文件跳过
- */
 public class PlaintextScanCheck extends AbstractSystemCheckCommand {
 
     private static final Pattern RE_ASSIGN = Pattern.compile(
@@ -29,6 +24,30 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
 
     @Override public String getId() { return "plaintext-scan"; }
     @Override public String getName() { return "明文密码扫描"; }
+    @Override public int getEstimatedSeconds(CheckConfig config) { return 30; }
+
+    @Override
+    public List<Map<String, Object>> getConfigFields(CheckConfig config) {
+        List<Map<String, Object>> list = new ArrayList<>();
+
+        Map<String, Object> f1 = new LinkedHashMap<>();
+        f1.put("key", "maxFileSize");
+        f1.put("label", "最大文本文件大小(字节)");
+        f1.put("type", "number");
+        f1.put("value", config.getPlaintextScanMaxFileSize());
+        f1.put("hint", "超过该大小的文本文件会跳过（默认 15728640 = 15MB）");
+        list.add(f1);
+
+        Map<String, Object> f2 = new LinkedHashMap<>();
+        f2.put("key", "maxDocSize");
+        f2.put("label", "最大文档大小(字节)");
+        f2.put("type", "number");
+        f2.put("value", config.getPlaintextScanMaxDocSize());
+        f2.put("hint", "超过该大小的 Office/PDF 只提示不解析（默认 3145728 = 3MB）");
+        list.add(f2);
+
+        return list;
+    }
 
     @Override
     public List<Finding> execute(SystemCheckContext ctx) {
@@ -51,7 +70,6 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, java.nio.file.attribute.BasicFileAttributes attrs) {
                     String name = dir.getFileName() == null ? "" : dir.getFileName().toString().toLowerCase();
-                    // 跳过系统/构建/IDE 缓存目录
                     if (name.equals("node_modules") || name.equals(".git") || name.equals(".idea")
                             || name.equals(".gradle") || name.equals("target") || name.equals("build")
                             || name.equals(".m2") || name.equals(".cache") || name.equals(".npm")) {
@@ -87,7 +105,6 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
                             }
                         } else if (EXT_DOC.contains(ext)) {
                             if (len > maxDoc) return FileVisitResult.CONTINUE;
-                            // 二进制提取字符串，关键词匹配
                             byte[] b = Files.readAllBytes(file);
                             String text = extractPrintable(b);
                             if (text.matches("(?i).*(password|passwd|pwd|密码|口令).*")) {
@@ -113,8 +130,7 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
             }
         }
         if (!docFiles.isEmpty()) {
-            list.add(new Finding("明文密码", "文档含账号/密码关键词",
-                    "警告", "中",
+            list.add(new Finding("明文密码", "文档含账号/密码关键词", "警告", "中",
                     "共 " + docFiles.size() + " 个: " + String.join("; ", docFiles)));
         }
         return list;

@@ -2,17 +2,21 @@ package com.omni.business.assistance.systemcheck.command.impl;
 
 import com.omni.business.assistance.systemcheck.command.AbstractSystemCheckCommand;
 import com.omni.business.assistance.systemcheck.command.SystemCheckContext;
+import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.Finding;
 
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ArchiveCheck extends AbstractSystemCheckCommand {
 
     @Override public String getId() { return "archive"; }
     @Override public String getName() { return "压缩包/安装包"; }
+
+    @Override
+    public int getEstimatedSeconds(CheckConfig config) { return 10; }
 
     @Override
     public List<Finding> execute(SystemCheckContext ctx) {
@@ -24,6 +28,7 @@ public class ArchiveCheck extends AbstractSystemCheckCommand {
         List<String> scanDirs = new ArrayList<>();
         scanDirs.add(ctx.isWin() ? home + "\\Desktop" : home + "/Desktop");
         scanDirs.add(ctx.isWin() ? home + "\\Downloads" : home + "/Downloads");
+
         for (String d : scanDirs) {
             if (!Files.exists(Paths.get(d))) continue;
             try {
@@ -34,7 +39,9 @@ public class ArchiveCheck extends AbstractSystemCheckCommand {
                     if (n.matches(openSource)) return;
                     try {
                         long len = Files.size(p);
-                        if (len > 2L * 1024 * 1024) found.add(p + " (" + (len / 1024 / 1024) + "MB)");
+                        if (len > 2L * 1024 * 1024) {
+                            found.add(p + " (" + (len / 1024 / 1024) + "MB)");
+                        }
                     } catch (Exception ignored) {}
                 });
             } catch (Exception ignored) {}

@@ -2,16 +2,21 @@ package com.omni.business.assistance.systemcheck.command.impl;
 
 import com.omni.business.assistance.systemcheck.command.AbstractSystemCheckCommand;
 import com.omni.business.assistance.systemcheck.command.SystemCheckContext;
+import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.Finding;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class CredentialsCheck extends AbstractSystemCheckCommand {
 
     @Override public String getId() { return "credentials"; }
     @Override public String getName() { return "凭据/软件"; }
+
+    @Override
+    public int getEstimatedSeconds(CheckConfig config) { return 5; }
 
     @Override
     public List<Finding> execute(SystemCheckContext ctx) {

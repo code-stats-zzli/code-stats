@@ -1,5 +1,6 @@
 package com.omni.business.assistance.systemcheck.controller;
 
+import com.omni.business.assistance.systemcheck.command.SystemCheckCommand;
 import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.CheckResult;
 import com.omni.business.assistance.systemcheck.model.Finding;
@@ -9,9 +10,9 @@ import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestBody;
 import com.omni.framework.spring.annotation.RequestMapping;
 import com.omni.framework.spring.annotation.ResponseBody;
-import com.omni.framework.util.JsonUtil;
 import com.omni.framework.spring.mvc.ResponseContextHolder;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
+import com.omni.framework.util.JsonUtil;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -25,19 +26,21 @@ public class SystemCheckController {
     @Autowired
     private SystemCheckService service;
 
-    /** 获取默认配置 */
+    /** 获取默认配置（含每个模块的详细配置字段） */
     @RequestMapping("/config")
     @ResponseBody
     public String getConfig() {
         CheckConfig cfg = CheckConfig.load();
-        return JsonUtil.toJson(cfg.toMetaMap());
+        List<SystemCheckCommand> commands = service.getCommands();
+        return JsonUtil.toJson(cfg.toMetaMap(commands));
     }
 
-    /** 执行系统检查 */
+    /** 执行系统检查（接收前端配置覆盖） */
     @RequestMapping("/run")
     @ResponseBody
     @SuppressWarnings("unchecked")
     public String run(@RequestBody Map<String, Object> req) {
+        long t0 = System.currentTimeMillis();
         try {
             CheckConfig cfg = CheckConfig.load();
             if (req != null) {
@@ -45,6 +48,11 @@ public class SystemCheckController {
                 if (tc != null) {
                     try { cfg.setThreadCount(Integer.parseInt(String.valueOf(tc))); }
                     catch (Exception ignored) {}
+                }
+                // ★ 合并前端传入的模块级详细配置
+                Object mc = req.get("moduleConfig");
+                if (mc instanceof Map) {
+                    cfg.mergeModuleConfig((Map<String, Map<String, Object>>) mc);
                 }
             }
 
@@ -56,13 +64,11 @@ public class SystemCheckController {
 
             List<CheckResult> results = service.runCheck(cfg, selected);
 
-            Map<String, Object> resp = new LinkedHashMap<>();
-            resp.put("success", true);
-            resp.put("timestamp", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
-            resp.put("results", results);
-            // 统计
+            // 预估总耗时（已选模块之和）
+            int estimatedTotal = 0;
             int cOk = 0, cBad = 0, cWarn = 0, cInfo = 0;
             for (CheckResult r : results) {
+                estimatedTotal += r.getEstimatedSeconds();
                 for (Finding f : r.getFindings()) {
                     switch (f.getStatus()) {
                         case "合规": cOk++; break;
@@ -72,12 +78,20 @@ public class SystemCheckController {
                     }
                 }
             }
+            long totalMs = System.currentTimeMillis() - t0;
+
+            Map<String, Object> resp = new LinkedHashMap<>();
+            resp.put("success", true);
+            resp.put("timestamp", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+            resp.put("results", results);
+            resp.put("totalDurationMs", totalMs);
+            resp.put("estimatedTotalSeconds", estimatedTotal);
+
             Map<String, Object> stat = new LinkedHashMap<>();
-            stat.put("ok", cOk);
-            stat.put("bad", cBad);
-            stat.put("warn", cWarn);
-            stat.put("info", cInfo);
+            stat.put("ok", cOk); stat.put("bad", cBad);
+            stat.put("warn", cWarn); stat.put("info", cInfo);
             resp.put("summary", stat);
+
             return JsonUtil.toJson(resp);
         } catch (Exception e) {
             return JsonUtil.toJson(Map.of("success", false, "error", e.getMessage()));
@@ -92,9 +106,11 @@ public class SystemCheckController {
         CheckConfig cfg = CheckConfig.load();
         List<CheckResult> results = service.runCheck(cfg, null);
 
+        long totalMs = 0;
         StringBuilder rows = new StringBuilder();
         int cOk = 0, cBad = 0, cInfo = 0;
         for (CheckResult r : results) {
+            totalMs += r.getDurationMs();
             for (Finding f : r.getFindings()) {
                 if ("警告".equals(f.getStatus())) continue;
                 String color = "合规".equals(f.getStatus()) ? "#1a7f37"
@@ -104,8 +120,7 @@ public class SystemCheckController {
                 else cInfo++;
                 rows.append("<tr><td>").append(esc(f.getCategory())).append("</td>")
                         .append("<td>").append(esc(f.getItem())).append("</td>")
-                        .append("<td style='color:").append(color).append("'>")
-                        .append(esc(f.getStatus())).append("</td>")
+                        .append("<td style='color:").append(color).append("'>").append(esc(f.getStatus())).append("</td>")
                         .append("<td>").append(esc(f.getRisk())).append("</td>")
                         .append("<td>").append(esc(f.getDetail())).append("</td>")
                         .append("<td>").append(esc(f.getSuggestion())).append("</td></tr>");
@@ -119,7 +134,8 @@ public class SystemCheckController {
                 + "th{background:#eef2f6}</style></head><body>"
                 + "<h1>系统安全检查报告</h1>"
                 + "<p>生成时间：" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + "</p>"
-                + "<p>合规：" + cOk + " · 不合规：" + cBad + " · 信息：" + cInfo + "</p>"
+                + "<p>合规：" + cOk + " · 不合规：" + cBad + " · 信息：" + cInfo
+                + " · 实际耗时：" + (totalMs / 1000.0) + " 秒</p>"
                 + "<table><thead><tr><th>类别</th><th>检查项</th><th>状态</th><th>风险</th><th>详情</th><th>整改建议</th></tr></thead>"
                 + "<tbody>" + rows + "</tbody></table></body></html>";
 
@@ -140,7 +156,7 @@ public class SystemCheckController {
         CheckConfig cfg = CheckConfig.load();
         List<CheckResult> results = service.runCheck(cfg, null);
 
-        StringBuilder csv = new StringBuilder("\uFEFF"); // UTF-8 BOM
+        StringBuilder csv = new StringBuilder("\uFEFF");
         csv.append("Category,Item,Status,Risk,Detail,Suggestion\n");
         for (CheckResult r : results) {
             for (Finding f : r.getFindings()) {

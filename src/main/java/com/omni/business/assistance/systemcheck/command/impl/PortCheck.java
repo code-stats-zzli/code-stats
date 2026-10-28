@@ -2,6 +2,7 @@ package com.omni.business.assistance.systemcheck.command.impl;
 
 import com.omni.business.assistance.systemcheck.command.AbstractSystemCheckCommand;
 import com.omni.business.assistance.systemcheck.command.SystemCheckContext;
+import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.Finding;
 
 import java.util.*;
@@ -14,16 +15,40 @@ public class PortCheck extends AbstractSystemCheckCommand {
     @Override public String getName() { return "高危端口"; }
 
     @Override
+    public int getEstimatedSeconds(CheckConfig config) { return 5; }
+
+    @Override
+    public List<Map<String, Object>> getConfigFields(CheckConfig config) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        Map<String, Object> f1 = new LinkedHashMap<>();
+        f1.put("key", "riskPorts");
+        f1.put("label", "风险端口列表");
+        f1.put("type", "list");
+        f1.put("value", config.getRiskPorts());
+        f1.put("hint", "监听这些端口即视为风险；逗号分隔");
+        list.add(f1);
+
+        Map<String, Object> f2 = new LinkedHashMap<>();
+        f2.put("key", "riskReqPorts");
+        f2.put("label", "高危必需入站阻断端口");
+        f2.put("type", "list");
+        f2.put("value", config.getRiskReqPorts());
+        f2.put("hint", "这些端口必须有入站阻断规则，否则判为「高」风险；逗号分隔");
+        list.add(f2);
+
+        return list;
+    }
+
+    @Override
     public List<Finding> execute(SystemCheckContext ctx) {
         List<Finding> list = new ArrayList<>();
         Map<String, PortInfo> listen = getListeningPorts(ctx.isWin());
         List<String[]> blockRules = getBlockRules(ctx.isWin());
 
-        // 全部监听端口（信息）
+        // 全部监听端口
         List<String> all = new ArrayList<>();
         for (PortInfo p : listen.values()) {
-            all.add(p.proto + " " + p.addr + ":" + p.port
-                    + (p.proc.isEmpty() ? "" : " -> " + p.proc));
+            all.add(p.proto + " " + p.addr + ":" + p.port + (p.proc.isEmpty() ? "" : " -> " + p.proc));
         }
         Collections.sort(all);
         list.add(new Finding("高危端口", "监听端口范围(全部)", "信息", "信息",
@@ -38,14 +63,12 @@ public class PortCheck extends AbstractSystemCheckCommand {
             StringBuilder d = new StringBuilder();
             boolean blocked = true;
             if (tcp != null) {
-                d.append("TCP ").append(tcp.addr).append(":").append(port)
-                        .append("->").append(tcp.proc);
+                d.append("TCP ").append(tcp.addr).append(":").append(port).append("->").append(tcp.proc);
                 if (!covers(blockRules, "TCP", port)) blocked = false;
             }
             if (udp != null) {
                 if (d.length() > 0) d.append("; ");
-                d.append("UDP ").append(udp.addr).append(":").append(port)
-                        .append("->").append(udp.proc);
+                d.append("UDP ").append(udp.addr).append(":").append(port).append("->").append(udp.proc);
                 if (!covers(blockRules, "UDP", port)) blocked = false;
             }
             if (!blocked) {
@@ -99,8 +122,7 @@ public class PortCheck extends AbstractSystemCheckCommand {
             String[] p = line.trim().split("\\s+");
             if (p.length >= 4) {
                 String local = p[3];
-                map.put(port(local) + "/" + proto,
-                        new PortInfo(proto, addr(local), port(local), ""));
+                map.put(port(local) + "/" + proto, new PortInfo(proto, addr(local), port(local), ""));
             }
         }
     }
@@ -117,8 +139,7 @@ public class PortCheck extends AbstractSystemCheckCommand {
                     String lport = extract(v, "LPort=");
                     String proto = extract(v, "Protocol=");
                     String[] protos = proto.equals("6") ? new String[]{"TCP"}
-                            : proto.equals("17") ? new String[]{"UDP"}
-                              : new String[]{"TCP", "UDP"};
+                            : proto.equals("17") ? new String[]{"UDP"} : new String[]{"TCP","UDP"};
                     for (String pn : protos) rules.add(new String[]{pn, lport});
                 }
             }

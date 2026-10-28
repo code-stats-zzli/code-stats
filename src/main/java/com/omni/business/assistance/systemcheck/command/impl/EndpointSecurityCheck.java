@@ -2,10 +2,13 @@ package com.omni.business.assistance.systemcheck.command.impl;
 
 import com.omni.business.assistance.systemcheck.command.AbstractSystemCheckCommand;
 import com.omni.business.assistance.systemcheck.command.SystemCheckContext;
+import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.Finding;
 
-import java.nio.file.*;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -15,6 +18,9 @@ public class EndpointSecurityCheck extends AbstractSystemCheckCommand {
 
     @Override public String getId() { return "endpoint-security"; }
     @Override public String getName() { return "跨网/无线/U盘"; }
+
+    @Override
+    public int getEstimatedSeconds(CheckConfig config) { return 5; }
 
     @Override
     public List<Finding> execute(SystemCheckContext ctx) {
@@ -35,7 +41,9 @@ public class EndpointSecurityCheck extends AbstractSystemCheckCommand {
                 }
             }
             for (String line : exec("tasklist /FO CSV").split("\n")) {
-                if (line.matches("(?s).*" + CROSSNET_PAT + ".*")) tools.add("运行进程: " + line.trim());
+                if (line.matches("(?s).*" + CROSSNET_PAT + ".*")) {
+                    tools.add("运行进程: " + line.trim());
+                }
             }
         } else {
             String cmd = "dpkg -l 2>/dev/null | grep -iE 'teamviewer|anydesk|todesk|frp|ngrok|nps|shadowsocks|v2ray|clash|wireguard|openvpn|zerotier|tailscale'; " +
@@ -69,7 +77,8 @@ public class EndpointSecurityCheck extends AbstractSystemCheckCommand {
                 }
             }
             if (wdesc.length() == 0) {
-                list.add(new Finding("无线网卡", "WiFi 网卡检测", "合规", "信息", "未检测到 WiFi 无线网卡"));
+                list.add(new Finding("无线网卡", "WiFi 网卡检测", "合规", "信息",
+                        "未检测到 WiFi 无线网卡"));
             } else {
                 list.add(new Finding("无线网卡", "检测到 WiFi 无线网卡", "不合规", "中",
                         "存在 WiFi 无线网卡: " + wdesc));
@@ -77,7 +86,8 @@ public class EndpointSecurityCheck extends AbstractSystemCheckCommand {
         } else {
             String w = exec("nmcli -t -f DEVICE,TYPE device 2>/dev/null; iw dev 2>/dev/null | grep -i interface; ls /sys/class/net 2>/dev/null | grep -E '^wl'");
             if (w.trim().isEmpty()) {
-                list.add(new Finding("无线网卡", "WiFi 网卡检测", "合规", "信息", "未检测到 WiFi 无线网卡"));
+                list.add(new Finding("无线网卡", "WiFi 网卡检测", "合规", "信息",
+                        "未检测到 WiFi 无线网卡"));
             } else {
                 list.add(new Finding("无线网卡", "检测到 WiFi 无线网卡", "不合规", "中",
                         w.trim().replace("\n", "; ")));

@@ -2,11 +2,14 @@ package com.omni.business.assistance.systemcheck.command.impl;
 
 import com.omni.business.assistance.systemcheck.command.AbstractSystemCheckCommand;
 import com.omni.business.assistance.systemcheck.command.SystemCheckContext;
+import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.Finding;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -14,6 +17,9 @@ public class LockScreenCheck extends AbstractSystemCheckCommand {
 
     @Override public String getId() { return "lock-screen"; }
     @Override public String getName() { return "屏保/锁屏"; }
+
+    @Override
+    public int getEstimatedSeconds(CheckConfig config) { return 2; }
 
     @Override
     public List<Finding> execute(SystemCheckContext ctx) {
@@ -82,7 +88,10 @@ public class LockScreenCheck extends AbstractSystemCheckCommand {
     }
 
     private String readFile(String path) {
-        try { return new String(Files.readAllBytes(Paths.get(path)), java.nio.charset.StandardCharsets.UTF_8); }
-        catch (Exception e) { return ""; }
+        try {
+            return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return "";
+        }
     }
 }

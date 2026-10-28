@@ -18,9 +18,7 @@ import java.util.concurrent.*;
 public class SystemCheckService {
     private static final Logger log = LoggerFactory.getLogger(SystemCheckService.class);
 
-    /** 所有命令（按 ID 索引） */
     private final Map<String, SystemCheckCommand> commandMap = new LinkedHashMap<>();
-    /** 按执行顺序 */
     private final List<SystemCheckCommand> commands = new ArrayList<>();
 
     public SystemCheckService() {
@@ -42,28 +40,21 @@ public class SystemCheckService {
         commands.add(cmd);
     }
 
-    /**
-     * 执行系统检查
-     * @param config 检查配置（可由前端传入覆盖）
-     * @param selectedIds 选中的检查项 ID 集合（null 表示按配置启用）
-     * @return 各检查项结果
-     */
+    public List<SystemCheckCommand> getCommands() { return commands; }
+
+    /** 执行系统检查（一次性返回结果 + 预估时间） */
     public List<CheckResult> runCheck(CheckConfig config, Set<String> selectedIds) {
         SystemCheckContext ctx = new SystemCheckContext(config);
         int threadCount = Math.max(1, config.getThreadCount());
 
-        // 确定要执行的命令
         List<SystemCheckCommand> toRun = new ArrayList<>();
         for (SystemCheckCommand cmd : commands) {
             boolean enabled = config.getCheckEnabled().getOrDefault(cmd.getId(), true);
-            if (selectedIds != null) {
-                enabled = selectedIds.contains(cmd.getId());
-            }
+            if (selectedIds != null) enabled = selectedIds.contains(cmd.getId());
             if (enabled) toRun.add(cmd);
         }
 
-        ExecutorService pool = Executors.newFixedThreadPool(
-                Math.min(threadCount, toRun.size()));
+        ExecutorService pool = Executors.newFixedThreadPool(Math.min(threadCount, Math.max(1, toRun.size())));
         List<Future<CheckResult>> futures = new ArrayList<>();
         for (SystemCheckCommand cmd : toRun) {
             futures.add(pool.submit(() -> executeOne(cmd, ctx)));
@@ -72,7 +63,7 @@ public class SystemCheckService {
         List<CheckResult> results = new ArrayList<>();
         for (Future<CheckResult> f : futures) {
             try {
-                results.add(f.get(120, TimeUnit.SECONDS));
+                results.add(f.get(180, TimeUnit.SECONDS));
             } catch (TimeoutException e) {
                 f.cancel(true);
                 CheckResult err = new CheckResult("timeout", "超时");
@@ -92,13 +83,11 @@ public class SystemCheckService {
 
     private CheckResult executeOne(SystemCheckCommand cmd, SystemCheckContext ctx) {
         CheckResult r = new CheckResult(cmd.getId(), cmd.getName());
+        r.setEstimatedSeconds(cmd.getEstimatedSeconds(ctx.getConfig()));
         long start = System.currentTimeMillis();
         try {
             List<Finding> findings = cmd.execute(ctx);
-            // 填充整改建议
-            for (Finding f : findings) {
-                f.setSuggestion(suggestionFor(f));
-            }
+            for (Finding f : findings) f.setSuggestion(suggestionFor(f));
             r.setFindings(findings);
             r.setSuccess(true);
         } catch (Exception e) {

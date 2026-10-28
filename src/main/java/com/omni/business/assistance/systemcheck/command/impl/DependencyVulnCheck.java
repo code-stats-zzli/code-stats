@@ -2,6 +2,7 @@ package com.omni.business.assistance.systemcheck.command.impl;
 
 import com.omni.business.assistance.systemcheck.command.AbstractSystemCheckCommand;
 import com.omni.business.assistance.systemcheck.command.SystemCheckContext;
+import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.Finding;
 
 import java.nio.charset.StandardCharsets;
@@ -10,15 +11,9 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * 依赖漏洞扫描（内置离线漏洞库，简化版）
- * 只扫描用户项目目录下的 pom.xml / build.gradle / package.json / requirements.txt / go.mod
- */
 public class DependencyVulnCheck extends AbstractSystemCheckCommand {
 
-    // {名称, 生态, 最低受影响版本(空=不限), 修复版本, CVE, 说明}
     private static final String[][] VULN_DB = {
-            // Maven
             {"log4j-core","maven","2.0.0-beta9","2.17.1","CVE-2021-44228","Log4Shell 远程代码执行"},
             {"fastjson","maven","","1.2.83","CVE-2022-25845","反序列化 RCE"},
             {"jackson-databind","maven","","2.12.7.1","CVE-2020-36518","反序列化 DoS"},
@@ -30,14 +25,12 @@ public class DependencyVulnCheck extends AbstractSystemCheckCommand {
             {"commons-text","maven","1.5.0","1.10.0","CVE-2022-42889","Text4Shell RCE"},
             {"snakeyaml","maven","","1.33","CVE-2022-1471","构造器反序列化 RCE"},
             {"commons-collections","maven","","3.2.2","CVE-2015-6420","反序列化漏洞利用链"},
-            // npm
             {"lodash","npm","","4.17.21","CVE-2021-23337","原型污染/命令注入"},
             {"axios","npm","","1.7.4","CVE-2024-39338","SSRF"},
             {"moment","npm","","2.29.4","CVE-2022-31129","ReDoS"},
             {"minimist","npm","","1.2.7","CVE-2022-3517","ReDoS"},
             {"jsonwebtoken","npm","","9.0.0","CVE-2022-23529","RCE"},
             {"ejs","npm","","3.1.10","CVE-2024-33883","RCE"},
-            // pip
             {"django","pip","","3.2.24","CVE-2024-27351","ReDoS(3.2.x)"},
             {"django","pip","4.0","4.2.11","CVE-2024-27351","ReDoS(4.x)"},
             {"flask","pip","","2.2.5","CVE-2023-30861","信息泄露(2.2.x)"},
@@ -49,6 +42,20 @@ public class DependencyVulnCheck extends AbstractSystemCheckCommand {
 
     @Override public String getId() { return "dependency-vuln"; }
     @Override public String getName() { return "依赖漏洞扫描"; }
+    @Override public int getEstimatedSeconds(CheckConfig config) { return 20; }
+
+    @Override
+    public List<Map<String, Object>> getConfigFields(CheckConfig config) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        Map<String, Object> f = new LinkedHashMap<>();
+        f.put("key", "maxDepth");
+        f.put("label", "扫描最大深度");
+        f.put("type", "number");
+        f.put("value", config.getDependencyVulnMaxDepth());
+        f.put("hint", "从用户主目录向下遍历的最大层数（默认 8）");
+        list.add(f);
+        return list;
+    }
 
     @Override
     public List<Finding> execute(SystemCheckContext ctx) {
@@ -59,7 +66,6 @@ public class DependencyVulnCheck extends AbstractSystemCheckCommand {
         Set<String> manifests = new HashSet<>(Arrays.asList(
                 "pom.xml","build.gradle","build.gradle.kts","package.json","requirements.txt","go.mod"));
 
-        // 扫描位置：用户主目录（简化，不扫全盘）
         Path rootPath = Paths.get(System.getProperty("user.home", ""));
         if (!Files.exists(rootPath)) {
             list.add(new Finding("依赖漏洞", "第三方依赖扫描", "合规", "信息", "主目录不可访问"));
@@ -86,10 +92,11 @@ public class DependencyVulnCheck extends AbstractSystemCheckCommand {
                                                          java.nio.file.attribute.BasicFileAttributes attrs) {
                             String name = file.getFileName().toString().toLowerCase();
                             if (!manifests.contains(name)) return FileVisitResult.CONTINUE;
-                            String eco = name.equals("pom.xml") || name.equals("build.gradle") || name.equals("build.gradle.kts") ? "maven"
-                                    : name.equals("package.json") ? "npm" :
-                                      name.equals("requirements.txt") ? "pip" :
-                                      name.equals("go.mod") ? "go" : "";
+                            String eco = name.equals("pom.xml") || name.equals("build.gradle")
+                                    || name.equals("build.gradle.kts") ? "maven"
+                                    : name.equals("package.json") ? "npm"
+                                      : name.equals("requirements.txt") ? "pip"
+                                        : name.equals("go.mod") ? "go" : "";
                             for (String[] dep : parseManifest(file.toString(), eco)) {
                                 String dn = dep[0].toLowerCase();
                                 String dv = dep[1];
@@ -137,8 +144,7 @@ public class DependencyVulnCheck extends AbstractSystemCheckCommand {
                 }
                 if (path.endsWith(".gradle") || path.endsWith(".gradle.kts")) {
                     Matcher gm = Pattern.compile(
-                                    "(?:implementation|api|compile)\\s*\\(?\\s*['\"]([^'\"$:]+):([^'\"$:]+):([^'\"$]+)['\"]")
-                            .matcher(c);
+                            "(?:implementation|api|compile)\\s*\\(?\\s*['\"]([^'\"$:]+):([^'\"$:]+):([^'\"$]+)['\"]").matcher(c);
                     while (gm.find()) out.add(new String[]{gm.group(2), gm.group(3)});
                 }
             } else if (eco.equals("npm")) {

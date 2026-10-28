@@ -2,13 +2,19 @@ package com.omni.business.assistance.systemcheck.command.impl;
 
 import com.omni.business.assistance.systemcheck.command.AbstractSystemCheckCommand;
 import com.omni.business.assistance.systemcheck.command.SystemCheckContext;
+import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.Finding;
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class RdpCheck extends AbstractSystemCheckCommand {
 
     @Override public String getId() { return "rdp"; }
     @Override public String getName() { return "远程桌面"; }
+
+    @Override
+    public int getEstimatedSeconds(CheckConfig config) { return 2; }
 
     @Override
     public List<Finding> execute(SystemCheckContext ctx) {

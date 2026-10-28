@@ -2,18 +2,23 @@ package com.omni.business.assistance.systemcheck.command.impl;
 
 import com.omni.business.assistance.systemcheck.command.AbstractSystemCheckCommand;
 import com.omni.business.assistance.systemcheck.command.SystemCheckContext;
+import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.Finding;
 
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
 
 public class SystemInfoCheck extends AbstractSystemCheckCommand {
 
     @Override public String getId() { return "system-info"; }
     @Override public String getName() { return "系统信息"; }
+
+    @Override
+    public int getEstimatedSeconds(CheckConfig config) { return 1; }
 
     @Override
     public List<Finding> execute(SystemCheckContext ctx) {
@@ -42,9 +47,14 @@ public class SystemInfoCheck extends AbstractSystemCheckCommand {
             if (!Files.exists(Paths.get("/etc/os-release"))) return "Linux";
             List<String> lines = Files.readAllLines(Paths.get("/etc/os-release"));
             String name = "";
-            for (String l : lines) if (l.startsWith("PRETTY_NAME="))
-                name = l.replace("PRETTY_NAME=", "").replace("\"", "").trim();
+            for (String l : lines) {
+                if (l.startsWith("PRETTY_NAME=")) {
+                    name = l.replace("PRETTY_NAME=", "").replace("\"", "").trim();
+                }
+            }
             return name.isEmpty() ? "Linux" : name;
-        } catch (Exception e) { return "Linux"; }
+        } catch (Exception e) {
+            return "Linux";
+        }
     }
 }

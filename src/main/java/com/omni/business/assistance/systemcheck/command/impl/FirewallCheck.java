@@ -2,6 +2,7 @@ package com.omni.business.assistance.systemcheck.command.impl;
 
 import com.omni.business.assistance.systemcheck.command.AbstractSystemCheckCommand;
 import com.omni.business.assistance.systemcheck.command.SystemCheckContext;
+import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.Finding;
 
 import java.util.ArrayList;
@@ -13,6 +14,9 @@ public class FirewallCheck extends AbstractSystemCheckCommand {
 
     @Override public String getId() { return "firewall"; }
     @Override public String getName() { return "防火墙"; }
+
+    @Override
+    public int getEstimatedSeconds(CheckConfig config) { return 3; }
 
     @Override
     public List<Finding> execute(SystemCheckContext ctx) {

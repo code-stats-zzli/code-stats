@@ -10,6 +10,7 @@ import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestBody;
 import com.omni.framework.spring.annotation.RequestMapping;
+import com.omni.framework.spring.annotation.RequestParam;        // ★ 本次新增
 import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.spring.mvc.ResponseContextHolder;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
@@ -48,7 +49,7 @@ public class SystemCheckController {
         }
     }
 
-    /** 启动检查任务 — ★ 显式判空，失败返回明确错误 */
+    /** 启动检查任务 */
     @RequestMapping("/run")
     @ResponseBody
     @SuppressWarnings("unchecked")
@@ -71,52 +72,72 @@ public class SystemCheckController {
                 for (Object o : (List<Object>) req.get("checks")) selected.add(String.valueOf(o));
             }
             if (selected == null || selected.isEmpty()) {
-                return JsonUtil.toJson(Map.of("success", false, "error", "未选择任何检查模块"));
+                return errorJson("未选择任何检查模块");
             }
 
             if (service == null) {
-                return JsonUtil.toJson(Map.of("success", false, "error", "SystemCheckService 未注入"));
+                return errorJson("SystemCheckService 未注入");
             }
             List<SystemCheckCommand> commands = service.getCommands();
             if (commands == null || commands.isEmpty()) {
-                return JsonUtil.toJson(Map.of("success", false, "error", "后端未注册任何检查模块"));
+                return errorJson("后端未注册任何检查模块");
             }
 
             String taskId = SystemCheckTaskManager.createTask(cfg, commands, selected);
-            return JsonUtil.toJson(Map.of("success", true, "taskId", taskId));
+
+            // 兼容 JDK 8：避免使用 Map.of
+            Map<String, Object> res = new HashMap<>();
+            res.put("success", true);
+            res.put("taskId", taskId);
+            return JsonUtil.toJson(res);
+
         } catch (IllegalArgumentException e) {
-            return JsonUtil.toJson(Map.of("success", false, "error", e.getMessage()));
+            return errorJson(e.getMessage());
         } catch (Exception e) {
             e.printStackTrace();
-            return JsonUtil.toJson(Map.of("success", false, "error", "启动失败: " + e.getMessage()));
+            return errorJson("启动失败: " + e.getMessage());
         }
     }
 
+    // ★ 本次修复：status 加 @RequestParam("taskId")
     @RequestMapping("/status")
     @ResponseBody
-    public String status(String taskId) {
-        if (taskId == null || taskId.isEmpty()) {
-            return JsonUtil.toJson(Map.of("success", false, "error", "缺少 taskId"));
+    public String status(@RequestParam("taskId") String taskId) {
+        if (taskId == null || taskId.isEmpty() || "undefined".equals(taskId)) {
+            return errorJson("缺少 taskId");
         }
         Map<String, Object> s = SystemCheckTaskManager.getStatus(taskId);
         if (s == null) {
-            return JsonUtil.toJson(Map.of("success", false, "error", "任务不存在或已过期"));
+            return errorJson("任务不存在或已过期");
         }
         s.put("success", true);
         return JsonUtil.toJson(s);
     }
 
+    // ★ 本次修复：cancel 加 @RequestParam("taskId")
     @RequestMapping("/cancel")
     @ResponseBody
-    public String cancel(String taskId) {
+    public String cancel(@RequestParam("taskId") String taskId) {
         if (taskId == null || taskId.isEmpty()) {
-            return JsonUtil.toJson(Map.of("success", false, "error", "缺少 taskId"));
+            return errorJson("缺少 taskId");
         }
         boolean ok = SystemCheckTaskManager.cancel(taskId);
-        return JsonUtil.toJson(Map.of("success", ok, "message", ok ? "已取消" : "无法取消（已完成或不存在）"));
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("success", ok);
+        res.put("message", ok ? "已取消" : "无法取消（已完成或不存在）");
+        return JsonUtil.toJson(res);
     }
 
-    // ==================== 导出（保持不变） ====================
+    // 统一错误返回工具，避免 Map.of
+    private String errorJson(String msg) {
+        Map<String, Object> err = new HashMap<>();
+        err.put("success", false);
+        err.put("error", msg);
+        return JsonUtil.toJson(err);
+    }
+
+    // ==================== 导出 ====================
 
     @RequestMapping("/export/html")
     public void exportHtml() throws Exception {
@@ -235,6 +256,7 @@ public class SystemCheckController {
         return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;")
                                 .replace(">", "&gt;").replace("\"", "&quot;");
     }
+
     private static String q(String s) {
         return "\"" + (s == null ? "" : s.replace("\"", "\"\"")) + "\"";
     }

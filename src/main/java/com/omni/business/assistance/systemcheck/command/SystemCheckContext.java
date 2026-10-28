@@ -2,11 +2,12 @@ package com.omni.business.assistance.systemcheck.command;
 
 import com.omni.business.assistance.systemcheck.config.CheckConfig;
 
-/** 检查命令的执行上下文（持有配置和公共信息） */
+/** 检查命令的执行上下文（持有配置、系统信息、取消标志） */
 public class SystemCheckContext {
     private final CheckConfig config;
     private final boolean isWin;
     private final boolean isRoot;
+    private volatile boolean cancelled = false;
 
     public SystemCheckContext(CheckConfig config) {
         this.config = config;
@@ -25,4 +26,8 @@ public class SystemCheckContext {
     public CheckConfig getConfig() { return config; }
     public boolean isWin() { return isWin; }
     public boolean isRoot() { return isRoot; }
+
+    /** 请求取消（命令内部应定期检查 isCancelled()） */
+    public void cancel() { this.cancelled = true; }
+    public boolean isCancelled() { return cancelled; }
 }

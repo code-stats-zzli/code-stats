@@ -1,12 +1,16 @@
 (function() {
     const API = window.apiUrl('/systemcheck/api');
 
-    let allModules = [];       // 后端返回的模块列表（含 configFields）
-    let lastResult = null;
+    let allModules = [];
+    let currentTaskId = null;
+    let pollTimer = null;
+    let timerTick = null;
+    let taskStartTime = 0;
+    let lastStatus = null;
     let collapsedGroups = new Set();
 
     const DOM = {
-        tabs:          document.querySelectorAll('.sys-tab'),
+        tabs:           document.querySelectorAll('.sys-tab'),
         panes: {
             config: document.getElementById('configPane'),
             result: document.getElementById('resultPane')
@@ -16,24 +20,33 @@
         estimatedTotal: document.getElementById('estimatedTotal'),
         selectedCount:  document.getElementById('selectedCount'),
         runBtn:         document.getElementById('runBtn'),
+        // 运行中
+        runningPanel:   document.getElementById('runningPanel'),
+        runningTimer:   document.getElementById('runningTimer'),
+        elapsedText:    document.getElementById('elapsedText'),
+        progressText:   document.getElementById('progressText'),
+        estimatedText:  document.getElementById('estimatedText'),
+        progressFill:   document.getElementById('progressFill'),
+        runningModules: document.getElementById('runningModules'),
+        cancelBtn:      document.getElementById('cancelBtn'),
+        // 结果
+        resultPanel:    document.getElementById('resultPanel'),
+        emptyState:     document.getElementById('emptyState'),
         summaryStats:   document.getElementById('summaryStats'),
         totalDuration:  document.getElementById('totalDuration'),
         resultBody:     document.getElementById('resultBody'),
         exportHtmlBtn:  document.getElementById('exportHtmlBtn'),
         exportCsvBtn:   document.getElementById('exportCsvBtn'),
-        exportJsonBtn:  document.getElementById('exportJsonBtn')
+        exportJsonBtn:  document.getElementById('exportJsonBtn'),
+        backToConfigBtn: document.getElementById('backToConfigBtn')
     };
 
     // ==================== Tab 切换 ====================
-    function switchTab(tabId) {
-        DOM.tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
-        Object.keys(DOM.panes).forEach(k => {
-            DOM.panes[k].classList.toggle('active', k === tabId);
-        });
+    function switchTab(id) {
+        DOM.tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+        Object.keys(DOM.panes).forEach(k => DOM.panes[k].classList.toggle('active', k === id));
     }
-    DOM.tabs.forEach(t => {
-        t.addEventListener('click', () => switchTab(t.dataset.tab));
-    });
+    DOM.tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
 
     // ==================== 加载配置 ====================
     async function loadConfig() {
@@ -49,18 +62,15 @@
         }
     }
 
-    // ==================== 渲染模块列表 ====================
+    // ==================== 渲染模块 ====================
     function renderModules() {
         if (!allModules.length) {
             DOM.moduleList.innerHTML = '<div class="sys-empty">未配置任何检查模块</div>';
             return;
         }
-        DOM.moduleList.innerHTML = allModules.map(m => renderModule(m)).join('');
-
-        // 绑定事件
-        DOM.moduleList.querySelectorAll('.module-header .check-box').forEach(cb => {
-            cb.addEventListener('change', updateEstimate);
-        });
+        DOM.moduleList.innerHTML = allModules.map(renderModule).join('');
+        DOM.moduleList.querySelectorAll('.module-header .check-box')
+            .forEach(cb => cb.addEventListener('change', updateEstimate));
         DOM.moduleList.querySelectorAll('.expand-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const item = btn.closest('.module-item');
@@ -76,7 +86,7 @@
         const hasConfig = Array.isArray(m.configFields) && m.configFields.length > 0;
         const fieldsHtml = hasConfig
             ? m.configFields.map(f => renderConfigField(m.id, f)).join('')
-            : '<div class="config-field no-config-hint">该模块无额外配置项</div>';
+            : '<div class="config-field"><span style="color:#94a3b8;font-size:12px;">该模块无额外配置项</span></div>';
 
         return `
             <div class="module-item ${m.enabled ? '' : 'disabled'}" data-module-id="${escapeHtml(m.id)}">
@@ -91,23 +101,21 @@
                     </button>
                 </div>
                 <div class="module-config">${fieldsHtml}</div>
-            </div>
-        `;
+            </div>`;
     }
 
     function renderConfigField(moduleId, f) {
         const value = f.value;
         const hint = f.hint ? `<div class="field-hint">💡 ${escapeHtml(f.hint)}</div>` : '';
-        const commonAttrs = `data-module="${escapeHtml(moduleId)}" data-field="${escapeHtml(f.key)}"`;
+        const attrs = `data-module="${escapeHtml(moduleId)}" data-field="${escapeHtml(f.key)}"`;
 
         if (f.type === 'list') {
             const display = Array.isArray(value) ? value.join(', ') : String(value || '');
             return `
                 <div class="config-field">
                     <label>${escapeHtml(f.label)}</label>
-                    <input type="text" class="field-input" ${commonAttrs}
-                           value="${escapeHtml(display)}"
-                           placeholder="逗号分隔">
+                    <input type="text" class="field-input" ${attrs}
+                           value="${escapeHtml(display)}" placeholder="逗号分隔">
                     ${hint}
                 </div>`;
         }
@@ -115,30 +123,35 @@
             return `
                 <div class="config-field">
                     <label>${escapeHtml(f.label)}</label>
-                    <input type="number" class="field-input" ${commonAttrs}
+                    <input type="number" class="field-input" ${attrs}
                            value="${value != null ? value : ''}">
                     ${hint}
                 </div>`;
         }
-        // 兜底：text
+        if (f.type === 'textarea') {
+            return `
+                <div class="config-field">
+                    <label>${escapeHtml(f.label)}</label>
+                    <textarea class="field-input" ${attrs} rows="4">${escapeHtml(value != null ? String(value) : '')}</textarea>
+                    ${hint}
+                </div>`;
+        }
         return `
             <div class="config-field">
                 <label>${escapeHtml(f.label)}</label>
-                <input type="text" class="field-input" ${commonAttrs}
+                <input type="text" class="field-input" ${attrs}
                        value="${escapeHtml(value != null ? String(value) : '')}">
                 ${hint}
             </div>`;
     }
 
-    // ==================== 实时更新预估总耗时 ====================
+    // ==================== 预估总耗时 ====================
     function updateEstimate() {
-        let total = 0;
-        let count = 0;
+        let total = 0, count = 0;
         DOM.moduleList.querySelectorAll('.module-item').forEach(item => {
             const cb = item.querySelector('.check-box');
             if (cb && cb.checked) {
-                const moduleId = item.dataset.moduleId;
-                const m = allModules.find(x => x.id === moduleId);
+                const m = allModules.find(x => x.id === item.dataset.moduleId);
                 if (m) {
                     total += m.estimatedSeconds || 5;
                     count++;
@@ -152,37 +165,32 @@
         DOM.selectedCount.textContent = count;
     }
 
-    // ==================== 收集用户配置 ====================
+    // ==================== 收集配置 ====================
     function collectConfig() {
         const checks = [];
         const moduleConfig = {};
-
         DOM.moduleList.querySelectorAll('.module-item').forEach(item => {
             const cb = item.querySelector('.check-box');
-            const moduleId = item.dataset.moduleId;
             if (!cb || !cb.checked) return;
+            const moduleId = item.dataset.moduleId;
             checks.push(moduleId);
-
             const fields = {};
             item.querySelectorAll('.field-input').forEach(input => {
                 const fieldKey = input.dataset.field;
-                const type = input.type === 'number' ? 'number' : 'text';
+                const m = allModules.find(x => x.id === moduleId);
+                const fieldDef = m && m.configFields && m.configFields.find(f => f.key === fieldKey);
+                const type = fieldDef ? fieldDef.type : 'text';
                 const raw = input.value;
                 if (type === 'number') {
                     if (raw !== '' && !isNaN(parseFloat(raw))) fields[fieldKey] = parseFloat(raw);
+                } else if (type === 'list') {
+                    fields[fieldKey] = raw.split(',').map(s => s.trim()).filter(s => s);
                 } else {
-                    const m = allModules.find(x => x.id === moduleId);
-                    const fieldDef = m && m.configFields && m.configFields.find(f => f.key === fieldKey);
-                    if (fieldDef && fieldDef.type === 'list') {
-                        fields[fieldKey] = raw.split(',').map(s => s.trim()).filter(s => s);
-                    } else {
-                        fields[fieldKey] = raw;
-                    }
+                    fields[fieldKey] = raw;
                 }
             });
             if (Object.keys(fields).length) moduleConfig[moduleId] = fields;
         });
-
         return {
             checks,
             threadCount: parseInt(DOM.threadCount.value) || 4,
@@ -190,37 +198,16 @@
         };
     }
 
-    // ==================== 执行检查 ====================
-    async function runCheck() {
+    // ==================== 开始检查（异步） ====================
+    async function startCheck() {
         const payload = collectConfig();
         if (payload.checks.length === 0) {
             alert('请至少勾选一个检查模块');
             return;
         }
 
-        // 禁用按钮、切换到结果 Tab
         DOM.runBtn.disabled = true;
-        DOM.runBtn.textContent = '⏳ 检查中...';
-        DOM.exportHtmlBtn.disabled = true;
-        DOM.exportCsvBtn.disabled = true;
-        DOM.exportJsonBtn.disabled = true;
-        switchTab('result');
-
-        const estTotal = allModules
-            .filter(m => payload.checks.includes(m.id))
-            .reduce((s, m) => s + (m.estimatedSeconds || 5), 0);
-
-        DOM.resultBody.innerHTML = `
-            <div class="sys-loading">
-                <div class="sys-spinner"></div>
-                <div>正在执行系统检查，共 ${payload.checks.length} 项</div>
-                <div style="font-size:12px;color:#94a3b8;margin-top:8px;">
-                    预计耗时约 ${estTotal} 秒 · ${payload.threadCount} 线程并发
-                </div>
-                <div style="font-size:12px;color:#94a3b8;margin-top:4px;">
-                    明文扫描 / 依赖漏洞扫描可能较慢，请耐心等待...
-                </div>
-            </div>`;
+        DOM.runBtn.textContent = '⏳ 启动中...';
 
         try {
             const resp = await fetch(API + '/run', {
@@ -229,63 +216,202 @@
                 body: JSON.stringify(payload)
             });
             const data = await resp.json();
-            if (!data.success) throw new Error(data.error || '未知错误');
-            lastResult = data;
-            renderResult(data);
-            enableExportButtons();
+            if (!data.success) throw new Error(data.error || '启动失败');
+
+            currentTaskId = data.taskId;
+            taskStartTime = Date.now();
+            lastStatus = null;
+
+            // 切到结果 Tab 显示运行面板
+            switchTab('result');
+            DOM.emptyState.style.display = 'none';
+            DOM.resultPanel.style.display = 'none';
+            DOM.runningPanel.style.display = 'block';
+            DOM.runningModules.innerHTML = '';
+            DOM.progressFill.style.width = '0%';
+            DOM.runningTimer.textContent = '00:00';
+            DOM.cancelBtn.disabled = false;
+            DOM.cancelBtn.textContent = '⏹ 停止检查';
+
+            startPolling();
+            startTimer();
         } catch (e) {
-            DOM.resultBody.innerHTML = `<div class="sys-error">❌ 检查失败：${escapeHtml(e.message)}</div>`;
+            alert('启动失败：' + e.message);
         } finally {
             DOM.runBtn.disabled = false;
             DOM.runBtn.textContent = '🚀 开始检查';
         }
     }
 
-    // ==================== 渲染结果 ====================
+    // ==================== 计时器 ====================
+    function startTimer() {
+        stopTimer();
+        timerTick = setInterval(() => {
+            if (!currentTaskId) return;
+            const elapsed = (Date.now() - taskStartTime) / 1000;
+            const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+            const ss = String(Math.floor(elapsed % 60)).padStart(2, '0');
+            DOM.runningTimer.textContent = `${mm}:${ss}`;
+            DOM.elapsedText.textContent = elapsed.toFixed(1) + 's';
+        }, 200);
+    }
+    function stopTimer() {
+        if (timerTick) { clearInterval(timerTick); timerTick = null; }
+    }
+
+    // ==================== 轮询状态 ====================
+    function startPolling() {
+        stopPolling();
+        pollTimer = setInterval(pollStatus, 500);
+        pollStatus();
+    }
+    function stopPolling() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    async function pollStatus() {
+        if (!currentTaskId) return;
+        try {
+            const resp = await fetch(API + '/status?taskId=' + encodeURIComponent(currentTaskId));
+            const data = await resp.json();
+            if (!data.success) {
+                // 任务过期
+                stopPolling();
+                stopTimer();
+                return;
+            }
+            lastStatus = data;
+            renderRunning(data);
+
+            if (data.state !== 'RUNNING') {
+                stopPolling();
+                stopTimer();
+                handleFinalState(data);
+            }
+        } catch (e) {
+            console.error('轮询失败', e);
+        }
+    }
+
+    // ==================== 渲染运行状态 ====================
+    function renderRunning(s) {
+        const elapsed = (s.elapsedMs || 0) / 1000;
+        const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        const ss = String(Math.floor(elapsed % 60)).padStart(2, '0');
+        DOM.runningTimer.textContent = `${mm}:${ss}`;
+        DOM.elapsedText.textContent = elapsed.toFixed(1) + 's';
+        DOM.progressText.textContent = `${s.completedModules} / ${s.totalModules}`;
+        DOM.estimatedText.textContent = s.estimatedTotalSeconds || 0;
+
+        const pct = s.totalModules > 0 ? (s.completedModules / s.totalModules) * 100 : 0;
+        DOM.progressFill.style.width = pct + '%';
+
+        DOM.runningModules.innerHTML = (s.modules || []).map(m => {
+            let icon = '⏳', timeText = '';
+            if (m.state === 'PENDING') icon = '⚪';
+            else if (m.state === 'RUNNING') {
+                icon = '🔄';
+                timeText = ((Date.now() - m.startTime) / 1000).toFixed(1) + 's';
+            } else if (m.state === 'SUCCESS') {
+                icon = '✅';
+                timeText = (m.durationMs / 1000).toFixed(2) + 's';
+            } else if (m.state === 'FAILED') {
+                icon = '❌';
+                timeText = (m.durationMs / 1000).toFixed(2) + 's';
+            } else if (m.state === 'CANCELLED') {
+                icon = '⏹';
+                timeText = (m.durationMs / 1000).toFixed(2) + 's';
+            }
+            return `
+                <div class="run-module state-${m.state}">
+                    <span class="state-icon">${icon}</span>
+                    <span class="mod-name">${escapeHtml(m.checkName)}</span>
+                    <span class="mod-time">${timeText}</span>
+                </div>`;
+        }).join('');
+    }
+
+    // ==================== 结束状态处理 ====================
+    function handleFinalState(s) {
+        DOM.runningPanel.style.display = 'none';
+        DOM.resultPanel.style.display = 'flex';
+
+        if (s.state === 'CANCELLED') {
+            DOM.resultBody.innerHTML = `
+                <div class="sys-empty">
+                    <div style="font-size:48px;margin-bottom:16px;">⏹</div>
+                    <div>检查已取消</div>
+                    <div style="font-size:12px;margin-top:8px;">
+                        已用时间：${(s.elapsedSeconds || 0).toFixed(2)}s · 完成 ${s.completedModules}/${s.totalModules} 个模块
+                    </div>
+                    <button class="btn-secondary" style="margin-top:20px;" onclick="document.querySelector('.sys-tab[data-tab=config]').click()">返回配置</button>
+                </div>`;
+            DOM.summaryStats.innerHTML = '';
+            DOM.totalDuration.textContent = (s.elapsedSeconds || 0).toFixed(2) + 's';
+            DOM.exportHtmlBtn.disabled = true;
+            DOM.exportCsvBtn.disabled = true;
+            DOM.exportJsonBtn.disabled = true;
+            return;
+        }
+
+        if (s.state === 'ERROR') {
+            DOM.resultBody.innerHTML = `<div class="sys-error">❌ 检查执行错误：${escapeHtml(s.errorMessage || '未知')}</div>`;
+            return;
+        }
+
+        // COMPLETED
+        renderResult(s);
+        DOM.exportHtmlBtn.disabled = false;
+        DOM.exportCsvBtn.disabled = false;
+        DOM.exportJsonBtn.disabled = false;
+    }
+
     function renderResult(data) {
         const results = data.results || [];
         const summary = data.summary || { ok:0, bad:0, warn:0, info:0 };
-        const totalDurationMs = data.totalDurationMs || 0;
-        const estimatedTotalSeconds = data.estimatedTotalSeconds || 0;
+        const elapsedSeconds = data.elapsedSeconds || 0;
 
         DOM.summaryStats.innerHTML = `
             <div class="item ok"><span>合规</span><span class="num">${summary.ok}</span></div>
             <div class="item bad"><span>不合规</span><span class="num">${summary.bad}</span></div>
             <div class="item warn"><span>警告</span><span class="num">${summary.warn}</span></div>
             <div class="item info"><span>信息</span><span class="num">${summary.info}</span></div>
-            <div class="item time"><span>实际耗时</span><span class="num" id="totalDuration">${(totalDurationMs / 1000).toFixed(2)}s</span></div>
+            <div class="item time"><span>实际耗时</span><span class="num">${elapsedSeconds.toFixed(2)}s</span></div>
         `;
+        DOM.totalDuration.textContent = elapsedSeconds.toFixed(2) + 's';
 
         if (!results.length) {
             DOM.resultBody.innerHTML = '<div class="sys-empty">未返回任何结果</div>';
             return;
         }
 
-        // 顶部汇总时间
-        const timeSummary = `
+        const topSummary = `
             <div style="margin-bottom:12px;padding:10px 16px;background:rgba(0,102,255,0.06);
                         border-radius:12px;font-size:13px;display:flex;gap:24px;flex-wrap:wrap;">
-                <span>⏱ <strong>预计耗时</strong>：约 ${estimatedTotalSeconds} 秒</span>
-                <span>✅ <strong>实际耗时</strong>：${(totalDurationMs / 1000).toFixed(2)} 秒</span>
+                <span>⏱ <strong>预计总耗时</strong>：约 ${data.estimatedTotalSeconds || 0} 秒</span>
+                <span>✅ <strong>实际总耗时</strong>：${elapsedSeconds.toFixed(2)} 秒</span>
                 <span>📊 <strong>执行模块</strong>：${results.length} 个</span>
             </div>`;
 
-        let html = timeSummary;
+        let html = topSummary;
         for (const r of results) {
             const findings = r.findings || [];
             const isCollapsed = collapsedGroups.has(r.checkId);
             const groupCls = isCollapsed ? 'collapsed' : '';
             const headerCls = isCollapsed ? 'collapsed' : '';
+            const actualSec = (r.durationMs || 0) / 1000;
+            const estSec = r.estimatedSeconds || 0;
+            const durationIcon = actualSec > estSec * 1.5 ? '🐢' : (actualSec < estSec * 0.5 ? '⚡' : '✅');
 
-            html += `<div class="sys-check-group" data-group="${escapeHtml(r.checkId)}">
-                <div class="sys-group-header ${headerCls}" data-group-toggle="${escapeHtml(r.checkId)}">
+            html += `<div class="sys-check-group">
+                <div class="sys-group-header ${headerCls}" data-toggle="${escapeHtml(r.checkId)}">
                     <div class="left">
                         <span class="arrow">▼</span>
                         <span>${escapeHtml(r.checkName || r.checkId)}</span>
                     </div>
                     <div class="timing">
-                        <span class="actual">✅ 实际 ${(r.durationMs || 0) / 1000}s</span>
-                        <span class="est">⏱ 预估 ~${r.estimatedSeconds || 0}s</span>
+                        <span class="actual">${durationIcon} 实际 ${actualSec.toFixed(2)}s</span>
+                        <span class="est">⏱ 预估 ~${estSec}s</span>
                         <span>📋 ${findings.length} 条</span>
                     </div>
                 </div>
@@ -312,10 +438,9 @@
         }
         DOM.resultBody.innerHTML = html;
 
-        // 折叠/展开
-        DOM.resultBody.querySelectorAll('[data-group-toggle]').forEach(el => {
+        DOM.resultBody.querySelectorAll('[data-toggle]').forEach(el => {
             el.addEventListener('click', () => {
-                const gid = el.dataset.groupToggle;
+                const gid = el.dataset.toggle;
                 const body = el.nextElementSibling;
                 if (!body) return;
                 const isCollapsed = body.classList.toggle('collapsed');
@@ -326,10 +451,25 @@
         });
     }
 
-    function enableExportButtons() {
-        DOM.exportHtmlBtn.disabled = false;
-        DOM.exportCsvBtn.disabled = false;
-        DOM.exportJsonBtn.disabled = false;
+    // ==================== 取消 ====================
+    async function cancelCheck() {
+        if (!currentTaskId) return;
+        if (!confirm('确定停止检查吗？已完成的模块结果会保留。')) return;
+        DOM.cancelBtn.disabled = true;
+        DOM.cancelBtn.textContent = '⏳ 停止中...';
+        try {
+            const resp = await fetch(API + '/cancel?taskId=' + encodeURIComponent(currentTaskId), { method: 'POST' });
+            const data = await resp.json();
+            if (!data.success) {
+                alert('取消失败：' + (data.message || '未知'));
+                DOM.cancelBtn.disabled = false;
+                DOM.cancelBtn.textContent = '⏹ 停止检查';
+            }
+        } catch (e) {
+            alert('取消请求失败：' + e.message);
+            DOM.cancelBtn.disabled = false;
+            DOM.cancelBtn.textContent = '⏹ 停止检查';
+        }
     }
 
     function escapeHtml(s) {
@@ -340,11 +480,23 @@
     }
 
     // ==================== 事件绑定 ====================
-    DOM.runBtn.addEventListener('click', runCheck);
+    DOM.runBtn.addEventListener('click', startCheck);
+    DOM.cancelBtn.addEventListener('click', cancelCheck);
+    DOM.backToConfigBtn.addEventListener('click', () => {
+        DOM.resultPanel.style.display = 'none';
+        DOM.emptyState.style.display = 'block';
+        switchTab('config');
+    });
     DOM.exportHtmlBtn.addEventListener('click', () => window.open(API + '/export/html', '_blank'));
     DOM.exportCsvBtn.addEventListener('click',  () => window.open(API + '/export/csv',  '_blank'));
     DOM.exportJsonBtn.addEventListener('click', () => window.open(API + '/export/json', '_blank'));
 
-    // ==================== 启动 ====================
+    // 页面卸载时清理定时器
+    window.addEventListener('beforeunload', () => {
+        stopPolling();
+        stopTimer();
+    });
+
+    // 启动
     loadConfig();
 })();

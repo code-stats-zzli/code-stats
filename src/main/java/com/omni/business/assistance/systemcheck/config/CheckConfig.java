@@ -1,5 +1,7 @@
 package com.omni.business.assistance.systemcheck.config;
 
+import com.omni.business.assistance.systemcheck.command.SystemCheckCommand;
+
 import java.io.InputStream;
 import java.util.*;
 
@@ -13,7 +15,6 @@ public class CheckConfig {
 
     public static final Map<String, String> CHECK_NAMES = new LinkedHashMap<>();
     public static final Map<String, String> CHECK_ICONS = new LinkedHashMap<>();
-    public static final Map<String, Integer> DEFAULT_EST_SECONDS = new LinkedHashMap<>();
 
     static {
         CHECK_NAMES.put("system-info", "系统信息");
@@ -37,115 +38,119 @@ public class CheckConfig {
         CHECK_ICONS.put("plaintext-scan", "📝");
         CHECK_ICONS.put("dependency-vuln", "⚠️");
         CHECK_ICONS.put("endpoint-security", "🌐");
-
-        DEFAULT_EST_SECONDS.put("system-info", 1);
-        DEFAULT_EST_SECONDS.put("firewall", 3);
-        DEFAULT_EST_SECONDS.put("port", 5);
-        DEFAULT_EST_SECONDS.put("rdp", 2);
-        DEFAULT_EST_SECONDS.put("lock-screen", 2);
-        DEFAULT_EST_SECONDS.put("credentials", 5);
-        DEFAULT_EST_SECONDS.put("archive", 10);
-        DEFAULT_EST_SECONDS.put("plaintext-scan", 30);
-        DEFAULT_EST_SECONDS.put("dependency-vuln", 20);
-        DEFAULT_EST_SECONDS.put("endpoint-security", 5);
     }
 
-    // ==================== 默认值常量 ====================
-    private static final List<String> DEFAULT_RISK_PORTS = Collections.unmodifiableList(Arrays.asList(
-            "21","22","23","25","53","80","110","135","137","138","139","143","443",
-            "445","1433","1521","3306","3389","5432","5900","6379","9042","9092",
-            "9200","9300","11211","27017","2375","8080","8443","8888","5000","5001"));
-    private static final List<String> DEFAULT_RISK_REQ_PORTS = Collections.unmodifiableList(Arrays.asList(
-            "21","23","135","137","138","139","445","3306","3389","6379"));
-    private static final long DEFAULT_PLAINTEXT_MAX_FILE = 15L * 1024 * 1024;
-    private static final long DEFAULT_PLAINTEXT_MAX_DOC = 3L * 1024 * 1024;
-    private static final int DEFAULT_DEP_DEPTH = 8;
-
-    // ==================== 实例字段 ====================
+    // 实例字段
     private int threadCount = 4;
     private final Map<String, Boolean> checkEnabled = new LinkedHashMap<>();
-    /** moduleId → { 配置 key → 值 }（可为 List / Number / String） */
+    /** moduleId → { 配置 key → 值 }（值类型：List<String>/Number/String/Boolean） */
     private final Map<String, Map<String, Object>> moduleConfig = new LinkedHashMap<>();
 
     public CheckConfig() {
         for (String id : CHECK_IDS) checkEnabled.put(id, true);
-        // 初始化默认模块配置（保证每个模块都有 default 值可读）
-        setModuleValue("port", "riskPorts", new ArrayList<>(DEFAULT_RISK_PORTS));
-        setModuleValue("port", "riskReqPorts", new ArrayList<>(DEFAULT_RISK_REQ_PORTS));
-        setModuleValue("plaintext-scan", "maxFileSize", DEFAULT_PLAINTEXT_MAX_FILE);
-        setModuleValue("plaintext-scan", "maxDocSize", DEFAULT_PLAINTEXT_MAX_DOC);
-        setModuleValue("dependency-vuln", "maxDepth", DEFAULT_DEP_DEPTH);
     }
 
-    // ==================== 模块配置读写 ====================
+    // ==================== 模块配置读写（类型安全 getter） ====================
 
     public Map<String, Object> getModuleConfig(String moduleId) {
         return moduleConfig.computeIfAbsent(moduleId, k -> new LinkedHashMap<>());
     }
 
     @SuppressWarnings("unchecked")
-    public <T> T getModuleValue(String moduleId, String key, T defaultValue) {
-        Map<String, Object> m = getModuleConfig(moduleId);
-        Object v = m.get(key);
-        return v == null ? defaultValue : (T) v;
+    public List<String> getModuleList(String moduleId, String key, List<String> def) {
+        Object v = getModuleConfig(moduleId).get(key);
+        if (v instanceof List) return (List<String>) v;
+        if (v instanceof String) {
+            List<String> out = new ArrayList<>();
+            for (String s : ((String) v).split(",")) if (!s.trim().isEmpty()) out.add(s.trim());
+            return out;
+        }
+        return def;
+    }
+
+    public String getModuleString(String moduleId, String key, String def) {
+        Object v = getModuleConfig(moduleId).get(key);
+        return v == null ? def : String.valueOf(v);
+    }
+
+    public int getModuleInt(String moduleId, String key, int def) {
+        Object v = getModuleConfig(moduleId).get(key);
+        if (v instanceof Number) return ((Number) v).intValue();
+        if (v instanceof String) {
+            try { return Integer.parseInt(((String) v).trim()); } catch (Exception ignored) {}
+        }
+        return def;
+    }
+
+    public long getModuleLong(String moduleId, String key, long def) {
+        Object v = getModuleConfig(moduleId).get(key);
+        if (v instanceof Number) return ((Number) v).longValue();
+        if (v instanceof String) {
+            try { return Long.parseLong(((String) v).trim()); } catch (Exception ignored) {}
+        }
+        return def;
+    }
+
+    public boolean getModuleBool(String moduleId, String key, boolean def) {
+        Object v = getModuleConfig(moduleId).get(key);
+        if (v instanceof Boolean) return (Boolean) v;
+        if (v instanceof String) return Boolean.parseBoolean(((String) v).trim());
+        return def;
     }
 
     public void setModuleValue(String moduleId, String key, Object value) {
         getModuleConfig(moduleId).put(key, value);
     }
 
-    /** 合并前端传入的模块配置（自动类型转换） */
+    /** 合并前端传入的模块配置 */
     @SuppressWarnings("unchecked")
     public void mergeModuleConfig(Map<String, Map<String, Object>> overrides) {
         if (overrides == null) return;
         for (Map.Entry<String, Map<String, Object>> e : overrides.entrySet()) {
-            String moduleId = e.getKey();
             Map<String, Object> incoming = e.getValue();
             if (incoming == null) continue;
-            Map<String, Object> target = getModuleConfig(moduleId);
+            Map<String, Object> target = getModuleConfig(e.getKey());
             for (Map.Entry<String, Object> f : incoming.entrySet()) {
                 Object v = f.getValue();
-                // 前端 list 类型可能传成 List 或逗号字符串，统一转 List<String>
-                if (v instanceof String && (f.getKey().equals("riskPorts")
-                        || f.getKey().equals("riskReqPorts"))) {
-                    List<String> list = new ArrayList<>();
-                    for (String s : ((String) v).split(",")) if (!s.trim().isEmpty()) list.add(s.trim());
-                    v = list;
+                // 前端 list 类型可能传成 List 或逗号字符串
+                if (v instanceof String) {
+                    String s = (String) v;
+                    if (s.contains(",") && !f.getKey().matches("(?i).*pattern.*|.*regex.*")) {
+                        List<String> list = new ArrayList<>();
+                        for (String t : s.split(",")) if (!t.trim().isEmpty()) list.add(t.trim());
+                        v = list;
+                    }
                 }
                 target.put(f.getKey(), v);
             }
         }
     }
 
-    // ==================== 便捷读方法（兼容旧调用方） ====================
+    // ==================== 兼容旧调用方 ====================
 
-    @SuppressWarnings("unchecked")
     public List<String> getRiskPorts() {
-        Object v = getModuleValue("port", "riskPorts", null);
-        if (v instanceof List) return (List<String>) v;
-        return DEFAULT_RISK_PORTS;
+        return getModuleList("port", "riskPorts", defaultRiskPorts());
     }
-
-    @SuppressWarnings("unchecked")
     public List<String> getRiskReqPorts() {
-        Object v = getModuleValue("port", "riskReqPorts", null);
-        if (v instanceof List) return (List<String>) v;
-        return DEFAULT_RISK_REQ_PORTS;
+        return getModuleList("port", "riskReqPorts", defaultRiskReqPorts());
     }
-
     public long getPlaintextScanMaxFileSize() {
-        Object v = getModuleValue("plaintext-scan", "maxFileSize", null);
-        return v instanceof Number ? ((Number) v).longValue() : DEFAULT_PLAINTEXT_MAX_FILE;
+        return getModuleLong("plaintext-scan", "maxFileSize", 15L * 1024 * 1024);
     }
-
     public long getPlaintextScanMaxDocSize() {
-        Object v = getModuleValue("plaintext-scan", "maxDocSize", null);
-        return v instanceof Number ? ((Number) v).longValue() : DEFAULT_PLAINTEXT_MAX_DOC;
+        return getModuleLong("plaintext-scan", "maxDocSize", 3L * 1024 * 1024);
+    }
+    public int getDependencyVulnMaxDepth() {
+        return getModuleInt("dependency-vuln", "maxDepth", 8);
     }
 
-    public int getDependencyVulnMaxDepth() {
-        Object v = getModuleValue("dependency-vuln", "maxDepth", null);
-        return v instanceof Number ? ((Number) v).intValue() : DEFAULT_DEP_DEPTH;
+    private static List<String> defaultRiskPorts() {
+        return Arrays.asList("21","22","23","25","53","80","110","135","137","138","139",
+                "143","443","445","1433","1521","3306","3389","5432","5900","6379",
+                "9042","9092","9200","9300","11211","27017","2375","8080","8443","8888","5000","5001");
+    }
+    private static List<String> defaultRiskReqPorts() {
+        return Arrays.asList("21","23","135","137","138","139","445","3306","3389","6379");
     }
 
     public int getThreadCount() { return threadCount; }
@@ -161,22 +166,48 @@ public class CheckConfig {
             if (is == null) return cfg;
             Properties p = new Properties();
             p.load(is);
+
             String tc = p.getProperty("system-check.thread-count");
             if (tc != null) {
                 try { cfg.threadCount = Integer.parseInt(tc.trim()); } catch (Exception ignored) {}
             }
-            // 端口列表
-            List<String> rp = split(p.getProperty("system-check.risk-ports"));
-            if (rp != null) cfg.setModuleValue("port", "riskPorts", rp);
-            List<String> rrp = split(p.getProperty("system-check.risk-req-ports"));
-            if (rrp != null) cfg.setModuleValue("port", "riskReqPorts", rrp);
-            // 大小阈值
-            String v = p.getProperty("system-check.plaintext-scan.max-file-size");
-            if (v != null) cfg.setModuleValue("plaintext-scan", "maxFileSize", parseLong(v, DEFAULT_PLAINTEXT_MAX_FILE));
-            v = p.getProperty("system-check.plaintext-scan.max-doc-size");
-            if (v != null) cfg.setModuleValue("plaintext-scan", "maxDocSize", parseLong(v, DEFAULT_PLAINTEXT_MAX_DOC));
-            v = p.getProperty("system-check.dependency-vuln.max-depth");
-            if (v != null) cfg.setModuleValue("dependency-vuln", "maxDepth", parseInt(v, DEFAULT_DEP_DEPTH));
+
+            // 端口模块
+            loadList(p, cfg, "port", "system-check.port.riskPorts", "riskPorts");
+            loadList(p, cfg, "port", "system-check.port.riskReqPorts", "riskReqPorts");
+
+            // 明文扫描模块
+            loadLong(p, cfg, "plaintext-scan", "system-check.plaintext-scan.maxFileSize", "maxFileSize");
+            loadLong(p, cfg, "plaintext-scan", "system-check.plaintext-scan.maxDocSize", "maxDocSize");
+            loadList(p, cfg, "plaintext-scan", "system-check.plaintext-scan.passwordKeywords", "passwordKeywords");
+            loadList(p, cfg, "plaintext-scan", "system-check.plaintext-scan.textExtensions", "textExtensions");
+            loadList(p, cfg, "plaintext-scan", "system-check.plaintext-scan.docExtensions", "docExtensions");
+            loadList(p, cfg, "plaintext-scan", "system-check.plaintext-scan.skipDirs", "skipDirs");
+            loadList(p, cfg, "plaintext-scan", "system-check.plaintext-scan.skipKeywords", "skipKeywords");
+            loadList(p, cfg, "plaintext-scan", "system-check.plaintext-scan.placeholderBrackets", "placeholderBrackets");
+            loadStr(p, cfg, "plaintext-scan", "system-check.plaintext-scan.assignRegex", "assignRegex");
+
+            // 压缩包模块
+            loadLong(p, cfg, "archive", "system-check.archive.minSizeMB", "minSizeMB");
+            loadList(p, cfg, "archive", "system-check.archive.scanDirs", "scanDirs");
+            loadList(p, cfg, "archive", "system-check.archive.archiveExtensions", "archiveExtensions");
+            loadStr(p, cfg, "archive", "system-check.archive.openSourcePattern", "openSourcePattern");
+
+            // 凭据模块
+            loadList(p, cfg, "credentials", "system-check.credentials.credentialFiles", "credentialFiles");
+            loadList(p, cfg, "credentials", "system-check.credentials.browserDirsWin", "browserDirsWin");
+            loadList(p, cfg, "credentials", "system-check.credentials.browserDirsLinux", "browserDirsLinux");
+            loadStr(p, cfg, "credentials", "system-check.credentials.commercialPattern", "commercialPattern");
+
+            // 跨网模块
+            loadStr(p, cfg, "endpoint-security", "system-check.endpoint-security.crossNetPattern", "crossNetPattern");
+            loadStr(p, cfg, "endpoint-security", "system-check.endpoint-security.wifiPattern", "wifiPattern");
+
+            // 依赖漏洞模块
+            loadList(p, cfg, "dependency-vuln", "system-check.dependency-vuln.manifestFiles", "manifestFiles");
+            loadList(p, cfg, "dependency-vuln", "system-check.dependency-vuln.skipDirs", "skipDirs");
+            loadStr(p, cfg, "dependency-vuln", "system-check.dependency-vuln.customVulnDb", "customVulnDb");
+
             // 模块开关
             for (String id : CHECK_IDS) {
                 String s = p.getProperty("system-check.check." + id + ".enabled");
@@ -186,27 +217,31 @@ public class CheckConfig {
         return cfg;
     }
 
-    private static List<String> split(String s) {
-        if (s == null || s.trim().isEmpty()) return null;
-        List<String> out = new ArrayList<>();
-        for (String t : s.split(",")) if (!t.trim().isEmpty()) out.add(t.trim());
-        return out.isEmpty() ? null : out;
+    private static void loadList(Properties p, CheckConfig cfg, String module, String propKey, String cfgKey) {
+        String s = p.getProperty(propKey);
+        if (s == null) return;
+        List<String> list = new ArrayList<>();
+        for (String t : s.split(",")) if (!t.trim().isEmpty()) list.add(t.trim());
+        if (!list.isEmpty()) cfg.setModuleValue(module, cfgKey, list);
     }
-    private static long parseLong(String s, long def) {
-        try { return Long.parseLong(s.trim()); } catch (Exception e) { return def; }
+    private static void loadLong(Properties p, CheckConfig cfg, String module, String propKey, String cfgKey) {
+        String s = p.getProperty(propKey);
+        if (s == null) return;
+        try { cfg.setModuleValue(module, cfgKey, Long.parseLong(s.trim())); } catch (Exception ignored) {}
     }
-    private static int parseInt(String s, int def) {
-        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return def; }
+    private static void loadStr(Properties p, CheckConfig cfg, String module, String propKey, String cfgKey) {
+        String s = p.getProperty(propKey);
+        if (s != null) cfg.setModuleValue(module, cfgKey, s.trim());
     }
 
     // ==================== 输出元数据（含详细配置字段） ====================
 
-    public Map<String, Object> toMetaMap(java.util.List<com.omni.business.assistance.systemcheck.command.SystemCheckCommand> commands) {
+    public Map<String, Object> toMetaMap(List<SystemCheckCommand> commands) {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("threadCount", threadCount);
 
-        java.util.List<Map<String, Object>> checks = new ArrayList<>();
-        for (com.omni.business.assistance.systemcheck.command.SystemCheckCommand cmd : commands) {
+        List<Map<String, Object>> checks = new ArrayList<>();
+        for (SystemCheckCommand cmd : commands) {
             Map<String, Object> c = new LinkedHashMap<>();
             c.put("id", cmd.getId());
             c.put("name", cmd.getName());

@@ -1,6 +1,7 @@
 package com.omni.business.assistance.systemcheck.controller;
 
 import com.omni.business.assistance.systemcheck.command.SystemCheckCommand;
+import com.omni.business.assistance.systemcheck.command.SystemCheckTaskManager;
 import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.CheckResult;
 import com.omni.business.assistance.systemcheck.model.Finding;
@@ -26,7 +27,7 @@ public class SystemCheckController {
     @Autowired
     private SystemCheckService service;
 
-    /** 获取默认配置（含每个模块的详细配置字段） */
+    /** 获取默认配置（含每模块详细配置字段） */
     @RequestMapping("/config")
     @ResponseBody
     public String getConfig() {
@@ -35,12 +36,14 @@ public class SystemCheckController {
         return JsonUtil.toJson(cfg.toMetaMap(commands));
     }
 
-    /** 执行系统检查（接收前端配置覆盖） */
+    /**
+     * 启动检查任务（异步）
+     * 返回 { success, taskId }
+     */
     @RequestMapping("/run")
     @ResponseBody
     @SuppressWarnings("unchecked")
     public String run(@RequestBody Map<String, Object> req) {
-        long t0 = System.currentTimeMillis();
         try {
             CheckConfig cfg = CheckConfig.load();
             if (req != null) {
@@ -49,7 +52,6 @@ public class SystemCheckController {
                     try { cfg.setThreadCount(Integer.parseInt(String.valueOf(tc))); }
                     catch (Exception ignored) {}
                 }
-                // ★ 合并前端传入的模块级详细配置
                 Object mc = req.get("moduleConfig");
                 if (mc instanceof Map) {
                     cfg.mergeModuleConfig((Map<String, Map<String, Object>>) mc);
@@ -62,55 +64,55 @@ public class SystemCheckController {
                 for (Object o : (List<Object>) req.get("checks")) selected.add(String.valueOf(o));
             }
 
-            List<CheckResult> results = service.runCheck(cfg, selected);
-
-            // 预估总耗时（已选模块之和）
-            int estimatedTotal = 0;
-            int cOk = 0, cBad = 0, cWarn = 0, cInfo = 0;
-            for (CheckResult r : results) {
-                estimatedTotal += r.getEstimatedSeconds();
-                for (Finding f : r.getFindings()) {
-                    switch (f.getStatus()) {
-                        case "合规": cOk++; break;
-                        case "不合规": cBad++; break;
-                        case "警告": cWarn++; break;
-                        default: cInfo++;
-                    }
-                }
-            }
-            long totalMs = System.currentTimeMillis() - t0;
-
-            Map<String, Object> resp = new LinkedHashMap<>();
-            resp.put("success", true);
-            resp.put("timestamp", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
-            resp.put("results", results);
-            resp.put("totalDurationMs", totalMs);
-            resp.put("estimatedTotalSeconds", estimatedTotal);
-
-            Map<String, Object> stat = new LinkedHashMap<>();
-            stat.put("ok", cOk); stat.put("bad", cBad);
-            stat.put("warn", cWarn); stat.put("info", cInfo);
-            resp.put("summary", stat);
-
-            return JsonUtil.toJson(resp);
+            String taskId = SystemCheckTaskManager.createTask(cfg, service.getCommands(), selected);
+            return JsonUtil.toJson(Map.of("success", true, "taskId", taskId));
         } catch (Exception e) {
             return JsonUtil.toJson(Map.of("success", false, "error", e.getMessage()));
         }
     }
 
-    /** 导出 HTML */
+    /** 查询任务状态（含运行中实时耗时、各模块状态、完成时结果） */
+    @RequestMapping("/status")
+    @ResponseBody
+    public String status(String taskId) {
+        if (taskId == null || taskId.isEmpty()) {
+            return JsonUtil.toJson(Map.of("success", false, "error", "缺少 taskId"));
+        }
+        Map<String, Object> s = SystemCheckTaskManager.getStatus(taskId);
+        if (s == null) {
+            return JsonUtil.toJson(Map.of("success", false, "error", "任务不存在或已过期"));
+        }
+        s.put("success", true);
+        return JsonUtil.toJson(s);
+    }
+
+    /** 取消任务 */
+    @RequestMapping("/cancel")
+    @ResponseBody
+    public String cancel(String taskId) {
+        if (taskId == null || taskId.isEmpty()) {
+            return JsonUtil.toJson(Map.of("success", false, "error", "缺少 taskId"));
+        }
+        boolean ok = SystemCheckTaskManager.cancel(taskId);
+        return JsonUtil.toJson(Map.of("success", ok, "message", ok ? "已取消" : "无法取消（已完成或不存在）"));
+    }
+
+    // ==================== 导出 ====================
+
     @RequestMapping("/export/html")
     public void exportHtml() throws Exception {
         HttpServletResponse resp = ResponseContextHolder.getResponse();
         if (resp == null) return;
         CheckConfig cfg = CheckConfig.load();
-        List<CheckResult> results = service.runCheck(cfg, null);
+        // 同步执行（导出场景可接受阻塞）
+        Map<String, Object> result = runSync(cfg);
+        @SuppressWarnings("unchecked")
+        List<CheckResult> results = (List<CheckResult>) result.get("results");
+        long totalMs = (long) result.get("totalMs");
 
-        long totalMs = 0;
         StringBuilder rows = new StringBuilder();
         int cOk = 0, cBad = 0, cInfo = 0;
         for (CheckResult r : results) {
-            totalMs += r.getDurationMs();
             for (Finding f : r.getFindings()) {
                 if ("警告".equals(f.getStatus())) continue;
                 String color = "合规".equals(f.getStatus()) ? "#1a7f37"
@@ -136,7 +138,7 @@ public class SystemCheckController {
                 + "<p>生成时间：" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + "</p>"
                 + "<p>合规：" + cOk + " · 不合规：" + cBad + " · 信息：" + cInfo
                 + " · 实际耗时：" + (totalMs / 1000.0) + " 秒</p>"
-                + "<table><thead><tr><th>类别</th><th>检查项</th><th>状态</th><th>风险</th><th>详情</th><th>整改建议</th></tr></thead>"
+                + "<table><thead><tr><th>类别</th><th>检查项</th><th>状态</th><th>风险</th><th>详情</th><th>建议</th></tr></thead>"
                 + "<tbody>" + rows + "</tbody></table></body></html>";
 
         byte[] data = html.getBytes(StandardCharsets.UTF_8);
@@ -148,13 +150,13 @@ public class SystemCheckController {
         resp.getRawOutputStream().flush();
     }
 
-    /** 导出 CSV */
     @RequestMapping("/export/csv")
     public void exportCsv() throws Exception {
         HttpServletResponse resp = ResponseContextHolder.getResponse();
         if (resp == null) return;
-        CheckConfig cfg = CheckConfig.load();
-        List<CheckResult> results = service.runCheck(cfg, null);
+        Map<String, Object> result = runSync(CheckConfig.load());
+        @SuppressWarnings("unchecked")
+        List<CheckResult> results = (List<CheckResult>) result.get("results");
 
         StringBuilder csv = new StringBuilder("\uFEFF");
         csv.append("Category,Item,Status,Risk,Detail,Suggestion\n");
@@ -178,17 +180,14 @@ public class SystemCheckController {
         resp.getRawOutputStream().flush();
     }
 
-    /** 导出 JSON */
     @RequestMapping("/export/json")
     public void exportJson() throws Exception {
         HttpServletResponse resp = ResponseContextHolder.getResponse();
         if (resp == null) return;
-        CheckConfig cfg = CheckConfig.load();
-        List<CheckResult> results = service.runCheck(cfg, null);
-
+        Map<String, Object> result = runSync(CheckConfig.load());
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("timestamp", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
-        out.put("results", results);
+        out.put("results", result.get("results"));
         byte[] data = JsonUtil.toJson(out).getBytes(StandardCharsets.UTF_8);
         String fileName = URLEncoder.encode("系统检查结果_" + new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()) + ".json", "UTF-8")
                 .replaceAll("\\+", "%20");
@@ -196,6 +195,23 @@ public class SystemCheckController {
         resp.setContentType("application/json; charset=utf-8");
         resp.getRawOutputStream().write(data);
         resp.getRawOutputStream().flush();
+    }
+
+    /** 导出用同步执行（阻塞等待完成） */
+    private Map<String, Object> runSync(CheckConfig cfg) throws Exception {
+        String taskId = SystemCheckTaskManager.createTask(cfg, service.getCommands(), null);
+        long t0 = System.currentTimeMillis();
+        while (true) {
+            Map<String, Object> s = SystemCheckTaskManager.getStatus(taskId);
+            if (s == null) throw new RuntimeException("任务丢失");
+            if (!"RUNNING".equals(s.get("state"))) {
+                Map<String, Object> out = new LinkedHashMap<>();
+                out.put("results", s.get("results"));
+                out.put("totalMs", System.currentTimeMillis() - t0);
+                return out;
+            }
+            Thread.sleep(300);
+        }
     }
 
     private static String esc(String s) {

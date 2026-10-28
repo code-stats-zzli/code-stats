@@ -10,18 +10,15 @@
 </head>
 <body>
 <div class="systemcheck-container">
-    <!-- Tab 导航 -->
     <div class="sys-tabs">
         <button class="sys-tab active" data-tab="config">⚙️ 配置参数</button>
         <button class="sys-tab" data-tab="result">🔍 检查结果</button>
     </div>
 
-    <!-- 内容区 -->
     <div class="sys-content">
         <!-- 配置 Tab -->
         <div class="sys-pane active" id="configPane">
             <div class="config-scroll">
-                <!-- 全局配置 -->
                 <div class="config-section">
                     <div class="section-title">🌐 全局参数</div>
                     <div class="config-field-row">
@@ -30,20 +27,16 @@
                         <span class="hint">同时执行的检查项数量</span>
                     </div>
                 </div>
-
-                <!-- 模块列表 -->
                 <div class="config-section">
                     <div class="section-title">
                         📋 检查模块
-                        <span class="section-hint" id="moduleHint">勾选启用的模块，可展开配置详细参数</span>
+                        <span class="section-hint">勾选模块，展开可调整详细参数</span>
                     </div>
                     <div class="module-list" id="moduleList">
                         <div class="loading">加载配置中...</div>
                     </div>
                 </div>
             </div>
-
-            <!-- 底部固定操作栏 -->
             <div class="config-footer">
                 <div class="estimate-info">
                     ⏱ 预计总耗时约 <strong id="estimatedTotal">0</strong> 秒
@@ -53,26 +46,52 @@
             </div>
         </div>
 
-        <!-- 检查结果 Tab -->
+        <!-- 结果 Tab -->
         <div class="sys-pane" id="resultPane">
-            <div class="result-header">
-                <div class="sys-summary-stats" id="summaryStats">
-                    <div class="item ok"><span>合规</span><span class="num">0</span></div>
-                    <div class="item bad"><span>不合规</span><span class="num">0</span></div>
-                    <div class="item warn"><span>警告</span><span class="num">0</span></div>
-                    <div class="item info"><span>信息</span><span class="num">0</span></div>
-                    <div class="item time"><span>实际耗时</span><span class="num" id="totalDuration">0.00s</span></div>
+            <!-- 运行中状态面板 -->
+            <div class="running-panel" id="runningPanel" style="display:none;">
+                <div class="running-header">
+                    <div class="running-info">
+                        <div class="running-timer" id="runningTimer">00:00</div>
+                        <div class="running-meta">
+                            <div>已用时间 <span id="elapsedText">0.0s</span></div>
+                            <div>完成 <span id="progressText">0 / 0</span> 个模块</div>
+                            <div>预计总耗时 <span id="estimatedText">0</span> 秒</div>
+                        </div>
+                    </div>
+                    <button id="cancelBtn" class="btn-danger">⏹ 停止检查</button>
                 </div>
-                <div class="sys-export-btns">
-                    <button id="exportHtmlBtn" class="btn-secondary" disabled>📄 HTML</button>
-                    <button id="exportCsvBtn" class="btn-secondary" disabled>📊 CSV</button>
-                    <button id="exportJsonBtn" class="btn-secondary" disabled>📋 JSON</button>
+                <div class="progress-track">
+                    <div class="progress-fill" id="progressFill" style="width:0%"></div>
                 </div>
+                <div class="running-modules" id="runningModules"></div>
             </div>
-            <div class="result-body" id="resultBody">
+
+            <!-- 已完成结果面板 -->
+            <div class="result-panel" id="resultPanel" style="display:none;">
+                <div class="result-header">
+                    <div class="sys-summary-stats" id="summaryStats">
+                        <div class="item ok"><span>合规</span><span class="num">0</span></div>
+                        <div class="item bad"><span>不合规</span><span class="num">0</span></div>
+                        <div class="item warn"><span>警告</span><span class="num">0</span></div>
+                        <div class="item info"><span>信息</span><span class="num">0</span></div>
+                        <div class="item time"><span>实际耗时</span><span class="num" id="totalDuration">0.00s</span></div>
+                    </div>
+                    <div class="sys-export-btns">
+                        <button id="exportHtmlBtn" class="btn-secondary" disabled>📄 HTML</button>
+                        <button id="exportCsvBtn" class="btn-secondary" disabled>📊 CSV</button>
+                        <button id="exportJsonBtn" class="btn-secondary" disabled>📋 JSON</button>
+                        <button id="backToConfigBtn" class="btn-secondary">↩ 返回配置</button>
+                    </div>
+                </div>
+                <div class="result-body" id="resultBody"></div>
+            </div>
+
+            <!-- 空状态 -->
+            <div class="result-body" id="emptyState">
                 <div class="sys-empty">
                     <div style="font-size:48px;margin-bottom:16px;">🛡️</div>
-                    <div>点击「⚙️ 配置参数」Tab，勾选检查项后，点击「开始检查」</div>
+                    <div>在「⚙️ 配置参数」Tab 中勾选检查项后，点击「开始检查」</div>
                 </div>
             </div>
         </div>

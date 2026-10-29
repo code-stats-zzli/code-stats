@@ -1,7 +1,7 @@
 package com.omni.framework.log.layout;
 
 import com.omni.framework.log.core.LogEvent;
-import com.omni.framework.util.ExceptionUtil;  // ★ 新增引用
+import com.omni.framework.util.ExceptionUtil;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -41,7 +41,6 @@ public class PatternLayout extends Layout {
         Throwable t = event.getThrowable();
         if (t != null && !hasExplicitEx) {
             sb.append(System.lineSeparator());
-            // ★ 使用工具类获取完整异常堆栈（包含所有 cause 链）
             sb.append(ExceptionUtil.getFullStackTrace(t));
         }
 
@@ -57,16 +56,13 @@ public class PatternLayout extends Layout {
                     return String.format("%-" + width + "s", levelName);
                 }
                 return levelName;
+
             case "logger":
-                String loggerName = event.getLoggerName();
-                if (option != null) {
-                    int maxLen = Integer.parseInt(option);
-                    if (loggerName.length() > maxLen) {
-                        // 保留最后 maxLen 个字符，前面加 "..."
-                        loggerName = "..." + loggerName.substring(loggerName.length() - maxLen + 3);
-                    }
-                }
-                return loggerName;
+                // ★ 修复2：始终输出完整类全限定名，不截断
+                // 即使用户配置了 %logger{36} 也完整输出，避免调试时定位不到类
+                // 若后续希望按需截断，请用其他保留关键字（如 %shortLogger），这里不再支持
+                return event.getLoggerName();
+
             case "d":
                 DateTimeFormatter formatter;
                 if (option == null || option.isEmpty()) {
@@ -77,18 +73,22 @@ public class PatternLayout extends Layout {
                 LocalDateTime dt = LocalDateTime.ofInstant(
                         Instant.ofEpochMilli(event.getTimestamp()), ZoneId.systemDefault());
                 return dt.format(formatter);
+
             case "t":
                 return event.getThreadName();
+
             case "msg":
             case "m":
                 return event.getMessage();
+
             case "n":
                 return System.lineSeparator();
+
             case "ex":
                 Throwable t = event.getThrowable();
                 if (t == null) return "";
-                // ★ 使用工具类获取完整异常堆栈（包含所有 cause 链）
                 return ExceptionUtil.getFullStackTrace(t);
+
             default:
                 return "%" + keyword;
         }

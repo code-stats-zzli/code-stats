@@ -68,4 +68,9 @@ public class CppExecutor extends BaseScriptExecutor {
         addArgs(pb,params);
         return runProcess(pb, 30);
     }
+
+    @Override
+    public String getLanguage() {
+        return "cpp";
+    }
 }

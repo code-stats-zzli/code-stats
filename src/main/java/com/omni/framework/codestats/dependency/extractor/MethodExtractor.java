@@ -257,7 +257,11 @@ public class MethodExtractor {
         return "";
     }
 
-    /** 找配对 `)` 的下标，失败返回 -1 */
+    /**
+     * ★ 修复：原代码 `.equals(t.text))".equals(t.text)` 是笔误，应为 `")".equals(t.text)`。
+     * 该笔误导致括号匹配永远失败（除非遇到文本为 `...".equals(t.text)` 的 token），
+     * 使得整个方法级调用链抽取基本不可用。
+     */
     private int findMatchingParen(int openIdx) {
         if (openIdx >= tokens.size()) return -1;
         if (!"(".equals(tokens.get(openIdx).text)) return -1;
@@ -266,7 +270,7 @@ public class MethodExtractor {
             Token t = tokens.get(i);
             if (t.type != TokenType.SYMBOL) continue;
             if ("(".equals(t.text)) depth++;
-            else if (".equals(t.text))".equals(t.text)) depth--;   // ★ 缺陷所在
+            else if (")".equals(t.text)) depth--;   // ✅ 修复后
             if (depth == 0) return i;
         }
         return -1;
@@ -310,6 +314,10 @@ public class MethodExtractor {
         return types;
     }
 
+    /**
+     * ★ 修复：同理，原代码 `".equals(t.text))".equals(t.text) || ">".equals(t.text)`
+     * 应拆分为 `")".equals(t.text) || ">".equals(t.text)`。
+     */
     private int countArgs(int openIdx, int closeIdx) {
         if (closeIdx <= openIdx + 1) return 0;
         int count = 1, depth = 0;
@@ -317,7 +325,7 @@ public class MethodExtractor {
             Token t = tokens.get(i);
             if (t.type == TokenType.SYMBOL) {
                 if ("(".equals(t.text) || "<".equals(t.text)) depth++;
-                else if (".equals(t.text))".equals(t.text) || ">".equals(t.text)) depth--;  // ★ 缺陷所在
+                else if (")".equals(t.text) || ">".equals(t.text)) depth--;   // ✅ 修复后
                 else if (",".equals(t.text) && depth == 0) count++;
             }
         }

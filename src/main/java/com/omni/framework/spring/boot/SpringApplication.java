@@ -1,14 +1,16 @@
 package com.omni.framework.spring.boot;
 
-import com.omni.business.assistance.screenshot.bootstrap.ScreenshotAssistantBootstrap;
 import com.omni.framework.jdbc.DataSourceUtils;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
+import com.omni.framework.spring.boot.runner.ApplicationRunner;
 import com.omni.framework.spring.config.ConfigLoader;
+import com.omni.framework.spring.context.AbstractApplicationContext;
 import com.omni.framework.spring.context.SpringContextHolder;
 import com.omni.framework.spring.context.support.AnnotationConfigApplicationContext;
 import com.omni.framework.tomcat.Catalina;
 
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
 public class SpringApplication {
@@ -18,41 +20,36 @@ public class SpringApplication {
         long startTime = System.currentTimeMillis();
 
         // 1. 创建并刷新 ApplicationContext
-        long contextStart = System.currentTimeMillis();
         String packageToScan = primarySource.getPackage().getName();
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(packageToScan);
-        long contextEnd = System.currentTimeMillis();
         SpringContextHolder.setApplicationContext(context);
-        log.info("ApplicationContext initialized in {} ms", contextEnd - contextStart);
+        log.info("ApplicationContext initialized in {} ms", System.currentTimeMillis() - startTime);
 
-        // 2. 启动 Tomcat（Catalina）
-        long tomcatStart = System.currentTimeMillis();
+        // 2. 启动 Tomcat
         Catalina catalina = new Catalina();
         catalina.load();
         catalina.start();
-        long tomcatEnd = System.currentTimeMillis();
-        log.info("Tomcat started in {} ms", tomcatEnd - tomcatStart);
 
-        // 3. 总启动耗时
-        long totalTime = tomcatEnd - startTime;
-        log.info("Omni startup time: {} ms", totalTime);
-        printBanner();
-
-        // 4. 输出访问地址
+        // 3. 输出启动信息
         int port = Integer.parseInt(ConfigLoader.getProperty("server.port", "8080"));
         String contextPath = ConfigLoader.getProperty("context.path", "/omni");
         log.info("Access http://localhost:{}{}/demo/index.html", port, contextPath);
-        ScreenshotAssistantBootstrap.start();
-        // 5. 优雅关闭：等待关闭信号（Ctrl+C 或 IDEA 停止按钮）
+        printBanner();
+        log.info("Omni startup time: {} ms", System.currentTimeMillis() - startTime);
+
+        // 4. ★ 执行所有业务扩展点（ApplicationRunner）
+        //    框架层不再硬编码 ScreenshotAssistantBootstrap 等业务逻辑
+        executeApplicationRunners(context, args);
+
+        // 5. 优雅关闭
         final CountDownLatch latch = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("Shutdown hook triggered, stopping Tomcat...");
             try {
                 catalina.stop();
-                context.getBeanFactory().destroySingletons();// 关闭数据库连接池
+                context.getBeanFactory().destroySingletons();
                 DataSourceUtils.closePool();
                 log.info("Catalina stopped and resources released.");
-                log.info("Tomcat stopped successfully.");
             } catch (Exception e) {
                 log.error("Error during shutdown", e);
             } finally {
@@ -61,14 +58,42 @@ public class SpringApplication {
         }));
 
         try {
-            latch.await();  // 等待关闭信号
+            latch.await();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.warn("Main thread interrupted");
         }
         log.info("Application shutdown complete.");
+    }
 
-
+    /**
+     * 收集并执行所有 ApplicationRunner。
+     * 单个 Runner 失败不影响其他 Runner，也不影响主流程。
+     */
+    private static void executeApplicationRunners(AbstractApplicationContext context, String[] args) {
+        try {
+            Map<String, ApplicationRunner> runners =
+                    context.getBeanFactory().getBeansOfType(ApplicationRunner.class);
+            if (runners.isEmpty()) {
+                log.info("未发现 ApplicationRunner 扩展点");
+                return;
+            }
+            log.info("发现 {} 个 ApplicationRunner，依次执行...", runners.size());
+            for (Map.Entry<String, ApplicationRunner> entry : runners.entrySet()) {
+                String beanName = entry.getKey();
+                ApplicationRunner runner = entry.getValue();
+                long t0 = System.currentTimeMillis();
+                try {
+                    runner.run(args);
+                    log.info("ApplicationRunner [{}] 执行完成，耗时 {} ms",
+                            beanName, System.currentTimeMillis() - t0);
+                } catch (Exception e) {
+                    log.error("ApplicationRunner [{}] 执行失败", beanName, e);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("收集 ApplicationRunner 失败，跳过所有扩展点", e);
+        }
     }
 
     private static void printBanner() {

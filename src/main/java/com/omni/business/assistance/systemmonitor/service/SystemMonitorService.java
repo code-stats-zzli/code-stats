@@ -15,15 +15,14 @@ public class SystemMonitorService {
     @Autowired
     private SystemMonitorEngine engine;
 
-    /** 摘要：所有组件的一行状态（供大屏概览） */
+    /**
+     * 摘要：所有组件的一行状态（供大屏概览）。
+     * ★ 修复：删除原代码中无意义的空 for 循环（遍历空列表 + 空操作），保留真正的遍历逻辑。
+     */
     public Map<String, Object> summary() {
         Map<String, Object> result = new LinkedHashMap<>();
         List<Map<String, Object>> cards = new ArrayList<>();
 
-        for (SystemComponent c : engine.getComponentsMeta().stream()
-                .map(m -> (SystemComponent) null).collect(Collectors.toList())) { /* noop */ }
-
-        // 直接遍历所有详细信息
         for (MonitorItemInfo info : engine.getAllItemInfo()) {
             Map<String, Object> card = new LinkedHashMap<>();
             card.put("id", info.getId());
@@ -31,7 +30,6 @@ public class SystemMonitorService {
             card.put("icon", info.getIcon());
             card.put("category", info.getCategory());
             card.put("status", info.getStatus());
-            // 抽取一个主要指标作为卡片主值
             card.put("primary", pickPrimary(info));
             cards.add(card);
         }
@@ -52,7 +50,6 @@ public class SystemMonitorService {
     public List<MonitorItemInfo> getAllItemInfo() { return engine.getAllItemInfo(); }
     public List<MonitorItemInfo> getByCategory(String cat) { return engine.getItemInfoByCategory(cat); }
 
-    /** 注册自定义组件（供业务扩展） */
     public void register(SystemComponent c) { engine.register(c); }
     public void unregister(String id) { engine.unregister(id); }
 }

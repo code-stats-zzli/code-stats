@@ -73,4 +73,8 @@ public class CExecutor extends BaseScriptExecutor {
     }
 
 
+    @Override
+    public String getLanguage() {
+        return "c";
+    }
 }

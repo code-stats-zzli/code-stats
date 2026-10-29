@@ -1,7 +1,11 @@
 package com.omni.framework.jdbc;
 
+import com.omni.framework.jdbc.dialect.SqlDialect;
+import com.omni.framework.jdbc.dialect.SqlDialectRegistry;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
+import com.omni.framework.spring.annotation.Autowired;
+import com.omni.framework.spring.annotation.Service;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -10,12 +14,22 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Service
 public class DynamicSqlExecutor {
     private static final Logger log = LoggerFactory.getLogger(DynamicSqlExecutor.class);
+
     private final JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private SqlDialectRegistry dialectRegistry;
 
     public DynamicSqlExecutor(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+    }
+
+    /** 兼容旧的 new DynamicSqlExecutor(jdbcTemplate) 用法（无 IoC 时回退到 MySQL） */
+    public DynamicSqlExecutor() {
+        this.jdbcTemplate = new JdbcTemplate();
     }
 
     public List<Map<String, Object>> executeQuery(String sql, Map<String, Object> params) {
@@ -30,11 +44,10 @@ public class DynamicSqlExecutor {
     }
 
     /**
-     * 分页查询，自动适配不同数据库方言
+     * 分页查询：方言通过 {@link SqlDialectRegistry} 动态获取，不再 switch 硬编码。
      */
-    public Map<String, Object> executePageQuery(String sql, Map<String, Object> params, int page, int pageSize)
-            throws Exception {
-        // 查询总数
+    public Map<String, Object> executePageQuery(String sql, Map<String, Object> params,
+                                                int page, int pageSize) throws Exception {
         String countSql = "SELECT COUNT(*) FROM (" + parseSql(sql, params) + ") AS cnt";
         Object[] args = buildArgs(sql, params);
         long total = 0;
@@ -44,7 +57,6 @@ public class DynamicSqlExecutor {
             log.error("统计总数失败", e);
         }
 
-        // 分页数据（方言处理）
         String pageSql = generatePageSql(parseSql(sql, params), page, pageSize);
         List<Map<String, Object>> records = jdbcTemplate.queryForMapList(pageSql, args);
 
@@ -56,24 +68,23 @@ public class DynamicSqlExecutor {
         return result;
     }
 
-    /**
-     * 根据数据库类型生成分页SQL
-     */
     private String generatePageSql(String baseSql, int page, int pageSize) {
         int offset = (page - 1) * pageSize;
         DataSourceUtils.DbType dbType = DataSourceUtils.getDbType();
+        String dialectName = dbType == DataSourceUtils.DbType.ORACLE ? "oracle" : "mysql";
+        SqlDialect dialect = getDialect(dialectName);
+        return dialect.buildPageSql(baseSql, offset, pageSize);
+    }
 
-        switch (dbType) {
-            case ORACLE:
-                // 使用 ROWNUM 实现分页（兼容 Oracle 9i+）
-                // 注意：需要确保 baseSql 本身没有 ORDER BY 被覆盖，这里简单包裹
-                String oracleSql = "SELECT * FROM (SELECT t.*, ROWNUM rn FROM (" + baseSql + ") t WHERE ROWNUM <= " + (offset + pageSize) + ") WHERE rn > " + offset;
-                return oracleSql;
-            case MYSQL:
-            default:
-                // MySQL 使用 LIMIT
-                return baseSql + " LIMIT " + offset + "," + pageSize;
+    private SqlDialect getDialect(String name) {
+        if (dialectRegistry != null) {
+            SqlDialect d = dialectRegistry.get(name);
+            if (d != null) return d;
         }
+        // 降级：直接 new（兼容未走 IoC 的场景）
+        return "oracle".equals(name)
+                ? new com.omni.framework.jdbc.dialect.OracleDialect()
+                : new com.omni.framework.jdbc.dialect.MysqlDialect();
     }
 
     private String parseSql(String sql, Map<String, Object> params) {

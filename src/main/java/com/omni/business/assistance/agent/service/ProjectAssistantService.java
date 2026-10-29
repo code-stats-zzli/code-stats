@@ -1,9 +1,7 @@
-// 文件路径: src/main/java/com/omni/business/assistance/agent/service/ProjectAssistantService.java
 package com.omni.business.assistance.agent.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import com.omni.business.common.model.CharNgramLM;
 import com.omni.business.common.model.support.ProjectModelData;
 import com.omni.common.cache.Cache;
@@ -16,13 +14,8 @@ import com.omni.framework.spring.config.ConfigLoader;
 import java.io.InputStream;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-/**
- * 项目助手服务 - 支持 JSON 知识库 + 本地缓存 + n-gram 降级
- * 可回答 1000+ 常规框架问题
- */
 @Service
 public class ProjectAssistantService {
     private static final Logger log = LoggerFactory.getLogger(ProjectAssistantService.class);
@@ -36,42 +29,49 @@ public class ProjectAssistantService {
         }
     }
 
-    // 静态知识库缓存（整个服务生命周期只加载一次）
+    // 静态知识库缓存（整个服务生命周期只加载一次，但改为懒加载）
     private static volatile List<KnowledgeEntry> knowledgeBase;
     private static final Object lock = new Object();
 
-    // 可选：用户问答结果缓存（避免重复匹配，提升性能）
-    private final Cache<String, String> answerCache;
+    // ngram 模型懒加载（构造成本高）
+    private volatile CharNgramLM ngramLM;
 
-    private final CharNgramLM ngramLM;
+    private final Cache<String, String> answerCache;
     private final Map<String, List<Map<String, String>>> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final boolean enableNgramFallback;
 
     public ProjectAssistantService() {
-        // 加载知识库（单例缓存）
-        if (knowledgeBase == null) {
-            synchronized (lock) {
-                if (knowledgeBase == null) {
-                    knowledgeBase = loadKnowledgeBase();
-                    log.info("项目助手知识库加载完成，共 {} 条条目", knowledgeBase.size());
-                }
-            }
-        }
-
-        // 初始化 n-gram 模型（降级）
-        ProjectModelData modelData = new ProjectModelData();
-        this.ngramLM = new CharNgramLM(modelData.getTrigramProbs(), modelData.getVocab());
-
-        // 配置：是否启用 n-gram 降级（默认 true）
+        // ★ 关键：构造函数只读轻量配置，不做任何 IO / 模型加载
         this.enableNgramFallback = "true".equalsIgnoreCase(
                 ConfigLoader.getProperty("project.assistant.ngram.fallback", "true"));
-
-        // 初始化结果缓存（最大 1000 条，过期 1 小时）
         this.answerCache = CacheFactory.createDefaultCache();
+        log.info("ProjectAssistantService 已创建（知识库将懒加载）");
+    }
+
+    // ============ 懒加载入口 ============
+    private void ensureKnowledgeBase() {
+        if (knowledgeBase != null) return;
+        synchronized (lock) {
+            if (knowledgeBase != null) return;
+            knowledgeBase = loadKnowledgeBase();
+            log.info("项目助手知识库加载完成，共 {} 条条目", knowledgeBase.size());
+        }
+    }
+
+    private CharNgramLM getNgramLM() {
+        if (ngramLM != null) return ngramLM;
+        synchronized (this) {
+            if (ngramLM != null) return ngramLM;
+            ProjectModelData modelData = new ProjectModelData();
+            ngramLM = new CharNgramLM(modelData.getTrigramProbs(), modelData.getVocab());
+            log.info("ngram 模型初始化完成");
+            return ngramLM;
+        }
     }
 
     public String chat(String sessionId, String userInput) {
+        ensureKnowledgeBase();   // ★ 首次 chat 才加载
         if (sessionId == null) sessionId = "default";
         List<Map<String, String>> history = sessions.computeIfAbsent(sessionId, k -> new ArrayList<>());
 
@@ -80,14 +80,12 @@ public class ProjectAssistantService {
             return "请提出具体问题。";
         }
 
-        // 尝试从结果缓存获取
         String cached = answerCache.get(question);
         if (cached != null) {
             saveHistory(history, question, cached);
             return cached;
         }
 
-        // 1. 知识库匹配
         String answer = matchFromKnowledgeBase(question);
         if (answer != null) {
             answerCache.put(question, answer);
@@ -95,7 +93,6 @@ public class ProjectAssistantService {
             return answer;
         }
 
-        // 2. n-gram 降级生成
         if (enableNgramFallback) {
             String generated = generateWithNgram(history, question);
             if (generated != null && !generated.isEmpty()) {
@@ -105,7 +102,6 @@ public class ProjectAssistantService {
             }
         }
 
-        // 3. 最终兜底
         String fallback = "抱歉，我是项目助手，暂时无法回答这个问题。你可以尝试询问关于 Spring、Tomcat、日志、连接池、自研框架等关键词。";
         answerCache.put(question, fallback);
         saveHistory(history, question, fallback);
@@ -116,7 +112,7 @@ public class ProjectAssistantService {
         if (sessionId != null) sessions.remove(sessionId);
     }
 
-    // ==================== 私有方法 ====================
+    // ============ 以下私有方法保持原实现不变 ============
 
     private String extractQuestion(String input) {
         if (input == null) return null;
@@ -175,7 +171,6 @@ public class ProjectAssistantService {
 
     private List<KnowledgeEntry> buildDefaultKnowledgeBase() {
         List<KnowledgeEntry> list = new ArrayList<>();
-        // 此处保留简化的默认条目（略，实际不会走到这里，因为会优先从 JSON 加载）
         list.add(new KnowledgeEntry(Arrays.asList("default"), "请确保 project_knowledge.json 存在于 classpath 中。"));
         return list;
     }
@@ -193,9 +188,7 @@ public class ProjectAssistantService {
                 } else {
                     String[] kwWords = kw.split("\\s+");
                     for (String w : kwWords) {
-                        if (q.contains(w)) {
-                            score += 0.5;
-                        }
+                        if (q.contains(w)) score += 0.5;
                     }
                 }
             }
@@ -210,7 +203,7 @@ public class ProjectAssistantService {
 
     private String generateWithNgram(List<Map<String, String>> history, String question) {
         String prompt = buildPromptFromHistory(history, question);
-        String generated = ngramLM.generate(prompt, 80);
+        String generated = getNgramLM().generate(prompt, 80);   // ★ 懒加载 ngram
         String cleaned = cleanGenerated(generated);
         if (cleaned.isEmpty() || cleaned.length() < 5) return null;
         return cleaned;

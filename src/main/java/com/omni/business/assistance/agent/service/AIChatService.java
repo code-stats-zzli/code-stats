@@ -1,114 +1,80 @@
-// 文件路径: src/main/java/com/omni/business/assistance/agent/service/AIChatService.java
 package com.omni.business.assistance.agent.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.omni.business.assistance.agent.service.backend.ChatBackend;
+import com.omni.business.assistance.agent.service.backend.ChatBackendRegistry;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
+import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Service;
 import com.omni.framework.spring.config.ConfigLoader;
-import com.omni.framework.util.JsonUtil;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class AIChatService {
     private static final Logger log = LoggerFactory.getLogger(AIChatService.class);
 
-    public static final String BACKEND_OLLAMA = "ollama";
+    public static final String BACKEND_OLLAMA   = "ollama";
     public static final String BACKEND_DEEPSEEK = "deepseek";
-    public static final String BACKEND_CUSTOM = "custom";
-    public static final String BACKEND_PROJECT = "project";
+    public static final String BACKEND_CUSTOM   = "custom";
+    public static final String BACKEND_PROJECT  = "project";
 
     private final String defaultBackend;
-    private final String deepseekApiKey;
-    private final String ollamaUrl;
-    private final String customApiUrl;
-    private final String customApiKey;
 
-    private final HttpClient httpClient;
-    private final ObjectMapper objectMapper;
+    @Autowired
+    private ChatBackendRegistry backendRegistry;
 
-    // 独立项目助手服务
-    private final ProjectAssistantService projectAssistant;
+    @Autowired
+    private ProjectAssistantService projectAssistant;
 
     public AIChatService() {
         this.defaultBackend = ConfigLoader.getProperty("ai.backend.default", BACKEND_OLLAMA);
-        this.deepseekApiKey = ConfigLoader.getProperty("deepseek.api.key", "");
-        this.ollamaUrl = ConfigLoader.getProperty("ollama.api.url", "http://localhost:11434/api/chat");
-        this.customApiUrl = ConfigLoader.getProperty("custom.api.url", "");
-        this.customApiKey = ConfigLoader.getProperty("custom.api.key", "");
-
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
-        this.objectMapper = new ObjectMapper();
-
-        // 初始化项目助手
-        this.projectAssistant = new ProjectAssistantService();
         log.info("AIChatService 初始化完成，默认后端: {}", defaultBackend);
     }
 
     /**
-     * 统一聊天入口
-     * @param sessionId 会话ID
-     * @param question 原始问题（可为 null）
-     * @param messages 消息列表（优先使用）
-     * @param backend 后端类型
-     * @param model 模型名称
-     * @param temperature 温度
-     * @param customUrlOverride 自定义URL
-     * @param customKeyOverride 自定义Key
-     * @return 回答文本
+     * 统一聊天入口。
+     * 不再使用 switch-case 硬编码后端类型，而是通过 {@link ChatBackendRegistry} 策略分发。
+     * 新增后端只需新增一个 {@link ChatBackend} 实现类。
      */
     public String chat(String sessionId, String question, List<Map<String, String>> messages,
                        String backend, String model, double temperature,
                        String customUrlOverride, String customKeyOverride) {
-        String useBackend = backend != null ? backend : defaultBackend;
+        String useBackend = (backend != null && !backend.isEmpty()) ? backend : defaultBackend;
 
-        // 项目助手分支
+        // 项目助手分支（有状态，走专门服务）
         if (BACKEND_PROJECT.equals(useBackend)) {
-            // 将消息列表转换为 JSON 字符串传递给项目助手
-            String userInput = (messages != null && !messages.isEmpty()) ? JsonUtil.toJson(messages.get(messages.size() - 1)) : question;
+            String userInput = (messages != null && !messages.isEmpty())
+                    ? toJsonLastMessage(messages) : question;
             return projectAssistant.chat(sessionId, userInput);
         }
 
-        // 其他后端：提取用户最后一条消息作为问题
+        // 其他后端统一策略分发
+        ChatBackend backendImpl = backendRegistry.get(useBackend);
+        if (backendImpl == null) {
+            return "不支持的后端类型: " + useBackend;
+        }
+
+        // 校验用户问题非空
         String userQuestion = extractLastUserMessage(messages, question);
         if (userQuestion == null || userQuestion.trim().isEmpty()) {
             return "请提供有效的问题内容。";
         }
 
-        switch (useBackend) {
-            case BACKEND_OLLAMA:
-                return chatWithOllama(model, messages, temperature);
-            case BACKEND_DEEPSEEK:
-                return chatWithDeepSeek(model, messages, temperature);
-            case BACKEND_CUSTOM:
-                String url = customUrlOverride != null && !customUrlOverride.isEmpty() ? customUrlOverride : customApiUrl;
-                String key = customKeyOverride != null && !customKeyOverride.isEmpty() ? customKeyOverride : customApiKey;
-                if (url == null || url.isEmpty()) {
-                    return "错误：未配置自定义 API 地址";
-                }
-                return chatWithCustom(url, key, model, messages, temperature);
-            default:
-                return "不支持的后端类型: " + useBackend;
+        try {
+            return backendImpl.chat(model, messages, temperature,
+                    customUrlOverride, customKeyOverride);
+        } catch (Exception e) {
+            log.error("调用 ChatBackend[{}] 失败", useBackend, e);
+            return "调用 AI 服务失败: " + e.getMessage();
         }
     }
 
-    /**
-     * 关闭会话（仅对项目助手有状态）
-     */
     public void closeSession(String sessionId) {
         projectAssistant.closeSession(sessionId);
     }
 
-    // ==================== 私有辅助方法 ====================
     private String extractLastUserMessage(List<Map<String, String>> messages, String question) {
         if (messages != null && !messages.isEmpty()) {
             for (int i = messages.size() - 1; i >= 0; i--) {
@@ -120,115 +86,27 @@ public class AIChatService {
         return question;
     }
 
-    // ==================== Ollama 实现 ====================
-    private String chatWithOllama(String model, List<Map<String, String>> messages, double temperature) {
-        Map<String, Object> request = new HashMap<>();
-        request.put("model", model != null ? model : "deepseek-r1:7b");
-        request.put("messages", messages);
-        request.put("stream", false);
-        request.put("options", Map.of("temperature", temperature));
+    private String toJsonLastMessage(List<Map<String, String>> messages) {
+        // 简化处理：取最后一条消息的 JSON 表达，供项目助手解析
         try {
-            String json = objectMapper.writeValueAsString(request);
-            HttpRequest httpReq = HttpRequest.newBuilder()
-                    .uri(URI.create(ollamaUrl))
-                    .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(60))
-                    .POST(HttpRequest.BodyPublishers.ofString(json))
-                    .build();
-            HttpResponse<String> response = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200) {
-                JsonNode node = objectMapper.readTree(response.body());
-                return node.path("message").path("content").asText();
-            } else {
-                return "Ollama 错误: " + response.statusCode();
+            Map<String, String> last = messages.get(messages.size() - 1);
+            StringBuilder sb = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<String, String> e : last.entrySet()) {
+                if (!first) sb.append(",");
+                sb.append("\"").append(escape(e.getKey())).append("\":\"")
+                        .append(escape(e.getValue())).append("\"");
+                first = false;
             }
+            sb.append("}");
+            return sb.toString();
         } catch (Exception e) {
-            log.error("调用 Ollama 失败", e);
-            return "调用 Ollama 失败: " + e.getMessage();
+            return "";
         }
     }
 
-    // ==================== DeepSeek 实现 ====================
-    private String chatWithDeepSeek(String model, List<Map<String, String>> messages, double temperature) {
-        if (deepseekApiKey.isEmpty()) {
-            return "DeepSeek API Key 未配置";
-        }
-        String apiModel = "deepseek-chat";
-        if (model != null) {
-            if (model.startsWith("deepseek-r1:")) apiModel = "deepseek-reasoner";
-            else if (model.startsWith("deepseek-coder:")) apiModel = "deepseek-coder";
-            else apiModel = "deepseek-chat";
-        }
-        Map<String, Object> request = new HashMap<>();
-        request.put("model", apiModel);
-        request.put("messages", messages);
-        request.put("temperature", temperature);
-        request.put("stream", false);
-        try {
-            String json = objectMapper.writeValueAsString(request);
-            HttpRequest httpReq = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.deepseek.com/v1/chat/completions"))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + deepseekApiKey)
-                    .timeout(Duration.ofSeconds(60))
-                    .POST(HttpRequest.BodyPublishers.ofString(json))
-                    .build();
-            HttpResponse<String> response = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200) {
-                JsonNode node = objectMapper.readTree(response.body());
-                return node.path("choices").get(0).path("message").path("content").asText();
-            } else {
-                return "DeepSeek API 错误: " + response.statusCode();
-            }
-        } catch (Exception e) {
-            log.error("调用 DeepSeek API 失败", e);
-            return "调用 DeepSeek API 失败: " + e.getMessage();
-        }
-    }
-
-    // ==================== 自定义 API 实现 ====================
-    private String chatWithCustom(String url, String apiKey, String model,
-                                  List<Map<String, String>> messages, double temperature) {
-        Map<String, Object> request = new HashMap<>();
-        request.put("model", model != null ? model : "gpt-3.5-turbo");
-        request.put("messages", messages);
-        request.put("temperature", temperature);
-        request.put("stream", false);
-        try {
-            String json = objectMapper.writeValueAsString(request);
-            HttpRequest.Builder builder = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(60))
-                    .POST(HttpRequest.BodyPublishers.ofString(json));
-            if (apiKey != null && !apiKey.isEmpty()) {
-                builder.header("Authorization", "Bearer " + apiKey);
-            }
-            HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200) {
-                return extractResponse(response.body());
-            } else {
-                return "自定义 API 错误: " + response.statusCode();
-            }
-        } catch (Exception e) {
-            log.error("调用自定义 API 失败", e);
-            return "调用自定义 API 失败: " + e.getMessage();
-        }
-    }
-
-    private String extractResponse(String json) {
-        try {
-            JsonNode node = objectMapper.readTree(json);
-            if (node.has("choices")) {
-                return node.path("choices").get(0).path("message").path("content").asText();
-            }
-            if (node.has("response")) {
-                return node.get("response").asText();
-            }
-            return json;
-        } catch (Exception e) {
-            log.warn("解析自定义 API 响应失败: {}", json, e);
-            return json;
-        }
+    private String escape(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

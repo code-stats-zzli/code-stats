@@ -436,4 +436,9 @@ public class JavaExecutor extends BaseScriptExecutor {
 
         return packageName.isEmpty() ? className : packageName + "." + className;
     }
+
+    @Override
+    public String getLanguage() {
+        return "java";
+    }
 }

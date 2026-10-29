@@ -7,6 +7,8 @@ import com.omni.common.util.SecurityUtil;
 import com.omni.framework.datacube.model.*;
 import com.omni.framework.datacube.spi.CubeProvider;
 import com.omni.framework.jdbc.JdbcTemplate;
+import com.omni.framework.jdbc.dialect.SqlDialect;
+import com.omni.framework.jdbc.dialect.SqlDialectRegistry;
 import com.omni.framework.jdbc.metedata.model.ColumnInfo;
 import com.omni.framework.jdbc.metedata.service.AbatractDatabaseMetadataService;
 import com.omni.framework.pool.SimpleDataSource;
@@ -18,12 +20,15 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/** Table 数据来源 Provider — 复用现有数据源管理 */
+/** Table 数据来源 Provider — 支持多方言 */
 @Service
 public class TableCubeProvider implements CubeProvider {
 
     @Autowired
     private DataSourceConfigService configService;
+
+    @Autowired
+    private SqlDialectRegistry dialectRegistry;
 
     @Override
     public CubeType getType() { return CubeType.TABLE; }
@@ -41,23 +46,29 @@ public class TableCubeProvider implements CubeProvider {
         if (!SecurityUtil.isValidTableName(table))
             throw new SecurityException("非法表名: " + table);
 
-        int page     = toInt(params.get("page"), 1);
+        int page = toInt(params.get("page"), 1);
         int pageSize = toInt(params.get("pageSize"), 20);
         if (page < 1) page = 1;
         if (pageSize < 1 || pageSize > 1000) pageSize = 20;
 
-        SimpleDataSource ds = openDataSource(dsId);
+        DataSourceConfig dsConfig = configService.getById(dsId);
+        if (dsConfig == null) throw new IllegalArgumentException("数据源不存在: " + dsId);
+
+        SqlDialect dialect = resolveDialect(dsConfig.getDbType());
+
+        SimpleDataSource ds = openDataSource(dsConfig);
         JdbcTemplate jdbc = new JdbcTemplate() {
             @Override public Connection getConnection() throws SQLException {
                 return ds.getConnection();
             }
         };
 
-        String qualified = "`" + database + "`.`" + table + "`";
+        // ★ 使用方言的标识符引用
+        String qualified = dialect.quote(database) + "." + dialect.quote(table);
         String selectCols;
         if (wantColumns != null && !wantColumns.isEmpty()) {
             selectCols = wantColumns.stream()
-                    .map(c -> "`" + c + "`")
+                    .map(dialect::quote)
                     .collect(Collectors.joining(", "));
         } else {
             selectCols = "*";
@@ -66,18 +77,16 @@ public class TableCubeProvider implements CubeProvider {
         long start = System.currentTimeMillis();
         int offset = (page - 1) * pageSize;
 
-        // 查总数
         long total;
         try {
             total = jdbc.queryOne("SELECT COUNT(*) FROM " + qualified, rs -> rs.getLong(1));
         } catch (Exception e) {
-            // 有些方言不支持，忽略
             total = -1;
         }
 
-        // 查数据
-        String sql = "SELECT " + selectCols + " FROM " + qualified
-                + " LIMIT " + pageSize + " OFFSET " + offset;
+        // ★ 使用方言分页
+        String baseSql = "SELECT " + selectCols + " FROM " + qualified;
+        String sql = dialect.buildPageSql(baseSql, offset, pageSize);
         List<Map<String, Object>> records = jdbc.queryForMapList(sql);
 
         List<String> columns;
@@ -101,6 +110,7 @@ public class TableCubeProvider implements CubeProvider {
         meta.put("page", page);
         meta.put("pageSize", pageSize);
         meta.put("source", "table:" + database + "." + table);
+        meta.put("dialect", dialect.getName());
         meta.put("durationMs", System.currentTimeMillis() - start);
 
         return CubeQueryResult.ok(columns, rows, meta);
@@ -114,7 +124,7 @@ public class TableCubeProvider implements CubeProvider {
         if (dsId == null || database == null || table == null)
             throw new IllegalArgumentException("config 缺少 datasourceId/database/table");
 
-        SimpleDataSource ds = openDataSource(dsId);
+        SimpleDataSource ds = openDataSource(configService.getById(dsId));
         AbatractDatabaseMetadataService metaService = new AbatractDatabaseMetadataService() {
             @Override protected Connection getConnection() throws Exception {
                 return ds.getConnection();
@@ -132,9 +142,16 @@ public class TableCubeProvider implements CubeProvider {
         return schema;
     }
 
-    private SimpleDataSource openDataSource(String dsId) throws Exception {
-        DataSourceConfig config = configService.getById(dsId);
-        if (config == null) throw new IllegalArgumentException("数据源不存在: " + dsId);
+    private SqlDialect resolveDialect(String dbType) {
+        if (dialectRegistry != null) {
+            SqlDialect d = dialectRegistry.getOrMysql(dbType);
+            if (d != null) return d;
+        }
+        return new com.omni.framework.jdbc.dialect.MysqlDialect();
+    }
+
+    private SimpleDataSource openDataSource(DataSourceConfig config) throws Exception {
+        if (config == null) throw new IllegalArgumentException("数据源不存在");
         return DynamicDataSourceManager.getOrCreateDataSource(config);
     }
 

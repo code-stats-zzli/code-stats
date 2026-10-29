@@ -1,6 +1,7 @@
 package com.omni.framework.log.appender;
 
 import com.omni.framework.log.core.LogEvent;
+
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
@@ -14,6 +15,8 @@ public class AsyncAppender extends Appender {
         this.delegate = delegate;
         this.queue = new ArrayBlockingQueue<>(queueSize);
         this.worker = new Worker();
+        // ★ 修复：worker 设为守护线程，避免退出时阻塞
+        this.worker.setDaemon(true);
         this.worker.start();
     }
 

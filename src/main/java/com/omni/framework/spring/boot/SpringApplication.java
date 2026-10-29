@@ -12,6 +12,7 @@ import com.omni.framework.tomcat.Catalina;
 
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class SpringApplication {
     private static final Logger log = LoggerFactory.getLogger(SpringApplication.class);
@@ -19,59 +20,63 @@ public class SpringApplication {
     public static void run(Class<?> primarySource, String[] args) {
         long startTime = System.currentTimeMillis();
 
-        // 1. 创建并刷新 ApplicationContext
         String packageToScan = primarySource.getPackage().getName();
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(packageToScan);
         SpringContextHolder.setApplicationContext(context);
         log.info("ApplicationContext initialized in {} ms", System.currentTimeMillis() - startTime);
 
-        // 2. 启动 Tomcat
         Catalina catalina = new Catalina();
         catalina.load();
         catalina.start();
 
-        // 3. 输出启动信息
         int port = Integer.parseInt(ConfigLoader.getProperty("server.port", "8080"));
         String contextPath = ConfigLoader.getProperty("context.path", "/omni");
         log.info("Access http://localhost:{}{}/demo/index.html", port, contextPath);
         printBanner();
         log.info("Omni startup time: {} ms", System.currentTimeMillis() - startTime);
 
-        // 4. 执行所有业务扩展点（ApplicationRunner）
         executeApplicationRunners(context, args);
 
-        // 5. 优雅关闭
         final CountDownLatch latch = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("Shutdown hook triggered, stopping Tomcat...");
             try {
                 catalina.stop();
-                context.getBeanFactory().destroySingletons();
-                DataSourceUtils.closePool();
-                log.info("Catalina stopped and resources released.");
-            } catch (Exception e) {
-                log.error("Error during shutdown", e);
-            } finally {
-                latch.countDown();
+            } catch (Throwable e) {
+                log.error("Error stopping catalina", e);
             }
-        }));
+            try {
+                context.getBeanFactory().destroySingletons();
+            } catch (Throwable e) {
+                log.error("Error destroying singletons", e);
+            }
+            try {
+                DataSourceUtils.closePool();
+            } catch (Throwable e) {
+                log.error("Error closing pool", e);
+            }
+            log.info("Catalina stopped and resources released.");
+            latch.countDown();
+        }, "spring-shutdown"));
 
         try {
-            latch.await();
+            // ★ 修复：加超时——某个 hook 卡死时不要无限等
+            if (!latch.await(15, TimeUnit.SECONDS)) {
+                log.warn("Shutdown hook 超时（15s），强制退出");
+                Runtime.getRuntime().halt(0);
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.warn("Main thread interrupted");
         }
         log.info("Application shutdown complete.");
 
-        // ★ 修复2：强制退出 JVM，防止 Swing EDT 等非守护线程残留导致需要点两次 Stop
-        System.exit(0);
+        // ★ 修复：用 halt(0) 而非 System.exit(0)
+        //   System.exit(0) 会等所有 hook 完成——如果别处某个 hook 卡死，就会永远卡住
+        //   halt(0) 无条件立即终止 JVM，不等任何 hook
+        Runtime.getRuntime().halt(0);
     }
 
-    /**
-     * 收集并执行所有 ApplicationRunner。
-     * 单个 Runner 失败不影响其他 Runner，也不影响主流程。
-     */
     private static void executeApplicationRunners(AbstractApplicationContext context, String[] args) {
         try {
             Map<String, ApplicationRunner> runners =

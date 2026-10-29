@@ -23,7 +23,7 @@ public class Connector implements Lifecycle {
     private ExecutorService threadPool;
     private volatile boolean running;
     private ServerSocket serverSocket;
-    private Thread listenerThread;   // ★ 新增：保留监听线程引用
+    private Thread listenerThread;
 
     public Connector(int port) { this.port = port; }
 
@@ -31,7 +31,7 @@ public class Connector implements Lifecycle {
 
     @Override
     public void init() {
-        // ★ 修复2：所有工作线程设为守护线程，JVM 可以正常退出
+        // ★ 工作线程池全部守护线程（JVM 退出时不阻塞）
         threadPool = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "tomcat-connector-worker");
             t.setDaemon(true);
@@ -42,7 +42,7 @@ public class Connector implements Lifecycle {
     @Override
     public void start() {
         running = true;
-        // ★ 修复2：监听线程也设为守护线程，避免阻塞 JVM 退出（原先非守护线程需手动 stop 才能退出）
+        // ★ 监听线程也守护（避免残留线程导致 JVM 等它退出）
         listenerThread = new Thread(() -> {
             try {
                 serverSocket = new ServerSocket(port);
@@ -52,11 +52,8 @@ public class Connector implements Lifecycle {
                         Socket socket = serverSocket.accept();
                         threadPool.submit(() -> process(socket));
                     } catch (SocketException e) {
-                        if (running) {
-                            log.error("Socket error while running", e);
-                        } else {
-                            log.info("Connector stopped, accept interrupted.");
-                        }
+                        if (running) log.error("Socket error while running", e);
+                        else log.info("Connector stopped, accept interrupted.");
                         break;
                     } catch (IOException e) {
                         log.error("Accept failed", e);
@@ -72,10 +69,8 @@ public class Connector implements Lifecycle {
 
     private void process(Socket socket) {
         long startTime = System.currentTimeMillis();
-        // ====== 连接建立日志 ======
         log.debug("TCP 连接建立: remote={}, local={}",
                 socket.getRemoteSocketAddress(), socket.getLocalSocketAddress());
-
         try (java.io.InputStream in = socket.getInputStream();
              java.io.OutputStream out = socket.getOutputStream()) {
             Request request = new Request(in);
@@ -120,7 +115,7 @@ public class Connector implements Lifecycle {
         if (threadPool != null && !threadPool.isShutdown()) {
             threadPool.shutdownNow();
             try {
-                if (!threadPool.awaitTermination(5, TimeUnit.SECONDS)) {
+                if (!threadPool.awaitTermination(3, TimeUnit.SECONDS)) {
                     log.warn("Thread pool did not terminate gracefully");
                 }
             } catch (InterruptedException e) {

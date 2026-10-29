@@ -27,9 +27,7 @@ public class ScreenshotAssistantBootstrap {
     private static FloatingScreenshotToolbar toolbar;
     private static TrayIcon trayIcon;
 
-    /** Swing 自绘托盘菜单（替代 AWT 原生 PopupMenu，避免中文方块） */
     private static JPopupMenu trayMenu;
-    /** 菜单锚点窗口：1×1 透明窗口 */
     private static JWindow menuAnchor;
 
     public static void start() {
@@ -38,7 +36,6 @@ public class ScreenshotAssistantBootstrap {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             } catch (Exception ignored) {}
 
-            // ============ 全局字体 ============
             Font defaultFont = FontUtil.getUIFont(Font.PLAIN, 12);
             log.info("截图助手 UI 字体: {}", defaultFont.getFamily());
 
@@ -63,42 +60,36 @@ public class ScreenshotAssistantBootstrap {
 
             screenshotService = new ScreenshotService();
             toolbar = new FloatingScreenshotToolbar(screenshotService);
-            // ★ 默认不显示工具栏
             toolbar.setVisible(false);
 
             if (SystemTray.isSupported()) {
-                SystemTray tray = SystemTray.getSystemTray();
-                Image icon = createTrayIconImage();
-                trayIcon = new TrayIcon(icon, "截图助手");
-                trayIcon.setImageAutoSize(true);
-
-                // 左键：切换工具栏（Windows 上通常双击触发 ActionListener）
-                trayIcon.addActionListener(e -> toolbar.setVisible(!toolbar.isVisible()));
-
-                // 右键：弹出 Swing 菜单
-                trayIcon.addMouseListener(new MouseAdapter() {
-                    @Override
-                    public void mousePressed(MouseEvent e) {
-                        if (e.isPopupTrigger()) showTrayMenu();
-                    }
-                    @Override
-                    public void mouseReleased(MouseEvent e) {
-                        if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
-                            showTrayMenu();
-                        }
-                    }
-                });
-
                 try {
+                    SystemTray tray = SystemTray.getSystemTray();
+                    Image icon = createTrayIconImage();
+                    trayIcon = new TrayIcon(icon, "截图助手");
+                    trayIcon.setImageAutoSize(true);
+
+                    trayIcon.addActionListener(e -> toolbar.setVisible(!toolbar.isVisible()));
+                    trayIcon.addMouseListener(new MouseAdapter() {
+                        @Override
+                        public void mousePressed(MouseEvent e) {
+                            if (e.isPopupTrigger()) showTrayMenu();
+                        }
+                        @Override
+                        public void mouseReleased(MouseEvent e) {
+                            if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
+                                showTrayMenu();
+                            }
+                        }
+                    });
+
                     tray.add(trayIcon);
-                    // ★ 修复3：移除启动弹窗，改为日志输出，避免打扰
                     log.info("截图助手已启动，按 Ctrl+Shift+S 显示工具栏，或双击托盘图标");
-                } catch (AWTException e) {
+                } catch (Exception e) {
                     log.error("托盘添加失败", e);
                 }
             }
 
-            // 全局快捷键：Ctrl+Shift+S 切换工具栏
             KeyboardFocusManager.getCurrentKeyboardFocusManager()
                     .addKeyEventDispatcher(e -> {
                         if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == KeyEvent.VK_S) {
@@ -108,17 +99,31 @@ public class ScreenshotAssistantBootstrap {
                         return false;
                     });
 
+            // ★★★ 关键修复 ★★★
+            // 旧代码在 shutdown hook 里调 dispose()/SystemTray.remove()，这些都会同步到 AWT-EventQueue-0，
+            // shutdown 期间 EDT 可能已停止响应，导致 hook 死锁，JVM 卡在 "waiting for shutdown hooks to finish"
+            //
+            // 新方案：shutdown hook 只做最简单的、带超时的托盘清理，不碰任何 Swing 组件
+            //（窗口由 JVM 退出时自动释放，无需显式 dispose）
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                if (trayIcon != null) SystemTray.getSystemTray().remove(trayIcon);
-                if (miniWindow != null) miniWindow.dispose();
-                if (fullWindow != null) fullWindow.dispose();
-                if (toolbar != null) toolbar.dispose();
-                disposeAnchor();
-            }));
+                try {
+                    if (trayIcon != null) {
+                        Thread cleaner = new Thread(() -> {
+                            try {
+                                SystemTray.getSystemTray().remove(trayIcon);
+                            } catch (Throwable ignored) {}
+                        }, "tray-cleaner");
+                        cleaner.setDaemon(true);
+                        cleaner.start();
+                        cleaner.join(1500);   // 最多等 1.5 秒
+                    }
+                } catch (Throwable ignored) {}
+                log.info("截图助手已释放（shutdown hook 未调用任何 Swing 方法）");
+            }, "screenshot-shutdown"));
         });
     }
 
-    // ==================== 托盘菜单（Swing 自绘） ====================
+    // ==================== 以下方法保持不变 ====================
 
     private static void initTrayMenu() {
         trayMenu = new JPopupMenu();
@@ -174,8 +179,6 @@ public class ScreenshotAssistantBootstrap {
             menuAnchor = null;
         }
     }
-
-    // ==================== 模式切换 ====================
 
     public static void showMiniMode() {
         if (fullWindow != null && fullWindow.isVisible()) fullWindow.setVisible(false);

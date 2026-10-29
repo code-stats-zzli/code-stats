@@ -11,6 +11,7 @@
     let localInited = false;
     let activePicker = null;
 
+    // ==================== DOM ====================
     const modeList = document.getElementById('modeList');
     const serverWorkspace = document.getElementById('serverWorkspace');
     const localWorkspace = document.getElementById('localWorkspace');
@@ -31,6 +32,7 @@
     const mergeEnabledCheck = document.getElementById('mergeEnabled');
     const mergeRow = document.getElementById('mergeRow');
     const mergeOutputFileInput = document.getElementById('mergeOutputFile');
+    const useGitIgnoreCheck = document.getElementById('useGitIgnore');
     const analyzeBtn = document.getElementById('analyzeBtn');
     const defaultConfigBtn = document.getElementById('defaultConfigBtn');
     const clearConfigBtn = document.getElementById('clearConfigBtn');
@@ -62,6 +64,7 @@
     const localCloseEditorBtn = document.getElementById('localCloseEditorBtn');
     const localSaveFileBtn = document.getElementById('localSaveFileBtn');
 
+    // ==================== 工具 ====================
     function escapeHtml(str) {
         if (!str) return '';
         return str.replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
@@ -271,6 +274,7 @@
                 sortBySelect.value = config.sortBy || 'lines';
                 mergeEnabledCheck.checked = config.mergeEnabled !== false;
                 mergeOutputFileInput.value = normalizePath(config.mergeOutputFile || '');
+                useGitIgnoreCheck.checked = config.useGitIgnore === true;
                 toggleMergeRow();
             }
         } catch (e) { console.error('加载默认配置失败', e); }
@@ -286,6 +290,7 @@
         sortBySelect.value = 'lines';
         mergeEnabledCheck.checked = false;
         mergeOutputFileInput.value = '';
+        useGitIgnoreCheck.checked = false;
         toggleMergeRow();
         setPickerTarget(null);
     }
@@ -293,6 +298,7 @@
     function toggleMergeRow() { mergeRow.style.display = mergeEnabledCheck.checked ? 'flex' : 'none'; }
     mergeEnabledCheck.addEventListener('change', toggleMergeRow);
 
+    // ★ base64 转换：先按 UTF-8 编码，再 btoa
     function utf8ToBase64(str) {
         const bytes = new TextEncoder().encode(str);
         let binary = '';
@@ -300,7 +306,6 @@
         return btoa(binary);
     }
 
-    /** ★ [P1] 只做文件统计，不再自动触发依赖分析 */
     async function analyze() {
         if (downloadMergeBtn) downloadMergeBtn.disabled = true;
         currentMergeFilePath = null;
@@ -317,6 +322,7 @@
         params.append('sortBy', sortBySelect.value);
         params.append('mergeEnabled', mergeEnabledCheck.checked);
         params.append('mergeOutputFile', mergeOutputFileInput.value);
+        params.append('useGitIgnore', useGitIgnoreCheck.checked);
 
         progressBar.style.display = 'block';
         progressFill.style.width = '10%';
@@ -328,8 +334,11 @@
             const data = await resp.json();
             if (data.error) { showMsg('❌ 分析失败：' + data.error); progressBar.style.display = 'none'; return; }
             renderResults(data);
+
+            // ★ 后端返回的 mergeOutput 已是归一化后的绝对路径，直接回填输入框
             if (data.mergeOutput && data.mergeOutput.trim() !== '') {
                 currentMergeFilePath = data.mergeOutput;
+                if (mergeOutputFileInput) mergeOutputFileInput.value = data.mergeOutput;
                 if (downloadMergeBtn) downloadMergeBtn.disabled = false;
             }
             progressFill.style.width = '100%';
@@ -369,7 +378,7 @@
         if (dependencyTab) dependencyTab.style.display = 'none';
     }
 
-    /** 依赖分析：按需加载 */
+    // ==================== 依赖分析 ====================
     async function loadDependencyData() {
         const depStatsDiv = document.getElementById('depStats');
         if (depStatsDiv) depStatsDiv.innerHTML = '<div class="loading">加载依赖分析中...</div>';
@@ -381,6 +390,7 @@
         depParams.append('extraPaths', extraPathsInput.value);
         depParams.append('threadCount', threadCountInput.value);
         depParams.append('excludeComments', excludeCommentsCheck.checked);
+        depParams.append('useGitIgnore', useGitIgnoreCheck.checked);
         try {
             const resp = await fetch(API_CODE + '/dependencies?' + depParams.toString());
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -420,6 +430,9 @@
                 <div><strong>平均出向依赖数:</strong> ${(data.averageOutgoingDependencies || 0).toFixed(2)}</div>
                 <div><strong>最大出向依赖数:</strong> ${data.maxOutgoingDependencies || 0} (类: ${(data.maxOutgoingClasses || []).join(', ') || '无'})</div>
                 <div><strong>循环依赖组数:</strong> ${cycles.length}</div>
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-top:4px;">
+                💡 依赖分析仅支持 Java 源码；其他语言的统计请查看「文件列表」页签
             </div>
             ${cycles.length ? `<details><summary>🔍 查看循环依赖组</summary><pre>${escapeHtml(JSON.stringify(cycles, null, 2))}</pre></details>` : ''}
             ${failedHtml}
@@ -483,10 +496,8 @@
         else if (tabName === 'summary') summaryTab.style.display = 'block';
         else if (tabName === 'dependency') {
             if (dependencyTab) dependencyTab.style.display = 'block';
-            // ★ 按需加载：只有切到依赖页且尚未加载时才请求
-            if (!dependencyData && rootDirInput.value) {
-                loadDependencyData();
-            } else if (dependencyData && classInfoMap &&
+            if (!dependencyData && rootDirInput.value) loadDependencyData();
+            else if (dependencyData && classInfoMap &&
                 Object.keys(classInfoMap).length > 0 &&
                 document.getElementById('classSelect')?.options.length <= 1) {
                 populateClassSelect(classInfoMap);
@@ -523,28 +534,87 @@
         URL.revokeObjectURL(url);
     }
 
+    // ==================== ★ 下载合并文件（修复版） ====================
     async function downloadMergeFile() {
-        if (!currentMergeFilePath) { showMsg('没有可用的合并文件'); return; }
+        if (!currentMergeFilePath) {
+            showMsg('没有可用的合并文件，请先执行分析');
+            return;
+        }
+
         let encodedPath;
-        try { encodedPath = utf8ToBase64(currentMergeFilePath); }
-        catch (e) { showMsg('文件路径编码失败'); return; }
-        const downloadUrl = window.apiUrl(`/code/api/download?filePath=${encodedPath}`);
+        try {
+            encodedPath = utf8ToBase64(currentMergeFilePath);
+        } catch (e) {
+            showMsg('文件路径编码失败：' + e.message);
+            return;
+        }
+
+        // ★ 关键修复 1：base64 必须 encodeURIComponent，否则 + 会变成空格
+        const downloadUrl = window.apiUrl(
+            `/code/api/download?filePath=${encodeURIComponent(encodedPath)}&addTimestamp=false`
+        );
+
+        if (downloadMergeBtn) downloadMergeBtn.disabled = true;
+        showMsg('⏳ 正在下载合并文件...');
+
         try {
             const response = await fetch(downloadUrl);
-            if (!response.ok) { const t = await response.text(); throw new Error(t || '下载失败'); }
-            const blob = await response.blob();
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
+            const contentType = (response.headers.get('content-type') || '').toLowerCase();
+
+            // ★ 关键修复 2：非 200 或非二进制 → 解析 JSON 错误后提示
+            if (!response.ok || !contentType.includes('application/octet-stream')) {
+                let errMsg = `HTTP ${response.status} ${response.statusText}`;
+                try {
+                    const text = await response.text();
+                    try {
+                        const json = JSON.parse(text);
+                        if (json && json.error) errMsg = json.error;
+                        else if (json && json.message) errMsg = json.message;
+                    } catch (_) {
+                        if (text && text.length < 500) errMsg = text;
+                    }
+                } catch (_) {}
+                showMsg('❌ 下载失败：' + errMsg);
+                return;
+            }
+
+            // ★ 关键修复 3：从 Content-Disposition 解析真实文件名
             let filename = currentMergeFilePath.split(/[\\/]/).pop() || 'merged.txt';
+            const cd = response.headers.get('content-disposition') || '';
+            const m1 = cd.match(/filename\*=UTF-8''([^;]+)/i);
+            const m2 = cd.match(/filename="([^"]+)"/i);
+            if (m1 && m1[1]) {
+                try { filename = decodeURIComponent(m1[1]); } catch (_) { filename = m1[1]; }
+            } else if (m2 && m2[1]) {
+                filename = m2[1];
+            }
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
             link.href = url;
             link.setAttribute('download', filename);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-        } catch (err) { showMsg('下载合并文件失败：' + err.message); }
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+            showMsg('✅ 合并文件已开始下载：' + filename);
+        } catch (err) {
+            // ★ 关键修复 4：fetch 失败（大文件内存/跨域/网络）→ 用 window.open 兜底
+            console.error('[downloadMergeFile] fetch 失败，尝试 window.open 兜底', err);
+            try {
+                window.open(downloadUrl, '_blank');
+                showMsg('⚠️ 已改为浏览器直接下载（fetch 失败：' + err.message + '）');
+            } catch (e2) {
+                showMsg('❌ 下载失败：' + err.message);
+            }
+        } finally {
+            if (downloadMergeBtn) downloadMergeBtn.disabled = false;
+        }
     }
 
+    // ==================== 事件绑定 ====================
     analyzeBtn.addEventListener('click', analyze);
     defaultConfigBtn.addEventListener('click', loadDefaultConfig);
     clearConfigBtn.addEventListener('click', clearAllConfig);

@@ -10,7 +10,6 @@
 </head>
 <body>
 <div class="layout">
-    <!-- 左侧模式菜单 -->
     <aside class="sidebar">
         <h3 class="sidebar-title">分析模式</h3>
         <ul class="mode-list" id="modeList">
@@ -18,14 +17,11 @@
             <li class="mode-item" data-mode="local">💻 本地分析</li>
             <li class="mode-item" data-mode="webspider">🕷️ 网页爬虫</li>
             <li class="mode-item" data-mode="questionbank">📚 题库分析</li>
-            <!-- ★ 新增：系统检查 -->
             <li class="mode-item" data-mode="systemcheck">🛡️ 系统检查</li>
         </ul>
     </aside>
 
-    <!-- ============ 服务器分析面板 ============ -->
     <main class="workspace" id="serverWorkspace">
-        <!-- 目录树（用于选择分析目录） -->
         <aside class="dir-tree-panel">
             <div class="dir-panel-header">
                 <span>📂 服务器目录</span>
@@ -39,9 +35,7 @@
             </div>
         </aside>
 
-        <!-- 配置 + 结果 -->
         <div class="analysis-panel">
-            <!-- 配置 -->
             <section class="config-panel" id="codeStatsConfig">
                 <h2>代码统计配置</h2>
                 <div class="config-form">
@@ -68,8 +62,16 @@
                     </div>
                     <div class="form-row full-width">
                         <label>额外路径 (逗号分隔):</label>
-                        <input type="text" id="extraPaths" placeholder="点击右侧 📁 追加目录，可多次添加">
+                        <input type="text" id="extraPaths" placeholder="点击右侧 📁 追加目录，可多次添加；此路径内文件不受扩展名限制">
                         <button class="dir-picker-btn" data-target="extraPaths" title="点击后在左侧目录树选择目录（可连续添加）">📁</button>
+                    </div>
+                    <!-- ★ 新增：.gitignore 开关，默认关闭以保持旧行为 -->
+                    <div class="form-row full-width">
+                        <label>启用 .gitignore 过滤:</label>
+                        <input type="checkbox" id="useGitIgnore">
+                        <span style="font-size:12px;color:#64748b;margin-left:8px;">
+                            默认关闭（旧版本行为）；勾选后 .gitignore 中规则会实际生效
+                        </span>
                     </div>
                 </div>
                 <div class="action-bar">
@@ -79,7 +81,6 @@
                 </div>
             </section>
 
-            <!-- 结果 -->
             <section class="result-section" id="codeStatsResult">
                 <div class="progress-bar" id="progressBar" style="display: none;">
                     <div class="progress-fill" id="progressFill"></div>
@@ -124,7 +125,6 @@
         </div>
     </main>
 
-    <!-- ============ 本地分析面板（完整目录管理） ============ -->
     <main class="workspace" id="localWorkspace" style="display: none;">
         <aside class="dir-tree-panel">
             <div class="dir-panel-header">
@@ -170,17 +170,14 @@
         </div>
     </main>
 
-    <!-- ============ 网页爬虫 iframe ============ -->
     <main class="workspace fullscreen" id="spiderWorkspace" style="display: none;">
         <iframe id="spiderFrame" src="../spider/spider.html" title="网页爬虫"></iframe>
     </main>
 
-    <!-- ============ 题库分析 iframe ============ -->
     <main class="workspace fullscreen" id="qbWorkspace" style="display: none;">
         <iframe id="qbFrame" src="../questionbank/questionbank.html" title="题库分析"></iframe>
     </main>
 
-    <!-- ============ ★ 系统检查 iframe ============ -->
     <main class="workspace fullscreen" id="systemcheckWorkspace" style="display: none;">
         <iframe id="systemcheckFrame" src="../systemcheck/systemcheck.html" title="系统检查"></iframe>
     </main>

@@ -33,6 +33,7 @@ import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -40,6 +41,33 @@ public class CodeAnalysisService {
     private static final Logger log = LoggerFactory.getLogger(CodeAnalysisService.class);
 
     private final Cache<String, DependencyResult> dependencyCache = CacheFactory.createDefaultCache();
+
+    /**
+     * ★ 产出文件注册表：analyze 生成的合并文件自动加入，download 时命中即放行。
+     * key 为 toAbsolutePath().normalize().toString()。
+     * 上限 1000 条，超过后清空，避免长期运行内存膨胀。
+     */
+    private static final Set<String> DOWNLOADABLE_PATHS = ConcurrentHashMap.newKeySet();
+    private static final int DOWNLOADABLE_CAP = 1000;
+
+    private static final Set<String> EXTRA_SKIP_DIRS = new HashSet<>(Arrays.asList(
+            ".git", ".svn", ".hg", "node_modules", "target", "build", "dist",
+            ".idea", ".vscode", ".gradle", ".m2", ".cache",
+            "__pycache__", ".venv", "venv", ".pytest_cache", ".next", ".nuxt"
+    ));
+
+    /** ★ 注册可下载文件（由 analyze 生成合并文件后调用） */
+    public static void registerDownloadable(Path file) {
+        if (file == null) return;
+        if (DOWNLOADABLE_PATHS.size() >= DOWNLOADABLE_CAP) DOWNLOADABLE_PATHS.clear();
+        DOWNLOADABLE_PATHS.add(file.toAbsolutePath().normalize().toString());
+    }
+
+    /** ★ 判断文件是否在注册表中 */
+    public static boolean isDownloadable(Path file) {
+        if (file == null) return false;
+        return DOWNLOADABLE_PATHS.contains(file.toAbsolutePath().normalize().toString());
+    }
 
     // ==================== 代码统计 ====================
 
@@ -53,6 +81,7 @@ public class CodeAnalysisService {
         map.put("threadCount", config.getThreadCount());
         map.put("sortBy", config.getSortBy());
         map.put("mergeEnabled", true);
+        map.put("useGitIgnore", false);
         String defaultMergePath = config.getDefaultOutputPath() != null
                 ? config.getDefaultOutputPath().toString()
                 : Paths.get(System.getProperty("user.dir"), "merged_outputs", "merged_"
@@ -73,9 +102,7 @@ public class CodeAnalysisService {
 
             CompositeFilter filterChain = buildFilterChain(config);
             List<Path> files = new CollectStage(filterChain).process(config.getRootDir());
-
-            // ★ [P1] extraPaths 也走 filterChain，避免把 node_modules / .git 吞进来
-            files = appendExtraFiles(files, params.get("extraPaths"), filterChain);
+            files = appendExtraFiles(files, params.get("extraPaths"));
 
             ParallelAnalyzeStage analyzeStage = new ParallelAnalyzeStage(
                     config.getThreadCount(), config.isExcludeComments(), null);
@@ -98,9 +125,17 @@ public class CodeAnalysisService {
             }
             if (mergeEnabled && mergeOutputFile != null && !mergeOutputFile.isEmpty()) {
                 try {
-                    new MergeFilesStage(Paths.get(mergeOutputFile)).process(files);
+                    Path mergePath = Paths.get(mergeOutputFile).toAbsolutePath().normalize();
+                    new MergeFilesStage(mergePath).process(files);
+                    // ★ 合并成功 → 注册为可下载
+                    registerDownloadable(mergePath);
+                    // 同时返回归一化后的绝对路径，前端展示与实际一致
+                    mergeOutputFile = mergePath.toString();
+                    log.info("合并文件已注册可下载: {}", mergeOutputFile);
                 } catch (Exception e) {
                     log.error("合并文件失败: {}", mergeOutputFile, e);
+                    // 合并失败 → 不注册，但也不返回 mergeOutput
+                    mergeOutputFile = null;
                 }
             }
 
@@ -113,7 +148,6 @@ public class CodeAnalysisService {
 
     // ==================== 依赖分析 ====================
 
-    /** ★ [P0] 缓存 key 改用 SHA-256，避免 hashCode 32 位碰撞 */
     private String generateDependencyCacheKey(Map<String, String> params) {
         StringBuilder sb = new StringBuilder();
         sb.append(normalize(params.get("rootDir"))).append("|");
@@ -121,23 +155,20 @@ public class CodeAnalysisService {
         sb.append(normalize(params.get("excludePaths"))).append("|");
         sb.append(normalize(params.get("extraPaths"))).append("|");
         sb.append(normalize(params.get("threadCount"))).append("|");
-        sb.append(normalize(params.get("excludeComments")));
+        sb.append(normalize(params.get("excludeComments"))).append("|");
+        sb.append(normalize(params.get("useGitIgnore")));
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] digest = md.digest(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
             StringBuilder hex = new StringBuilder();
-            for (int i = 0; i < 8; i++) {
-                hex.append(String.format("%02x", digest[i]));
-            }
+            for (int i = 0; i < 8; i++) hex.append(String.format("%02x", digest[i]));
             return hex.toString();
         } catch (Exception e) {
             return Integer.toHexString(sb.toString().hashCode());
         }
     }
 
-    private static String normalize(String s) {
-        return s == null ? "" : s.trim();
-    }
+    private static String normalize(String s) { return s == null ? "" : s.trim(); }
 
     public String analyzeDependencies(Map<String, String> params) {
         long startTime = System.currentTimeMillis();
@@ -164,7 +195,7 @@ public class CodeAnalysisService {
         CompositeFilter filterChain = buildFilterChain(config);
 
         List<Path> files = new CollectStage(filterChain).process(config.getRootDir());
-        files = appendExtraFiles(files, params.get("extraPaths"), filterChain);
+        files = appendExtraFiles(files, params.get("extraPaths"));
 
         if (files.isEmpty()) {
             return new DependencyResult(Collections.emptyMap(), new DependencyGraph(), 0L);
@@ -188,17 +219,25 @@ public class CodeAnalysisService {
         return filterChain;
     }
 
-    /** ★ [P1] 统一走 filterChain 收集 extraPaths */
-    private List<Path> appendExtraFiles(List<Path> existing, String extraPathsStr, CompositeFilter filterChain) throws Exception {
+    private List<Path> appendExtraFiles(List<Path> existing, String extraPathsStr) throws Exception {
         if (extraPathsStr == null || extraPathsStr.trim().isEmpty()) return existing;
         Set<Path> merged = new LinkedHashSet<>(existing);
         for (String extraPath : extraPathsStr.split(",")) {
-            Path path = Paths.get(extraPath.trim());
-            if (Files.isDirectory(path)) {
-                Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
+            String trimmed = extraPath.trim();
+            if (trimmed.isEmpty()) continue;
+            Path root = Paths.get(trimmed).toAbsolutePath().normalize();
+            if (Files.isDirectory(root)) {
+                Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
+                    @Override
+                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                        if (!dir.equals(root) && EXTRA_SKIP_DIRS.contains(dir.getFileName().toString())) {
+                            return FileVisitResult.SKIP_SUBTREE;
+                        }
+                        return FileVisitResult.CONTINUE;
+                    }
                     @Override
                     public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                        if (filterChain.accept(file)) merged.add(file);
+                        if (Files.isRegularFile(file)) merged.add(file);
                         return FileVisitResult.CONTINUE;
                     }
                     @Override
@@ -206,8 +245,8 @@ public class CodeAnalysisService {
                         return FileVisitResult.CONTINUE;
                     }
                 });
-            } else if (Files.isRegularFile(path) && filterChain.accept(path)) {
-                merged.add(path);
+            } else if (Files.isRegularFile(root)) {
+                merged.add(root);
             }
         }
         return new ArrayList<>(merged);
@@ -222,7 +261,6 @@ public class CodeAnalysisService {
         response.put("maxOutgoingDependencies", result.getMaxOutgoingDependencies());
         response.put("maxOutgoingClasses", result.getMaxOutgoingClasses());
         response.put("durationMs", elapsedMs);
-        // ★ [P1] 暴露失败文件列表
         response.put("failedFiles", result.getFailedFiles());
 
         Map<String, Map<String, Object>> classInfoMap = new LinkedHashMap<>();
@@ -245,9 +283,7 @@ public class CodeAnalysisService {
         response.put("graph", graphMap);
 
         List<List<String>> cyclesJson = new ArrayList<>();
-        for (Set<String> cycle : result.getCycleGroups()) {
-            cyclesJson.add(new ArrayList<>(cycle));
-        }
+        for (Set<String> cycle : result.getCycleGroups()) cyclesJson.add(new ArrayList<>(cycle));
         response.put("cycles", cyclesJson);
         return JsonUtil.toJson(response);
     }
@@ -294,7 +330,6 @@ public class CodeAnalysisService {
         return JsonUtil.toJson(response);
     }
 
-    /** ★ [P1] 错误信息包含根因 */
     private String errorJson(Throwable e) {
         Map<String, Object> err = new LinkedHashMap<>();
         err.put("success", false);
@@ -375,7 +410,7 @@ public class CodeAnalysisService {
         if (sort != null && !sort.isEmpty()) builder.sortBy(sort);
         String extraPathsStr = params.get("extraPaths");
         if (extraPathsStr != null && !extraPathsStr.isEmpty()) builder.extraPaths(Arrays.asList(extraPathsStr.split(",")));
-        builder.useGitIgnore(true);
+        builder.useGitIgnore("true".equalsIgnoreCase(params.get("useGitIgnore")));
         return builder.build();
     }
 
@@ -391,7 +426,7 @@ public class CodeAnalysisService {
         String threads = params.get("threadCount");
         builder.threadCount(threads != null && !threads.isEmpty() ? Integer.parseInt(threads) : Runtime.getRuntime().availableProcessors());
         builder.sortBy("name");
-        builder.useGitIgnore(true);
+        builder.useGitIgnore("true".equalsIgnoreCase(params.get("useGitIgnore")));
         return builder.build();
     }
 }

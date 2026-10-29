@@ -12,7 +12,6 @@ import com.omni.framework.tomcat.Catalina;
 
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 public class SpringApplication {
     private static final Logger log = LoggerFactory.getLogger(SpringApplication.class);
@@ -37,43 +36,49 @@ public class SpringApplication {
 
         executeApplicationRunners(context, args);
 
-        final CountDownLatch latch = new CountDownLatch(1);
+        // ★★★ 关键：这个 latch 只在 shutdown hook 完成后才会 countDown ★★★
+        final CountDownLatch shutdownDone = new CountDownLatch(1);
+
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("Shutdown hook triggered, stopping Tomcat...");
+
+            // ★ 看门狗：只在 hook 真正开始时才启动，15 秒后 hook 还没完成就强杀
+            //   （正常运行时不会触发，所以不会误杀应用）
+            Thread watchdog = new Thread(() -> {
+                try {
+                    Thread.sleep(15_000);
+                    log.warn("Shutdown hook 执行超过 15 秒，强制退出 (halt(0))");
+                    Runtime.getRuntime().halt(0);
+                } catch (InterruptedException ignored) {
+                    // hook 按时完成，watchdog 被 interrupt，什么都不做
+                }
+            }, "shutdown-watchdog");
+            watchdog.setDaemon(true);
+            watchdog.start();
+
             try {
-                catalina.stop();
-            } catch (Throwable e) {
-                log.error("Error stopping catalina", e);
+                try { catalina.stop(); } catch (Throwable e) { log.error("stop catalina 失败", e); }
+                try { context.getBeanFactory().destroySingletons(); } catch (Throwable e) { log.error("destroySingletons 失败", e); }
+                try { DataSourceUtils.closePool(); } catch (Throwable e) { log.error("closePool 失败", e); }
+
+                log.info("Catalina stopped and resources released.");
+            } finally {
+                watchdog.interrupt();          // 通知看门狗"我完成了，别开枪"
+                shutdownDone.countDown();      // 唤醒主线程
             }
-            try {
-                context.getBeanFactory().destroySingletons();
-            } catch (Throwable e) {
-                log.error("Error destroying singletons", e);
-            }
-            try {
-                DataSourceUtils.closePool();
-            } catch (Throwable e) {
-                log.error("Error closing pool", e);
-            }
-            log.info("Catalina stopped and resources released.");
-            latch.countDown();
         }, "spring-shutdown"));
 
+        // ★ 主线程无限等待，正常运行时永远不会走到下面
+        //   只有 shutdown hook 完成后 countDown 才会唤醒
         try {
-            // ★ 修复：加超时——某个 hook 卡死时不要无限等
-            if (!latch.await(15, TimeUnit.SECONDS)) {
-                log.warn("Shutdown hook 超时（15s），强制退出");
-                Runtime.getRuntime().halt(0);
-            }
+            shutdownDone.await();   // ← 无超时！这才是正确的
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.warn("Main thread interrupted");
         }
-        log.info("Application shutdown complete.");
 
-        // ★ 修复：用 halt(0) 而非 System.exit(0)
-        //   System.exit(0) 会等所有 hook 完成——如果别处某个 hook 卡死，就会永远卡住
-        //   halt(0) 无条件立即终止 JVM，不等任何 hook
+        log.info("Application shutdown complete.");
+        // 兜底：如果 hook 里还有其他非守护线程残留，halt(0) 直接干净退出
         Runtime.getRuntime().halt(0);
     }
 

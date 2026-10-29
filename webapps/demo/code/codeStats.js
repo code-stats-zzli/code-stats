@@ -1,5 +1,4 @@
 (function() {
-    // ==================== 全局状态 ====================
     const API_CODE = window.apiUrl('/code/api');
     const API_FILES = window.apiUrl('/files/api');
 
@@ -7,24 +6,18 @@
     let classInfoMap = null;
     let currentMergeFilePath = null;
 
-    // 本地目录管理状态
     let localCurrentPath = '';
     let localCurrentEditPath = null;
     let localInited = false;
-
-    // 目录拾取状态：null | 'rootDir' | 'extraPaths'
     let activePicker = null;
 
-    // ==================== DOM 引用 ====================
     const modeList = document.getElementById('modeList');
     const serverWorkspace = document.getElementById('serverWorkspace');
     const localWorkspace = document.getElementById('localWorkspace');
     const spiderWorkspace = document.getElementById('spiderWorkspace');
     const qbWorkspace = document.getElementById('qbWorkspace');
-    // ★ 新增：系统检查 workspace
     const systemcheckWorkspace = document.getElementById('systemcheckWorkspace');
 
-    // 服务器分析
     const serverDirTree = document.getElementById('serverDirTree');
     const serverRefreshTreeBtn = document.getElementById('serverRefreshTreeBtn');
     const serverDirTip = document.getElementById('serverDirTip');
@@ -54,7 +47,6 @@
     const exportCsvBtn = document.getElementById('exportCsvBtn');
     const downloadMergeBtn = document.getElementById('downloadMergeBtn');
 
-    // 本地目录管理
     const localDirTree = document.getElementById('localDirTree');
     const localRefreshTreeBtn = document.getElementById('localRefreshTreeBtn');
     const localCurrentPathSpan = document.getElementById('localCurrentPath');
@@ -70,12 +62,9 @@
     const localCloseEditorBtn = document.getElementById('localCloseEditorBtn');
     const localSaveFileBtn = document.getElementById('localSaveFileBtn');
 
-    // ==================== 工具函数 ====================
     function escapeHtml(str) {
         if (!str) return '';
-        return str.replace(/[&<>"]/g, m => ({
-            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
-        }[m]));
+        return str.replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
     }
     function truncatePath(path) { return path.length > 60 ? '...' + path.slice(-57) : path; }
     function formatSize(bytes) {
@@ -83,10 +72,8 @@
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
-    function normalizePath(p) {
-        return (p || '').replace(/\\/g, '/');
-    }
-    function showMsg(msg, isError = false) { alert(msg); }
+    function normalizePath(p) { return (p || '').replace(/\\/g, '/'); }
+    function showMsg(msg) { if (progressText) progressText.textContent = msg; }
 
     // ==================== 模式切换 ====================
     function switchMode(mode) {
@@ -98,22 +85,13 @@
         localWorkspace.style.display = 'none';
         spiderWorkspace.style.display = 'none';
         qbWorkspace.style.display = 'none';
-        // ★ 新增：系统检查 workspace 隐藏
         if (systemcheckWorkspace) systemcheckWorkspace.style.display = 'none';
 
-        if (mode === 'server') {
-            serverWorkspace.style.display = 'flex';
-        } else if (mode === 'local') {
-            localWorkspace.style.display = 'flex';
-            initLocalFileManager();
-        } else if (mode === 'webspider') {
-            spiderWorkspace.style.display = 'flex';
-        } else if (mode === 'questionbank') {
-            qbWorkspace.style.display = 'flex';
-        } else if (mode === 'systemcheck') {
-            // ★ 新增：系统检查
-            systemcheckWorkspace.style.display = 'flex';
-        }
+        if (mode === 'server') serverWorkspace.style.display = 'flex';
+        else if (mode === 'local') { localWorkspace.style.display = 'flex'; initLocalFileManager(); }
+        else if (mode === 'webspider') spiderWorkspace.style.display = 'flex';
+        else if (mode === 'questionbank') qbWorkspace.style.display = 'flex';
+        else if (mode === 'systemcheck') systemcheckWorkspace.style.display = 'flex';
     }
 
     modeList.addEventListener('click', (e) => {
@@ -123,21 +101,17 @@
         if (mode) switchMode(mode);
     });
 
-    // ==================== 目录树渲染（toggle 独立处理） ====================
-
+    // ==================== 目录树 ====================
     function containerHighlight(targetDiv) {
         if (!targetDiv) return;
         const container = targetDiv.closest('.dir-tree-wrapper');
-        if (container) {
-            container.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
-        }
+        if (container) container.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
         targetDiv.classList.add('selected');
     }
 
     function createTreeNodeWithHighlight(node, level, onDirectoryClick, onFileClick, pathContext) {
         const li = document.createElement('li');
         li.className = 'tree-node';
-
         const div = document.createElement('div');
         div.className = 'tree-item';
         div.style.paddingLeft = (level * 16 + 8) + 'px';
@@ -149,12 +123,8 @@
 
         const toggle = document.createElement('span');
         toggle.className = 'toggle';
-        if (isDir && hasChildren) {
-            toggle.textContent = '▶';   // 初始总是收起
-        } else {
-            toggle.textContent = ' ';
-            toggle.style.opacity = '0';
-        }
+        toggle.textContent = (isDir && hasChildren) ? '▶' : ' ';
+        if (!(isDir && hasChildren)) toggle.style.opacity = '0';
 
         const icon = document.createElement('span');
         icon.className = 'icon';
@@ -176,7 +146,6 @@
             li.appendChild(childrenUl);
         }
 
-        // 展开 / 收起（含懒加载）
         async function expandOrCollapse() {
             if (!isDir || !hasChildren || !childrenUl) return;
             const isOpen = childrenUl.classList.contains('open');
@@ -191,9 +160,7 @@
                             node.hasChildren = data.hasChildren;
                             childrenUl.innerHTML = '';
                             node.children.forEach(child =>
-                                childrenUl.appendChild(createTreeNodeWithHighlight(
-                                    child, level + 1, onDirectoryClick, onFileClick, pathContext
-                                ))
+                                childrenUl.appendChild(createTreeNodeWithHighlight(child, level + 1, onDirectoryClick, onFileClick, pathContext))
                             );
                         }
                     } catch (err) { console.error('懒加载失败', err); }
@@ -207,29 +174,18 @@
             node.expanded = !isOpen;
         }
 
-        // ★ toggle 单独处理，避免冒泡到 div 触发 onDirectoryClick
-        toggle.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            await expandOrCollapse();
-        });
+        toggle.addEventListener('click', async (e) => { e.stopPropagation(); await expandOrCollapse(); });
 
-        // div 主体：选中 / 打开
         div.addEventListener('click', (e) => {
             e.stopPropagation();
             if (isDir) {
                 containerHighlight(div);
                 if (onDirectoryClick) onDirectoryClick(node, pathContext);
-            } else {
-                if (onFileClick) onFileClick(node, pathContext);
-            }
+            } else if (onFileClick) onFileClick(node, pathContext);
         });
-
         return li;
     }
 
-    /**
-     * 渲染目录树，返回根 li（供调用方自动展开根）
-     */
     function renderDirectoryTreeWithHighlight(container, rootNode, onDirectoryClick, onFileClick, pathContext) {
         container.innerHTML = '';
         if (!rootNode) return null;
@@ -238,24 +194,17 @@
         return rootLi;
     }
 
-    /**
-     * 自动展开某个 li 的 toggle（不触发 onDirectoryClick）
-     */
     function autoExpandNode(li) {
         if (!li) return;
-        const rootToggle = li.querySelector(':scope > .tree-item > .toggle');
-        if (rootToggle && rootToggle.textContent === '▶') {
-            rootToggle.click();
-        }
+        const t = li.querySelector(':scope > .tree-item > .toggle');
+        if (t && t.textContent === '▶') t.click();
     }
 
-    // ==================== 目录拾取（根目录 / 额外目录） ====================
-
+    // ==================== 目录拾取 ====================
     function setPickerTarget(target) {
         activePicker = target;
-        document.querySelectorAll('.dir-picker-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.target === target);
-        });
+        document.querySelectorAll('.dir-picker-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.target === target));
         if (target === 'rootDir') {
             serverDirTree.classList.add('picking-mode');
             serverDirTip.textContent = '👉 请点击下方目录树选择根目录';
@@ -268,7 +217,6 @@
         }
     }
 
-    // 绑定所有 📁 按钮
     document.querySelectorAll('.dir-picker-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const target = btn.dataset.target;
@@ -276,31 +224,20 @@
         });
     });
 
-    // 服务器目录树点击统一处理
     function handleServerDirectoryClick(node, pathContext) {
         const absolutePath = normalizePath(pathContext.absolutePath);
-        const fullPath = node.path
-            ? normalizePath(absolutePath + '/' + node.path)
-            : absolutePath;
-
+        const fullPath = node.path ? normalizePath(absolutePath + '/' + node.path) : absolutePath;
         if (activePicker === 'rootDir') {
             rootDirInput.value = fullPath;
             setPickerTarget(null);
         } else if (activePicker === 'extraPaths') {
             const current = extraPathsInput.value.trim();
             const items = current ? current.split(',').map(s => s.trim()).filter(s => s) : [];
-            if (!items.includes(fullPath)) {
-                items.push(fullPath);
-                extraPathsInput.value = items.join(',');
-            }
-            // 保持拾取模式，允许连续点击
+            if (!items.includes(fullPath)) { items.push(fullPath); extraPathsInput.value = items.join(','); }
         } else {
-            // 默认填充根目录
             rootDirInput.value = fullPath;
         }
     }
-
-    // ==================== 服务器目录树加载 ====================
 
     async function initServerDirectoryTree() {
         serverDirTree.innerHTML = '<div class="loading">加载中...</div>';
@@ -308,28 +245,18 @@
             const rootRes = await fetch(`${API_FILES}/root?rootType=local`);
             const rootInfo = await rootRes.json();
             const absolutePath = normalizePath(rootInfo.absolutePath || '');
-
             const res = await fetch(`${API_FILES}/tree?rootType=local&path=&withChildren=true`);
             if (!res.ok) throw new Error('获取目录树失败');
             const rootNode = await res.json();
-
-            const rootLi = renderDirectoryTreeWithHighlight(
-                serverDirTree,
-                rootNode,
-                handleServerDirectoryClick,
-                null,
-                { absolutePath }
-            );
-
-            // ★ 默认展开根目录（不触发 onDirectoryClick）
+            const rootLi = renderDirectoryTreeWithHighlight(serverDirTree, rootNode,
+                handleServerDirectoryClick, null, { absolutePath });
             autoExpandNode(rootLi);
         } catch (err) {
             serverDirTree.innerHTML = `<div class="error-tip">❌ ${escapeHtml(err.message)}</div>`;
         }
     }
 
-    // ==================== 服务器分析逻辑 ====================
-
+    // ==================== 服务器分析 ====================
     async function loadDefaultConfig() {
         try {
             const resp = await fetch(API_CODE + '/config');
@@ -363,22 +290,22 @@
         setPickerTarget(null);
     }
 
-    function toggleMergeRow() {
-        mergeRow.style.display = mergeEnabledCheck.checked ? 'flex' : 'none';
-    }
+    function toggleMergeRow() { mergeRow.style.display = mergeEnabledCheck.checked ? 'flex' : 'none'; }
     mergeEnabledCheck.addEventListener('change', toggleMergeRow);
 
     function utf8ToBase64(str) {
-        const utf8Bytes = new TextEncoder().encode(str);
+        const bytes = new TextEncoder().encode(str);
         let binary = '';
-        for (let i = 0; i < utf8Bytes.length; i++) binary += String.fromCharCode(utf8Bytes[i]);
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
         return btoa(binary);
     }
 
+    /** ★ [P1] 只做文件统计，不再自动触发依赖分析 */
     async function analyze() {
         if (downloadMergeBtn) downloadMergeBtn.disabled = true;
         currentMergeFilePath = null;
         dependencyData = null;
+        classInfoMap = null;
 
         const params = new URLSearchParams();
         params.append('rootDir', rootDirInput.value);
@@ -393,24 +320,23 @@
 
         progressBar.style.display = 'block';
         progressFill.style.width = '10%';
-        progressText.textContent = '正在分析...';
+        showMsg('正在分析（大工程请耐心等待）...');
 
         try {
             const resp = await fetch(API_CODE + '/analyze?' + params.toString());
             progressFill.style.width = '80%';
             const data = await resp.json();
-            if (data.error) { alert('分析失败：' + data.error); return; }
+            if (data.error) { showMsg('❌ 分析失败：' + data.error); progressBar.style.display = 'none'; return; }
             renderResults(data);
             if (data.mergeOutput && data.mergeOutput.trim() !== '') {
                 currentMergeFilePath = data.mergeOutput;
                 if (downloadMergeBtn) downloadMergeBtn.disabled = false;
             }
-            await loadDependencyData(params);
             progressFill.style.width = '100%';
-            progressText.textContent = '分析完成';
+            showMsg('✅ 分析完成（依赖分析请切到「依赖关系」页签）');
             setTimeout(() => progressBar.style.display = 'none', 2000);
         } catch (e) {
-            alert('请求失败：' + e.message);
+            showMsg('❌ 请求失败：' + e.message);
             progressBar.style.display = 'none';
         }
     }
@@ -443,7 +369,11 @@
         if (dependencyTab) dependencyTab.style.display = 'none';
     }
 
-    async function loadDependencyData(params) {
+    /** 依赖分析：按需加载 */
+    async function loadDependencyData() {
+        const depStatsDiv = document.getElementById('depStats');
+        if (depStatsDiv) depStatsDiv.innerHTML = '<div class="loading">加载依赖分析中...</div>';
+
         const depParams = new URLSearchParams();
         depParams.append('rootDir', rootDirInput.value);
         depParams.append('extensions', extensionsInput.value);
@@ -455,18 +385,34 @@
             const resp = await fetch(API_CODE + '/dependencies?' + depParams.toString());
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
-            if (data.error) { console.warn('依赖分析失败：', data.error); return; }
+            if (data.error) {
+                if (depStatsDiv) depStatsDiv.innerHTML = `<div class="error-tip">❌ ${escapeHtml(data.error)}</div>`;
+                return;
+            }
             dependencyData = data;
             classInfoMap = data.classInfoMap || {};
             renderDependencyStats(data);
             populateClassSelect(classInfoMap);
-        } catch (err) { console.error('依赖分析请求失败', err); }
+        } catch (err) {
+            console.error('依赖分析请求失败', err);
+            if (depStatsDiv) depStatsDiv.innerHTML = `<div class="error-tip">❌ ${escapeHtml(err.message)}</div>`;
+        }
     }
 
     function renderDependencyStats(data) {
         const depStatsDiv = document.getElementById('depStats');
         if (!depStatsDiv) return;
         const cycles = data.cycles || [];
+        const failed = data.failedFiles || [];
+        let failedHtml = '';
+        if (failed.length) {
+            failedHtml = `<details style="margin-top:8px;color:#dc2626;">
+                <summary>⚠️ ${failed.length} 个文件解析失败（点击查看）</summary>
+                <ul style="max-height:160px;overflow:auto;font-size:12px;font-family:monospace;">
+                    ${failed.map(f => `<li>${escapeHtml(f)}</li>`).join('')}
+                </ul>
+            </details>`;
+        }
         depStatsDiv.innerHTML = `
             <h3>📊 依赖统计</h3>
             <div style="display: flex; gap: 20px; flex-wrap: wrap;">
@@ -475,7 +421,8 @@
                 <div><strong>最大出向依赖数:</strong> ${data.maxOutgoingDependencies || 0} (类: ${(data.maxOutgoingClasses || []).join(', ') || '无'})</div>
                 <div><strong>循环依赖组数:</strong> ${cycles.length}</div>
             </div>
-            ${cycles.length ? `<details><summary>🔍 查看循环依赖组</summary><pre>${JSON.stringify(cycles, null, 2)}</pre></details>` : ''}
+            ${cycles.length ? `<details><summary>🔍 查看循环依赖组</summary><pre>${escapeHtml(JSON.stringify(cycles, null, 2))}</pre></details>` : ''}
+            ${failedHtml}
             <hr>
         `;
     }
@@ -536,15 +483,11 @@
         else if (tabName === 'summary') summaryTab.style.display = 'block';
         else if (tabName === 'dependency') {
             if (dependencyTab) dependencyTab.style.display = 'block';
+            // ★ 按需加载：只有切到依赖页且尚未加载时才请求
             if (!dependencyData && rootDirInput.value) {
-                const params = new URLSearchParams();
-                params.append('rootDir', rootDirInput.value);
-                params.append('extensions', extensionsInput.value);
-                params.append('excludePaths', excludePathsInput.value);
-                params.append('extraPaths', extraPathsInput.value);
-                params.append('threadCount', threadCountInput.value);
-                loadDependencyData(params);
-            } else if (dependencyData && classInfoMap && Object.keys(classInfoMap).length > 0 &&
+                loadDependencyData();
+            } else if (dependencyData && classInfoMap &&
+                Object.keys(classInfoMap).length > 0 &&
                 document.getElementById('classSelect')?.options.length <= 1) {
                 populateClassSelect(classInfoMap);
             }
@@ -555,7 +498,7 @@
 
     function exportToCsv() {
         const rows = document.querySelectorAll('#fileTableBody tr');
-        if (!rows.length) { alert('没有数据可导出，请先执行分析'); return; }
+        if (!rows.length) { showMsg('没有数据可导出'); return; }
         const headers = [];
         document.querySelector('#filesTable table thead tr')?.querySelectorAll('th').forEach(th => headers.push(th.innerText.trim()));
         const csvRows = [headers.join(',')];
@@ -564,9 +507,7 @@
             const rowData = [];
             for (let cell of cells) {
                 let text = cell.innerText.trim();
-                if (text.includes(',') || text.includes('"') || text.includes('\n')) {
-                    text = `"${text.replace(/"/g, '""')}"`;
-                }
+                if (text.includes(',') || text.includes('"') || text.includes('\n')) text = `"${text.replace(/"/g, '""')}"`;
                 rowData.push(text);
             }
             csvRows.push(rowData.join(','));
@@ -583,18 +524,14 @@
     }
 
     async function downloadMergeFile() {
-        if (!currentMergeFilePath) { alert('没有可用的合并文件'); return; }
+        if (!currentMergeFilePath) { showMsg('没有可用的合并文件'); return; }
         let encodedPath;
-        try {
-            encodedPath = utf8ToBase64(currentMergeFilePath);
-        } catch (e) { alert('文件路径编码失败'); return; }
+        try { encodedPath = utf8ToBase64(currentMergeFilePath); }
+        catch (e) { showMsg('文件路径编码失败'); return; }
         const downloadUrl = window.apiUrl(`/code/api/download?filePath=${encodedPath}`);
         try {
             const response = await fetch(downloadUrl);
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || '下载失败');
-            }
+            if (!response.ok) { const t = await response.text(); throw new Error(t || '下载失败'); }
             const blob = await response.blob();
             const link = document.createElement('a');
             const url = URL.createObjectURL(blob);
@@ -605,7 +542,7 @@
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-        } catch (err) { alert('下载合并文件失败：' + err.message); }
+        } catch (err) { showMsg('下载合并文件失败：' + err.message); }
     }
 
     analyzeBtn.addEventListener('click', analyze);
@@ -616,7 +553,6 @@
     if (downloadMergeBtn) downloadMergeBtn.addEventListener('click', downloadMergeFile);
 
     // ==================== 本地目录管理 ====================
-
     async function initLocalFileManager() {
         if (localInited) {
             await loadLocalDirectoryTree();
@@ -634,15 +570,9 @@
             const res = await fetch(`${API_FILES}/tree?rootType=local&path=&withChildren=true`);
             if (!res.ok) throw new Error('获取目录树失败');
             const rootNode = await res.json();
-
-            const rootLi = renderDirectoryTreeWithHighlight(
-                localDirTree,
-                rootNode,
+            const rootLi = renderDirectoryTreeWithHighlight(localDirTree, rootNode,
                 (node) => navigateLocalTo(node.path || ''),
-                (node) => openLocalEditor(node.path),
-                {}
-            );
-            // ★ 默认展开根目录
+                (node) => openLocalEditor(node.path), {});
             autoExpandNode(rootLi);
         } catch (err) {
             localDirTree.innerHTML = `<div class="error-tip">❌ ${escapeHtml(err.message)}</div>`;
@@ -656,7 +586,7 @@
             await loadLocalFileListAndRender(path);
             localEditorPanel.style.display = 'none';
             localFileListPanel.style.display = 'block';
-        } catch (err) { showMsg(err.message, true); }
+        } catch (err) { showMsg(err.message); }
     }
 
     async function loadLocalFileListAndRender(path) {
@@ -724,7 +654,7 @@
             localEditFileNameSpan.textContent = path;
             localFileListPanel.style.display = 'none';
             localEditorPanel.style.display = 'flex';
-        } catch (err) { showMsg(err.message, true); }
+        } catch (err) { showMsg(err.message); }
     }
 
     async function saveLocalFile() {
@@ -737,12 +667,9 @@
                 body: JSON.stringify({ rootType: 'local', path: localCurrentEditPath, content })
             });
             const data = await res.json();
-            if (data.success) {
-                showMsg('保存成功');
-                navigateLocalTo(localCurrentPath);
-                loadLocalDirectoryTree();
-            } else { showMsg(data.error || '保存失败', true); }
-        } catch (err) { showMsg(err.message, true); }
+            if (data.success) { showMsg('保存成功'); navigateLocalTo(localCurrentPath); loadLocalDirectoryTree(); }
+            else showMsg(data.error || '保存失败');
+        } catch (err) { showMsg(err.message); }
     }
 
     async function localRenameItem(oldPath, oldName) {
@@ -755,12 +682,9 @@
                 body: JSON.stringify({ rootType: 'local', path: oldPath, newName })
             });
             const data = await res.json();
-            if (data.success) {
-                showMsg('重命名成功');
-                await navigateLocalTo(localCurrentPath);
-                await loadLocalDirectoryTree();
-            } else { showMsg(data.error || '重命名失败', true); }
-        } catch (err) { showMsg(err.message, true); }
+            if (data.success) { showMsg('重命名成功'); await navigateLocalTo(localCurrentPath); await loadLocalDirectoryTree(); }
+            else showMsg(data.error || '重命名失败');
+        } catch (err) { showMsg(err.message); }
     }
 
     async function localDeleteItem(path) {
@@ -772,20 +696,14 @@
                 body: JSON.stringify({ rootType: 'local', path })
             });
             const data = await res.json();
-            if (data.success) {
-                showMsg('删除成功');
-                await navigateLocalTo(localCurrentPath);
-                await loadLocalDirectoryTree();
-            } else { showMsg(data.error || '删除失败', true); }
-        } catch (err) { showMsg(err.message, true); }
+            if (data.success) { showMsg('删除成功'); await navigateLocalTo(localCurrentPath); await loadLocalDirectoryTree(); }
+            else showMsg(data.error || '删除失败');
+        } catch (err) { showMsg(err.message); }
     }
 
     function localDownloadItem(path, type) {
-        if (type === 'directory') {
-            window.open(`${API_FILES}/downloadZip?rootType=local&path=${encodeURIComponent(path)}`, '_blank');
-        } else {
-            window.open(`${API_FILES}/download?rootType=local&path=${encodeURIComponent(path)}`, '_blank');
-        }
+        if (type === 'directory') window.open(`${API_FILES}/downloadZip?rootType=local&path=${encodeURIComponent(path)}`, '_blank');
+        else window.open(`${API_FILES}/download?rootType=local&path=${encodeURIComponent(path)}`, '_blank');
     }
 
     async function localNewFolder() {
@@ -798,12 +716,9 @@
                 body: JSON.stringify({ rootType: 'local', parentPath: localCurrentPath, name: folderName })
             });
             const data = await res.json();
-            if (data.success) {
-                showMsg('目录创建成功');
-                await navigateLocalTo(localCurrentPath);
-                await loadLocalDirectoryTree();
-            } else { showMsg(data.error || '创建失败', true); }
-        } catch (err) { showMsg(err.message, true); }
+            if (data.success) { showMsg('目录创建成功'); await navigateLocalTo(localCurrentPath); await loadLocalDirectoryTree(); }
+            else showMsg(data.error || '创建失败');
+        } catch (err) { showMsg(err.message); }
     }
 
     async function localNewFile() {
@@ -816,15 +731,11 @@
                 body: JSON.stringify({ rootType: 'local', parentPath: localCurrentPath, fileName })
             });
             const data = await res.json();
-            if (data.success) {
-                showMsg('文件创建成功');
-                await navigateLocalTo(localCurrentPath);
-                await loadLocalDirectoryTree();
-            } else { showMsg(data.error || '创建失败', true); }
-        } catch (err) { showMsg(err.message, true); }
+            if (data.success) { showMsg('文件创建成功'); await navigateLocalTo(localCurrentPath); await loadLocalDirectoryTree(); }
+            else showMsg(data.error || '创建失败');
+        } catch (err) { showMsg(err.message); }
     }
 
-    /** 本地文件上传：ArrayBuffer 读取，二进制保真 */
     function localUploadFile() {
         const input = document.createElement('input');
         input.type = 'file';
@@ -836,28 +747,21 @@
                 const bytes = new Uint8Array(e.target.result);
                 let binary = '';
                 const CHUNK = 0x8000;
-                for (let i = 0; i < bytes.length; i += CHUNK) {
-                    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-                }
+                for (let i = 0; i < bytes.length; i += CHUNK) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
                 const base64 = btoa(binary);
                 try {
                     const res = await fetch(`${API_FILES}/upload`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            rootType: 'local',
-                            parentPath: localCurrentPath,
-                            fileName: file.name,
-                            content: base64
+                            rootType: 'local', parentPath: localCurrentPath,
+                            fileName: file.name, content: base64
                         })
                     });
                     const data = await res.json();
-                    if (data.success) {
-                        showMsg('上传成功');
-                        await navigateLocalTo(localCurrentPath);
-                        await loadLocalDirectoryTree();
-                    } else { showMsg(data.error || '上传失败', true); }
-                } catch (err) { showMsg(err.message, true); }
+                    if (data.success) { showMsg('上传成功'); await navigateLocalTo(localCurrentPath); await loadLocalDirectoryTree(); }
+                    else showMsg(data.error || '上传失败');
+                } catch (err) { showMsg(err.message); }
             };
             reader.readAsArrayBuffer(file);
         };

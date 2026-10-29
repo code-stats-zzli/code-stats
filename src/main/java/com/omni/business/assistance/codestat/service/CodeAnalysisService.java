@@ -1,4 +1,3 @@
-// 完整文件路径: com.omni.business.assistance.codestat.service.CodeAnalysisService
 package com.omni.business.assistance.codestat.service;
 
 import com.omni.common.cache.Cache;
@@ -24,9 +23,13 @@ import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Service;
 import com.omni.framework.util.JsonUtil;
 
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -36,10 +39,9 @@ import java.util.stream.Collectors;
 public class CodeAnalysisService {
     private static final Logger log = LoggerFactory.getLogger(CodeAnalysisService.class);
 
-    // 依赖分析结果缓存
     private final Cache<String, DependencyResult> dependencyCache = CacheFactory.createDefaultCache();
 
-    // ==================== 原有代码统计功能 ====================
+    // ==================== 代码统计 ====================
 
     public Map<String, Object> getDefaultConfig() {
         Config config = ConfigLoader.load(new String[0]);
@@ -51,10 +53,10 @@ public class CodeAnalysisService {
         map.put("threadCount", config.getThreadCount());
         map.put("sortBy", config.getSortBy());
         map.put("mergeEnabled", true);
-        String defaultMergePath = config.getDefaultOutputPath() != null ?
-                config.getDefaultOutputPath().toString() :
-                Paths.get(System.getProperty("user.dir"), "merged_outputs", "merged_" +
-                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".txt").toString();
+        String defaultMergePath = config.getDefaultOutputPath() != null
+                ? config.getDefaultOutputPath().toString()
+                : Paths.get(System.getProperty("user.dir"), "merged_outputs", "merged_"
+                                                                              + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".txt").toString();
         map.put("mergeOutputFile", defaultMergePath);
         map.put("extraPaths", config.getExtraPaths() != null ? String.join(",", config.getExtraPaths()) : "");
         return map;
@@ -69,51 +71,19 @@ public class CodeAnalysisService {
             Config config = buildConfig(params);
             long startTime = System.currentTimeMillis();
 
-            CompositeFilter filterChain = new CompositeFilter();
-            if (config.getExtensions() != null && !config.getExtensions().isEmpty()) {
-                filterChain.add(new ExtensionFilter(config.getExtensions()));
-            }
-            if (config.getExcludePaths() != null && !config.getExcludePaths().isEmpty()) {
-                filterChain.add(new ExcludePathFilter(config.getExcludePaths()));
-            }
-            if (config.isUseGitIgnore()) {
-                filterChain.add(new GitIgnoreFilter(config.getRootDir()));
-            }
+            CompositeFilter filterChain = buildFilterChain(config);
+            List<Path> files = new CollectStage(filterChain).process(config.getRootDir());
 
-            CollectStage collectStage = new CollectStage(filterChain);
-            List<Path> files = collectStage.process(config.getRootDir());
-
-            String extraPathsStr = params.get("extraPaths");
-            if (extraPathsStr != null && !extraPathsStr.trim().isEmpty()) {
-                String[] extraPaths = extraPathsStr.split(",");
-                Set<Path> extraFileSet = new LinkedHashSet<>();
-                for (String extraPath : extraPaths) {
-                    Path path = Paths.get(extraPath.trim());
-                    if (Files.isDirectory(path)) {
-                        Files.walk(path)
-                                .filter(Files::isRegularFile)
-                                .forEach(extraFileSet::add);
-                    } else if (Files.isRegularFile(path)) {
-                        extraFileSet.add(path);
-                    }
-                }
-                if (!extraFileSet.isEmpty()) {
-                    Set<Path> mergedSet = new LinkedHashSet<>(files);
-                    mergedSet.addAll(extraFileSet);
-                    files = new ArrayList<>(mergedSet);
-                }
-            }
+            // ★ [P1] extraPaths 也走 filterChain，避免把 node_modules / .git 吞进来
+            files = appendExtraFiles(files, params.get("extraPaths"), filterChain);
 
             ParallelAnalyzeStage analyzeStage = new ParallelAnalyzeStage(
                     config.getThreadCount(), config.isExcludeComments(), null);
             List<FileInfo> fileInfos = analyzeStage.process(files);
-
             fileInfos.sort(SorterRegistry.getComparator(config.getSortBy()));
 
             StatisticsResult result = new StatisticsResult();
-            for (FileInfo info : fileInfos) {
-                result.addFileInfo(info);
-            }
+            for (FileInfo info : fileInfos) result.addFileInfo(info);
             result.setDurationMs(System.currentTimeMillis() - startTime);
 
             boolean mergeEnabled = !"false".equalsIgnoreCase(params.get("mergeEnabled"));
@@ -127,9 +97,8 @@ public class CodeAnalysisService {
                 }
             }
             if (mergeEnabled && mergeOutputFile != null && !mergeOutputFile.isEmpty()) {
-                Path mergePath = Paths.get(mergeOutputFile);
                 try {
-                    new MergeFilesStage(mergePath).process(files);
+                    new MergeFilesStage(Paths.get(mergeOutputFile)).process(files);
                 } catch (Exception e) {
                     log.error("合并文件失败: {}", mergeOutputFile, e);
                 }
@@ -138,43 +107,149 @@ public class CodeAnalysisService {
             return buildResponseJson(fileInfos, result, mergeEnabled, mergeOutputFile);
         } catch (Exception e) {
             log.error("代码分析失败", e);
-            Map<String, String> err = new LinkedHashMap<>();
-            err.put("error", e.getMessage());
-            return JsonUtil.toJson(err);
+            return errorJson(e);
         }
     }
 
-    private Config buildConfig(Map<String, String> params) {
-        Config.Builder builder = new Config.Builder();
-        String rootDir = params.get("rootDir");
-        if (rootDir != null && !rootDir.isEmpty()) {
-            builder.rootDir(Paths.get(rootDir));
-        } else {
-            builder.rootDir(Paths.get("."));
+    // ==================== 依赖分析 ====================
+
+    /** ★ [P0] 缓存 key 改用 SHA-256，避免 hashCode 32 位碰撞 */
+    private String generateDependencyCacheKey(Map<String, String> params) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(normalize(params.get("rootDir"))).append("|");
+        sb.append(normalize(params.get("extensions"))).append("|");
+        sb.append(normalize(params.get("excludePaths"))).append("|");
+        sb.append(normalize(params.get("extraPaths"))).append("|");
+        sb.append(normalize(params.get("threadCount"))).append("|");
+        sb.append(normalize(params.get("excludeComments")));
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (int i = 0; i < 8; i++) {
+                hex.append(String.format("%02x", digest[i]));
+            }
+            return hex.toString();
+        } catch (Exception e) {
+            return Integer.toHexString(sb.toString().hashCode());
         }
-        String exts = params.get("extensions");
-        if (exts != null && !exts.isEmpty()) {
-            builder.extensions(Arrays.asList(exts.split(",")));
+    }
+
+    private static String normalize(String s) {
+        return s == null ? "" : s.trim();
+    }
+
+    public String analyzeDependencies(Map<String, String> params) {
+        long startTime = System.currentTimeMillis();
+        String cacheKey = generateDependencyCacheKey(params);
+
+        DependencyResult cached = dependencyCache.get(cacheKey);
+        if (cached != null) {
+            log.info("依赖分析结果命中缓存，key={}", cacheKey);
+            return buildDependencyResponseJson(cached, System.currentTimeMillis() - startTime);
         }
-        String exclude = params.get("excludePaths");
-        if (exclude != null && !exclude.isEmpty()) {
-            builder.excludePaths(Arrays.asList(exclude.split(",")));
+
+        try {
+            DependencyResult result = doAnalyzeDependencies(params);
+            dependencyCache.put(cacheKey, result, 3600000L);
+            return buildDependencyResponseJson(result, System.currentTimeMillis() - startTime);
+        } catch (Exception e) {
+            log.error("依赖分析失败", e);
+            return errorJson(e);
         }
-        builder.excludeComments("true".equalsIgnoreCase(params.get("excludeComments")));
-        String threads = params.get("threadCount");
-        if (threads != null && !threads.isEmpty()) {
-            builder.threadCount(Integer.parseInt(threads));
+    }
+
+    private DependencyResult doAnalyzeDependencies(Map<String, String> params) throws Exception {
+        Config config = buildConfigForDependency(params);
+        CompositeFilter filterChain = buildFilterChain(config);
+
+        List<Path> files = new CollectStage(filterChain).process(config.getRootDir());
+        files = appendExtraFiles(files, params.get("extraPaths"), filterChain);
+
+        if (files.isEmpty()) {
+            return new DependencyResult(Collections.emptyMap(), new DependencyGraph(), 0L);
         }
-        String sort = params.get("sortBy");
-        if (sort != null && !sort.isEmpty()) {
-            builder.sortBy(sort);
+
+        DependencyAnalysisStage stage = new DependencyAnalysisStage(config.getThreadCount());
+        return stage.process(files);
+    }
+
+    private CompositeFilter buildFilterChain(Config config) {
+        CompositeFilter filterChain = new CompositeFilter();
+        if (config.getExtensions() != null && !config.getExtensions().isEmpty()) {
+            filterChain.add(new ExtensionFilter(config.getExtensions()));
         }
-        String extraPathsStr = params.get("extraPaths");
-        if (extraPathsStr != null && !extraPathsStr.isEmpty()) {
-            builder.extraPaths(Arrays.asList(extraPathsStr.split(",")));
+        if (config.getExcludePaths() != null && !config.getExcludePaths().isEmpty()) {
+            filterChain.add(new ExcludePathFilter(config.getExcludePaths()));
         }
-        builder.useGitIgnore(true);
-        return builder.build();
+        if (config.isUseGitIgnore()) {
+            filterChain.add(new GitIgnoreFilter(config.getRootDir()));
+        }
+        return filterChain;
+    }
+
+    /** ★ [P1] 统一走 filterChain 收集 extraPaths */
+    private List<Path> appendExtraFiles(List<Path> existing, String extraPathsStr, CompositeFilter filterChain) throws Exception {
+        if (extraPathsStr == null || extraPathsStr.trim().isEmpty()) return existing;
+        Set<Path> merged = new LinkedHashSet<>(existing);
+        for (String extraPath : extraPathsStr.split(",")) {
+            Path path = Paths.get(extraPath.trim());
+            if (Files.isDirectory(path)) {
+                Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                        if (filterChain.accept(file)) merged.add(file);
+                        return FileVisitResult.CONTINUE;
+                    }
+                    @Override
+                    public FileVisitResult visitFileFailed(Path file, java.io.IOException exc) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
+            } else if (Files.isRegularFile(path) && filterChain.accept(path)) {
+                merged.add(path);
+            }
+        }
+        return new ArrayList<>(merged);
+    }
+
+    // ==================== 响应序列化 ====================
+
+    private String buildDependencyResponseJson(DependencyResult result, long elapsedMs) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("totalClasses", result.getTotalClasses());
+        response.put("averageOutgoingDependencies", result.getAverageOutgoingDependencies());
+        response.put("maxOutgoingDependencies", result.getMaxOutgoingDependencies());
+        response.put("maxOutgoingClasses", result.getMaxOutgoingClasses());
+        response.put("durationMs", elapsedMs);
+        // ★ [P1] 暴露失败文件列表
+        response.put("failedFiles", result.getFailedFiles());
+
+        Map<String, Map<String, Object>> classInfoMap = new LinkedHashMap<>();
+        for (Map.Entry<String, ClassInfo> entry : result.getClassInfoMap().entrySet()) {
+            ClassInfo info = entry.getValue();
+            Map<String, Object> infoMap = new LinkedHashMap<>();
+            infoMap.put("fullyQualifiedName", info.getFullyQualifiedName());
+            infoMap.put("packageName", info.getPackageName());
+            infoMap.put("simpleName", info.getSimpleName());
+            infoMap.put("type", info.getType().name());
+            classInfoMap.put(entry.getKey(), infoMap);
+        }
+        response.put("classInfoMap", classInfoMap);
+
+        Map<String, List<String>> graphMap = new LinkedHashMap<>();
+        DependencyGraph graph = result.getGraph();
+        for (String className : graph.getAllClasses()) {
+            graphMap.put(className, new ArrayList<>(graph.getDependencies(className)));
+        }
+        response.put("graph", graphMap);
+
+        List<List<String>> cyclesJson = new ArrayList<>();
+        for (Set<String> cycle : result.getCycleGroups()) {
+            cyclesJson.add(new ArrayList<>(cycle));
+        }
+        response.put("cycles", cyclesJson);
+        return JsonUtil.toJson(response);
     }
 
     private String buildResponseJson(List<FileInfo> fileInfos, StatisticsResult result,
@@ -192,6 +267,7 @@ public class CodeAnalysisService {
             return fileMap;
         }).collect(Collectors.toList());
         response.put("files", fileList);
+
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("totalFiles", result.getFileInfos().size());
         summary.put("totalLines", result.getTotalLines());
@@ -200,6 +276,7 @@ public class CodeAnalysisService {
         summary.put("totalBlankLines", result.getTotalBlankLines());
         summary.put("durationMs", result.getDurationMs());
         response.put("summary", summary);
+
         Map<String, Map<String, Long>> langSummary = new LinkedHashMap<>();
         result.getLanguageSummary().forEach((lang, ls) -> {
             Map<String, Long> langMap = new LinkedHashMap<>();
@@ -217,222 +294,52 @@ public class CodeAnalysisService {
         return JsonUtil.toJson(response);
     }
 
-    // ==================== 依赖分析功能 ====================
-
-    /**
-     * 生成依赖分析的缓存 Key
-     */
-    private String generateDependencyCacheKey(Map<String, String> params) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(params.getOrDefault("rootDir", "")).append("|");
-        sb.append(params.getOrDefault("extensions", "java")).append("|");
-        sb.append(params.getOrDefault("excludePaths", "")).append("|");
-        sb.append(params.getOrDefault("extraPaths", "")).append("|");
-        sb.append(params.getOrDefault("threadCount", "0")).append("|");
-        sb.append(params.getOrDefault("excludeComments", "true"));
-        return Integer.toHexString(sb.toString().hashCode());
+    /** ★ [P1] 错误信息包含根因 */
+    private String errorJson(Throwable e) {
+        Map<String, Object> err = new LinkedHashMap<>();
+        err.put("success", false);
+        Throwable root = e;
+        while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+        err.put("error", root.getClass().getSimpleName() + ": " + root.getMessage());
+        return JsonUtil.toJson(err);
     }
 
-    /**
-     * 执行依赖分析（带缓存）
-     */
-    public String analyzeDependencies(Map<String, String> params) {
-        long startTime = System.currentTimeMillis();
-        String cacheKey = generateDependencyCacheKey(params);
+    // ==================== 外部查询接口 ====================
 
-        DependencyResult cached = dependencyCache.get(cacheKey);
-        if (cached != null) {
-            log.info("依赖分析结果命中缓存，key={}", cacheKey);
-            return buildDependencyResponseJson(cached, System.currentTimeMillis() - startTime);
-        }
-
-        try {
-            DependencyResult result = doAnalyzeDependencies(params);
-            dependencyCache.put(cacheKey, result, 3600000L); // TTL 1小时
-            return buildDependencyResponseJson(result, System.currentTimeMillis() - startTime);
-        } catch (Exception e) {
-            log.error("依赖分析失败", e);
-            Map<String, String> err = new LinkedHashMap<>();
-            err.put("error", e.getMessage());
-            return JsonUtil.toJson(err);
-        }
-    }
-
-    /**
-     * 实际执行依赖分析（无缓存）
-     */
-    private DependencyResult doAnalyzeDependencies(Map<String, String> params) throws Exception {
-        Config config = buildConfigForDependency(params);
-
-        CompositeFilter filterChain = new CompositeFilter();
-        if (config.getExtensions() != null && !config.getExtensions().isEmpty()) {
-            filterChain.add(new ExtensionFilter(config.getExtensions()));
-        }
-        if (config.getExcludePaths() != null && !config.getExcludePaths().isEmpty()) {
-            filterChain.add(new ExcludePathFilter(config.getExcludePaths()));
-        }
-        if (config.isUseGitIgnore()) {
-            filterChain.add(new GitIgnoreFilter(config.getRootDir()));
-        }
-
-        CollectStage collectStage = new CollectStage(filterChain);
-        List<Path> files = collectStage.process(config.getRootDir());
-
-        String extraPathsStr = params.get("extraPaths");
-        if (extraPathsStr != null && !extraPathsStr.trim().isEmpty()) {
-            String[] extraPaths = extraPathsStr.split(",");
-            Set<Path> extraFileSet = new LinkedHashSet<>();
-            for (String extraPath : extraPaths) {
-                Path path = Paths.get(extraPath.trim());
-                if (Files.isDirectory(path)) {
-                    Files.walk(path).filter(Files::isRegularFile).forEach(extraFileSet::add);
-                } else if (Files.isRegularFile(path)) {
-                    extraFileSet.add(path);
-                }
-            }
-            if (!extraFileSet.isEmpty()) {
-                Set<Path> mergedSet = new LinkedHashSet<>(files);
-                mergedSet.addAll(extraFileSet);
-                files = new ArrayList<>(mergedSet);
-            }
-        }
-
-        if (files.isEmpty()) {
-            return new DependencyResult(Collections.emptyMap(), new DependencyGraph(), 0L);
-        }
-
-        DependencyAnalysisStage stage = new DependencyAnalysisStage(config.getThreadCount());
-        return stage.process(files);
-    }
-
-    private Config buildConfigForDependency(Map<String, String> params) {
-        Config.Builder builder = new Config.Builder();
-        String rootDir = params.get("rootDir");
-        if (rootDir != null && !rootDir.isEmpty()) {
-            builder.rootDir(Paths.get(rootDir));
-        } else {
-            builder.rootDir(Paths.get("."));
-        }
-        String exts = params.get("extensions");
-        if (exts != null && !exts.isEmpty()) {
-            builder.extensions(Arrays.asList(exts.split(",")));
-        } else {
-            builder.extensions(Collections.singletonList("java"));
-        }
-        String exclude = params.get("excludePaths");
-        if (exclude != null && !exclude.isEmpty()) {
-            builder.excludePaths(Arrays.asList(exclude.split(",")));
-        }
-        builder.excludeComments("true".equalsIgnoreCase(params.get("excludeComments")));
-        String threads = params.get("threadCount");
-        if (threads != null && !threads.isEmpty()) {
-            builder.threadCount(Integer.parseInt(threads));
-        } else {
-            builder.threadCount(Runtime.getRuntime().availableProcessors());
-        }
-        builder.sortBy("name");
-        builder.useGitIgnore(true);
-        return builder.build();
-    }
-
-    /**
-     * 构建依赖分析结果的 JSON
-     */
-    private String buildDependencyResponseJson(DependencyResult result, long elapsedMs) {
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("totalClasses", result.getTotalClasses());
-        response.put("averageOutgoingDependencies", result.getAverageOutgoingDependencies());
-        response.put("maxOutgoingDependencies", result.getMaxOutgoingDependencies());
-        response.put("maxOutgoingClasses", result.getMaxOutgoingClasses());
-        response.put("durationMs", elapsedMs);
-
-        // 序列化类信息
-        Map<String, Map<String, Object>> classInfoMap = new LinkedHashMap<>();
-        for (Map.Entry<String, ClassInfo> entry : result.getClassInfoMap().entrySet()) {
-            ClassInfo info = entry.getValue();
-            Map<String, Object> infoMap = new LinkedHashMap<>();
-            infoMap.put("fullyQualifiedName", info.getFullyQualifiedName());
-            infoMap.put("packageName", info.getPackageName());
-            infoMap.put("simpleName", info.getSimpleName());
-            infoMap.put("type", info.getType().name());
-            classInfoMap.put(entry.getKey(), infoMap);
-        }
-        response.put("classInfoMap", classInfoMap);
-
-        // 序列化依赖图（完整）
-        Map<String, List<String>> graphMap = new LinkedHashMap<>();
-        DependencyGraph graph = result.getGraph();
-        for (String className : graph.getAllClasses()) {
-            graphMap.put(className, new ArrayList<>(graph.getDependencies(className)));
-        }
-        response.put("graph", graphMap);
-
-        // 序列化循环分组
-        List<List<String>> cyclesJson = new ArrayList<>();
-        for (Set<String> cycle : result.getCycleGroups()) {
-            cyclesJson.add(new ArrayList<>(cycle));
-        }
-        response.put("cycles", cyclesJson);
-
-        return JsonUtil.toJson(response);
-    }
-
-    /**
-     * 获取依赖分析结果对象（供内部使用，优先从缓存取）
-     */
     public DependencyResult getDependencyResult(Map<String, String> params) throws Exception {
         String cacheKey = generateDependencyCacheKey(params);
         DependencyResult cached = dependencyCache.get(cacheKey);
-        if (cached != null) {
-            return cached;
-        }
+        if (cached != null) return cached;
         DependencyResult result = doAnalyzeDependencies(params);
         dependencyCache.put(cacheKey, result, 3600000L);
         return result;
     }
 
-    /**
-     * 查询某个类的直接依赖（出向）
-     */
     public Map<String, Object> getDirectDependencies(String className, Map<String, String> params) throws Exception {
         DependencyResult result = getDependencyResult(params);
-        List<String> outgoing = result.getGraph().getDirectDependencies(className);
         Map<String, Object> resp = new HashMap<>();
         resp.put("className", className);
-        resp.put("outgoing", outgoing);
+        resp.put("outgoing", result.getGraph().getDirectDependencies(className));
         return resp;
     }
 
-    /**
-     * 查询哪些类依赖了某个类（入向）
-     */
     public Map<String, Object> getInverseDependencies(String className, Map<String, String> params) throws Exception {
         DependencyResult result = getDependencyResult(params);
-        List<String> incoming = result.getGraph().getInverseDependencies(className);
         Map<String, Object> resp = new HashMap<>();
         resp.put("className", className);
-        resp.put("incoming", incoming);
+        resp.put("incoming", result.getGraph().getInverseDependencies(className));
         return resp;
     }
 
-    /**
-     * 获取供 3D 力导向图使用的节点和边数据
-     * @param params 分析参数（与依赖分析相同）
-     * @return 包含 nodes 和 links 的 Map
-     */
     public Map<String, Object> getGraphDataFor3D(Map<String, String> params) throws Exception {
-        // 复用已有的依赖分析结果（带缓存）
         DependencyResult result = getDependencyResult(params);
-
         List<Map<String, String>> nodes = new ArrayList<>();
         for (Map.Entry<String, ClassInfo> entry : result.getClassInfoMap().entrySet()) {
             Map<String, String> node = new HashMap<>();
             node.put("id", entry.getKey());
-            String type = entry.getValue().getType().name().toLowerCase();
-            node.put("type", type);
+            node.put("type", entry.getValue().getType().name().toLowerCase());
             nodes.add(node);
         }
-
         List<Map<String, String>> links = new ArrayList<>();
         DependencyGraph graph = result.getGraph();
         for (String src : graph.getAllClasses()) {
@@ -443,17 +350,48 @@ public class CodeAnalysisService {
                 links.add(link);
             }
         }
-
         Map<String, Object> graphData = new LinkedHashMap<>();
         graphData.put("nodes", nodes);
         graphData.put("links", links);
-        // 可选附带统计信息
         graphData.put("totalClasses", result.getTotalClasses());
         graphData.put("totalEdges", links.size());
         return graphData;
     }
 
-// 注意：getDependencyResult 是私有方法，需要将其可见性改为 private 或 protected，它已经存在。
-// 如果它不可见，请确保以下方法存在（已存在于您的代码中）：
-// private DependencyResult getDependencyResult(Map<String, String> params) throws Exception
+    // ==================== 配置构建 ====================
+
+    private Config buildConfig(Map<String, String> params) {
+        Config.Builder builder = new Config.Builder();
+        String rootDir = params.get("rootDir");
+        builder.rootDir(rootDir != null && !rootDir.isEmpty() ? Paths.get(rootDir) : Paths.get("."));
+        String exts = params.get("extensions");
+        if (exts != null && !exts.isEmpty()) builder.extensions(Arrays.asList(exts.split(",")));
+        String exclude = params.get("excludePaths");
+        if (exclude != null && !exclude.isEmpty()) builder.excludePaths(Arrays.asList(exclude.split(",")));
+        builder.excludeComments("true".equalsIgnoreCase(params.get("excludeComments")));
+        String threads = params.get("threadCount");
+        if (threads != null && !threads.isEmpty()) builder.threadCount(Integer.parseInt(threads));
+        String sort = params.get("sortBy");
+        if (sort != null && !sort.isEmpty()) builder.sortBy(sort);
+        String extraPathsStr = params.get("extraPaths");
+        if (extraPathsStr != null && !extraPathsStr.isEmpty()) builder.extraPaths(Arrays.asList(extraPathsStr.split(",")));
+        builder.useGitIgnore(true);
+        return builder.build();
+    }
+
+    private Config buildConfigForDependency(Map<String, String> params) {
+        Config.Builder builder = new Config.Builder();
+        String rootDir = params.get("rootDir");
+        builder.rootDir(rootDir != null && !rootDir.isEmpty() ? Paths.get(rootDir) : Paths.get("."));
+        String exts = params.get("extensions");
+        builder.extensions(exts != null && !exts.isEmpty() ? Arrays.asList(exts.split(",")) : Collections.singletonList("java"));
+        String exclude = params.get("excludePaths");
+        if (exclude != null && !exclude.isEmpty()) builder.excludePaths(Arrays.asList(exclude.split(",")));
+        builder.excludeComments("true".equalsIgnoreCase(params.get("excludeComments")));
+        String threads = params.get("threadCount");
+        builder.threadCount(threads != null && !threads.isEmpty() ? Integer.parseInt(threads) : Runtime.getRuntime().availableProcessors());
+        builder.sortBy("name");
+        builder.useGitIgnore(true);
+        return builder.build();
+    }
 }

@@ -21,10 +21,20 @@ public class StatisticsResult {
         totalCodeLines += info.getCodeLines();
         totalCommentLines += info.getCommentLines();
         totalBlankLines += info.getBlankLines();
-        languageSummary.computeIfAbsent(info.getLanguage(), k -> new LanguageSummary())
-                .add(info);
+        languageSummary.computeIfAbsent(info.getLanguage(), k -> new LanguageSummary()).add(info);
     }
-    public void aggregate() { /* 可在此计算平均值等 */ }
+
+    /**
+     * ★ [P3] 重新计算语言汇总（供 AggregateStage 调用）。
+     * 原实现为空方法，语义不明；现明确为"从 fileInfos 重建汇总"。
+     */
+    public void aggregate() {
+        languageSummary.clear();
+        for (FileInfo info : fileInfos) {
+            languageSummary.computeIfAbsent(info.getLanguage(), k -> new LanguageSummary()).add(info);
+        }
+    }
+
     public long getDurationMs() { return durationMs; }
     public void setDurationMs(long ms) { this.durationMs = ms; }
     public List<FileInfo> getFileInfos() { return fileInfos; }
@@ -40,7 +50,6 @@ public class StatisticsResult {
             files++; lines += info.getLines(); code += info.getCodeLines();
             comments += info.getCommentLines(); blanks += info.getBlankLines();
         }
-        // getters
         public long getFiles() { return files; }
         public long getLines() { return lines; }
         public long getCode() { return code; }

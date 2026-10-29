@@ -5,7 +5,11 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 极简 Java 词法扫描器：识别关键字、标识符、字符串、注释等，供依赖提取使用
+ * 极简 Java 词法扫描器。
+ * 修复：
+ *  - 识别转义字符（\"  \'  \\）
+ *  - 识别 Java 15+ 文本块（""" ... """）
+ *  - 字符串/字符/数字 也产出 Token（下游按需忽略），避免文本块内的关键字被误判
  */
 public class SimpleJavaLexer {
     private final String source;
@@ -21,10 +25,8 @@ public class SimpleJavaLexer {
         List<Token> tokens = new ArrayList<>();
         while (pos < length) {
             char ch = source.charAt(pos);
-            if (Character.isWhitespace(ch)) {
-                pos++;
-                continue;
-            }
+            if (Character.isWhitespace(ch)) { pos++; continue; }
+
             // 单行注释
             if (ch == '/' && pos + 1 < length && source.charAt(pos + 1) == '/') {
                 pos += 2;
@@ -38,25 +40,68 @@ public class SimpleJavaLexer {
                 pos += 2;
                 continue;
             }
-            // ★ 缺陷：不识别转义字符
+            // 文本块 """
+            if (ch == '"' && pos + 2 < length
+                    && source.charAt(pos + 1) == '"' && source.charAt(pos + 2) == '"') {
+                int start = pos;
+                pos += 3;
+                while (pos + 2 < length
+                        && !(source.charAt(pos) == '"' && source.charAt(pos + 1) == '"' && source.charAt(pos + 2) == '"')) {
+                    if (source.charAt(pos) == '\\' && pos + 1 < length) pos += 2;
+                    else pos++;
+                }
+                pos = Math.min(pos + 3, length);
+                tokens.add(new Token(TokenType.TEXT_BLOCK, source.substring(start, pos), start));
+                continue;
+            }
+            // 字符串
             if (ch == '"') {
+                int start = pos;
                 pos++;
-                while (pos < length && source.charAt(pos) != '"') pos++;
-                pos++;
-                continue;
-            }
-            // ★ 缺陷：不识别转义字符
-            if (ch == '\'') {
-                pos++;
-                while (pos < length && source.charAt(pos) != '\'') pos++;
-                pos++;
-                continue;
-            }
-            if (Character.isDigit(ch)) {
-                while (pos < length && (Character.isDigit(source.charAt(pos)) || source.charAt(pos) == '.'))
+                while (pos < length) {
+                    char c = source.charAt(pos);
+                    if (c == '\\' && pos + 1 < length) { pos += 2; continue; }
+                    if (c == '"') { pos++; break; }
                     pos++;
+                }
+                tokens.add(new Token(TokenType.STRING, source.substring(start, pos), start));
                 continue;
             }
+            // 字符
+            if (ch == '\'') {
+                int start = pos;
+                pos++;
+                while (pos < length) {
+                    char c = source.charAt(pos);
+                    if (c == '\\' && pos + 1 < length) { pos += 2; continue; }
+                    if (c == '\'') { pos++; break; }
+                    pos++;
+                }
+                tokens.add(new Token(TokenType.CHAR, source.substring(start, pos), start));
+                continue;
+            }
+            // 数字（简化：十进制 + 0x 十六进制 + 小数点）
+            if (Character.isDigit(ch)) {
+                int start = pos;
+                boolean hex = false;
+                if (ch == '0' && pos + 1 < length
+                        && (source.charAt(pos + 1) == 'x' || source.charAt(pos + 1) == 'X')) {
+                    hex = true;
+                    pos += 2;
+                }
+                while (pos < length) {
+                    char c = source.charAt(pos);
+                    if (Character.isDigit(c)) { pos++; continue; }
+                    if (hex && ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) { pos++; continue; }
+                    if (!hex && c == '.') { pos++; continue; }
+                    if (c == '_') { pos++; continue; }
+                    if (c == 'L' || c == 'l' || c == 'F' || c == 'f' || c == 'D' || c == 'd') { pos++; continue; }
+                    break;
+                }
+                tokens.add(new Token(TokenType.NUMBER, source.substring(start, pos), start));
+                continue;
+            }
+            // 标识符 / 关键字
             if (Character.isJavaIdentifierStart(ch)) {
                 int start = pos;
                 while (pos < length && Character.isJavaIdentifierPart(source.charAt(pos))) pos++;
@@ -82,7 +127,7 @@ public class SimpleJavaLexer {
         ).contains(word);
     }
 
-    public enum TokenType { KEYWORD, IDENTIFIER, SYMBOL }
+    public enum TokenType { KEYWORD, IDENTIFIER, SYMBOL, STRING, CHAR, TEXT_BLOCK, NUMBER }
 
     public static class Token {
         public final TokenType type;
@@ -93,9 +138,6 @@ public class SimpleJavaLexer {
             this.text = text;
             this.position = position;
         }
-        @Override
-        public String toString() {
-            return type + ":" + text;
-        }
+        @Override public String toString() { return type + ":" + text; }
     }
 }

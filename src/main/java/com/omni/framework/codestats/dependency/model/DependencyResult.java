@@ -10,7 +10,9 @@ public class DependencyResult {
     private final double averageOutgoingDependencies;
     private final int maxOutgoingDependencies;
     private final List<String> maxOutgoingClasses;
-    private List<Set<String>> cycleGroups;   // Day 4 填充
+    private List<Set<String>> cycleGroups;
+    // ★ [P1] 新增：解析失败的文件列表
+    private List<String> failedFiles = Collections.emptyList();
 
     public DependencyResult(Map<String, ClassInfo> classInfoMap, DependencyGraph graph, long analysisTimeMs) {
         this.classInfoMap = Collections.unmodifiableMap(classInfoMap);
@@ -19,19 +21,15 @@ public class DependencyResult {
         this.totalClasses = classInfoMap.size();
 
         long sum = 0;
-        for (String cls : graph.getAllClasses()) {
-            sum += graph.getDependencies(cls).size();
-        }
+        for (String cls : graph.getAllClasses()) sum += graph.getDependencies(cls).size();
         this.averageOutgoingDependencies = totalClasses == 0 ? 0.0 : (double) sum / totalClasses;
 
         Map.Entry<Integer, List<String>> maxEntry = graph.getMaxOutgoingDependencies();
         this.maxOutgoingDependencies = maxEntry.getKey();
         this.maxOutgoingClasses = maxEntry.getValue();
-
-        this.cycleGroups = Collections.emptyList(); // 默认空
+        this.cycleGroups = Collections.emptyList();
     }
 
-    // Getters
     public Map<String, ClassInfo> getClassInfoMap() { return classInfoMap; }
     public DependencyGraph getGraph() { return graph; }
     public long getAnalysisTimeMs() { return analysisTimeMs; }
@@ -41,10 +39,15 @@ public class DependencyResult {
     public List<String> getMaxOutgoingClasses() { return maxOutgoingClasses; }
     public List<Set<String>> getCycleGroups() { return cycleGroups; }
     public void setCycleGroups(List<Set<String>> cycleGroups) { this.cycleGroups = cycleGroups; }
+    public List<String> getFailedFiles() { return failedFiles; }
+    public void setFailedFiles(List<String> failedFiles) {
+        this.failedFiles = failedFiles == null ? Collections.emptyList() : failedFiles;
+    }
 
     @Override
     public String toString() {
-        return String.format("DependencyResult{classes=%d, avgDeps=%.2f, maxDeps=%d, time=%dms, cycles=%d}",
-                totalClasses, averageOutgoingDependencies, maxOutgoingDependencies, analysisTimeMs, cycleGroups.size());
+        return String.format("DependencyResult{classes=%d, avgDeps=%.2f, maxDeps=%d, time=%dms, cycles=%d, failed=%d}",
+                totalClasses, averageOutgoingDependencies, maxOutgoingDependencies,
+                analysisTimeMs, cycleGroups.size(), failedFiles.size());
     }
 }

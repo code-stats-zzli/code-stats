@@ -20,13 +20,8 @@ public class JavaDependencyExtractor {
         String packageName = parsePackage(tokens);
         List<String> imports = parseImports(tokens);
         TypeDeclaration mainType = parseTypeDeclaration(tokens);
-        if (mainType == null) {
+        if (mainType == null || mainType.name == null || mainType.name.isEmpty()) {
             throw new IOException("无法找到类型声明: " + file);
-        }
-
-        // ★ 修复：确保 mainType.name 不为空
-        if (mainType.name == null || mainType.name.isEmpty()) {
-            throw new IOException("类型名称为空: " + file);
         }
 
         String fqName = packageName.isEmpty() ? mainType.name : packageName + "." + mainType.name;
@@ -39,38 +34,28 @@ public class JavaDependencyExtractor {
         for (String raw : rawTypes) {
             if (TypeNameResolver.isPrimitive(raw)) continue;
             String resolved = resolver.resolve(raw);
-            if (resolved != null) {
-                resolvedDeps.add(resolved);
-            }
+            if (resolved != null) resolvedDeps.add(resolved);
         }
 
         DependencyGraph graph = new DependencyGraph();
-        for (String dep : resolvedDeps) {
-            // ★ 修复：addDependency 内部已做 null 检查，但此处 fqName 已确保非空
-            graph.addDependency(fqName, dep);
-        }
+        for (String dep : resolvedDeps) graph.addDependency(fqName, dep);
+
         Map<String, ClassInfo> classInfoMap = new HashMap<>();
         classInfoMap.put(fqName, classInfo);
         DependencyResult result = new DependencyResult(classInfoMap, graph, 0L);
         return new ExtractedResult(classInfo, resolvedDeps, result);
     }
 
-    // ----- 解析辅助方法（保持不变） -----
     private String parsePackage(List<SimpleJavaLexer.Token> tokens) {
         for (int i = 0; i < tokens.size(); i++) {
             if (tokens.get(i).type == SimpleJavaLexer.TokenType.KEYWORD && "package".equals(tokens.get(i).text)) {
                 StringBuilder pkg = new StringBuilder();
                 int j = i + 1;
                 while (j < tokens.size()) {
-                    if (tokens.get(j).type == SimpleJavaLexer.TokenType.IDENTIFIER) {
-                        pkg.append(tokens.get(j).text);
-                    } else if (".".equals(tokens.get(j).text)) {
-                        pkg.append('.');
-                    } else if (";".equals(tokens.get(j).text)) {
-                        return pkg.toString();
-                    } else {
-                        break;
-                    }
+                    if (tokens.get(j).type == SimpleJavaLexer.TokenType.IDENTIFIER) pkg.append(tokens.get(j).text);
+                    else if (".".equals(tokens.get(j).text)) pkg.append('.');
+                    else if (";".equals(tokens.get(j).text)) return pkg.toString();
+                    else break;
                     j++;
                 }
             }
@@ -102,7 +87,7 @@ public class JavaDependencyExtractor {
     }
 
     private static class TypeDeclaration {
-        String kind; // "class", "interface", "enum", "@interface"
+        String kind;
         String name;
         List<String> extendedTypes = new ArrayList<>();
         List<String> implementedTypes = new ArrayList<>();
@@ -124,7 +109,6 @@ public class JavaDependencyExtractor {
                         i++;
                         break;
                     }
-                    // 处理 extends / implements
                     while (i < tokens.size() && !"{".equals(tokens.get(i).text)) {
                         if ("extends".equals(tokens.get(i).text)) {
                             i++;
@@ -179,15 +163,9 @@ public class JavaDependencyExtractor {
         int i = start;
         while (i < tokens.size()) {
             String text = tokens.get(i).text;
-            if (tokens.get(i).type == SimpleJavaLexer.TokenType.IDENTIFIER) {
-                sb.append(text);
-            } else if (".".equals(text)) {
-                sb.append('.');
-            } else if (",".equals(text) || "{".equals(text) || "extends".equals(text) || "implements".equals(text)) {
-                break;
-            } else {
-                break;
-            }
+            if (tokens.get(i).type == SimpleJavaLexer.TokenType.IDENTIFIER) sb.append(text);
+            else if (".".equals(text)) sb.append('.');
+            else break;
             i++;
         }
         return sb.length() == 0 ? null : sb.toString();
@@ -202,56 +180,61 @@ public class JavaDependencyExtractor {
         }
     }
 
+    /**
+     * ★ [P1] 修正类型引用收集：
+     *  - 显式处理 new Foo / new Foo<...>()
+     *  - 泛型声明 Foo<...>
+     *  - 内部类/静态引用 Foo.Bar
+     *  - 字段/方法返回类型 Foo name / Foo name(
+     *  - 不再把纯方法调用 foo(...) 误判为类型
+     */
     private Set<String> collectTypeReferences(List<SimpleJavaLexer.Token> tokens, TypeDeclaration mainType) {
         Set<String> types = new HashSet<>();
         types.addAll(mainType.extendedTypes);
         types.addAll(mainType.implementedTypes);
 
         int start = mainType.startTokenIndex;
-        int end = mainType.endTokenIndex;
-        for (int i = start; i <= end && i < tokens.size(); i++) {
+        int end = Math.min(mainType.endTokenIndex, tokens.size() - 1);
+
+        for (int i = start; i <= end; i++) {
             SimpleJavaLexer.Token t = tokens.get(i);
-            if (t.type == SimpleJavaLexer.TokenType.KEYWORD && isModifier(t.text)) continue;
-            if (t.type == SimpleJavaLexer.TokenType.IDENTIFIER && isPossibleTypeName(t.text)) {
-                int nextIdx = i + 1;
-                if (nextIdx < tokens.size() && tokens.get(nextIdx).type == SimpleJavaLexer.TokenType.IDENTIFIER) {
-                    String fieldType = t.text;
-                    types.add(fieldType);
-                }
+            if (t.type != SimpleJavaLexer.TokenType.IDENTIFIER) continue;
+            String word = t.text;
+            if (!isPossibleTypeName(word)) continue;
+
+            // 情况 1: new Foo
+            if (i >= 1 && tokens.get(i - 1).type == SimpleJavaLexer.TokenType.KEYWORD
+                    && "new".equals(tokens.get(i - 1).text)) {
+                types.add(word);
+                continue;
             }
-            if (t.type == SimpleJavaLexer.TokenType.IDENTIFIER && isPossibleTypeName(t.text)) {
-                int nextIdx = i + 1;
-                if (nextIdx < tokens.size() && tokens.get(nextIdx).type == SimpleJavaLexer.TokenType.IDENTIFIER) {
-                    int afterName = nextIdx + 1;
-                    if (afterName < tokens.size() && "(".equals(tokens.get(afterName).text)) {
-                        types.add(t.text);
-                    }
-                }
+
+            // 情况 2: 字段/方法返回类型 Foo name
+            if (i + 1 <= end && tokens.get(i + 1).type == SimpleJavaLexer.TokenType.IDENTIFIER) {
+                types.add(word);
+                continue;
             }
-            if ("(".equals(t.text)) {
-                int paramStart = i + 1;
-                int braceCount = 1;
-                int j = paramStart;
-                while (j < tokens.size() && braceCount > 0) {
-                    if ("(".equals(tokens.get(j).text)) braceCount++;
-                    else if (")".equals(tokens.get(j).text)) braceCount--;
-                    else if (braceCount == 1 && tokens.get(j).type == SimpleJavaLexer.TokenType.IDENTIFIER) {
-                        types.add(tokens.get(j).text);
-                    }
-                    j++;
-                }
-                i = j;
+
+            // 情况 3: 泛型 Foo<...>
+            if (i + 1 <= end && tokens.get(i + 1).type == SimpleJavaLexer.TokenType.SYMBOL
+                    && "<".equals(tokens.get(i + 1).text)) {
+                types.add(word);
+                continue;
+            }
+
+            // 情况 4: 内部类 Foo.Bar
+            if (i + 2 <= end && tokens.get(i + 1).type == SimpleJavaLexer.TokenType.SYMBOL
+                    && ".".equals(tokens.get(i + 1).text)
+                    && tokens.get(i + 2).type == SimpleJavaLexer.TokenType.IDENTIFIER
+                    && isPossibleTypeName(tokens.get(i + 2).text)) {
+                types.add(word);
             }
         }
         return types;
     }
 
-    private boolean isModifier(String word) {
-        return Set.of("public", "protected", "private", "static", "final", "abstract", "synchronized",
-                "volatile", "transient", "native", "strictfp").contains(word);
-    }
-
     private boolean isPossibleTypeName(String word) {
+        if (word == null || word.isEmpty()) return false;
         if (Character.isUpperCase(word.charAt(0))) return true;
         return Set.of("int", "long", "double", "float", "boolean", "char", "byte", "short", "void").contains(word);
     }

@@ -1,9 +1,7 @@
 package com.omni.framework.codestats.dependency.extractor;
 
-import com.omni.framework.codestats.dependency.extractor.SimpleJavaLexer;
 import com.omni.framework.codestats.dependency.extractor.SimpleJavaLexer.Token;
 import com.omni.framework.codestats.dependency.extractor.SimpleJavaLexer.TokenType;
-
 import com.omni.framework.codestats.dependency.model.MethodInfo;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
@@ -13,17 +11,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-/**
- * 基于 SimpleJavaLexer 的手写方法级抽取器（零第三方依赖）。
- */
 public class MethodExtractor {
-
     private static final Logger log = LoggerFactory.getLogger(MethodExtractor.class);
-
-    private static final Set<String> NON_CALL_KEYWORDS = new HashSet<>(Arrays.asList(
-            "if", "while", "for", "switch", "catch", "synchronized",
-            "return", "throw", "assert", "new"
-    ));
 
     private static final Set<String> MODIFIERS = new HashSet<>(Arrays.asList(
             "public", "protected", "private", "static", "final",
@@ -34,7 +23,6 @@ public class MethodExtractor {
     private final String source;
     private final List<Token> tokens;
     private final int[] lineStarts;
-
     private final List<MethodInfo> methods = new ArrayList<>();
     private final List<RawCall> rawCalls = new ArrayList<>();
 
@@ -45,7 +33,6 @@ public class MethodExtractor {
         public final int argCount;
         public final int line;
         public final boolean isConstructor;
-
         RawCall(String callerId, String calleeName, String receiverTypeHint,
                 int argCount, int line, boolean isConstructor) {
             this.callerId = callerId;
@@ -70,11 +57,8 @@ public class MethodExtractor {
 
     public void extract() {
         String pkg = parsePackageName();
-
         Deque<String> classStack = new ArrayDeque<>();
-        Map<String, String> fieldTypes = new HashMap<>();
         Deque<Map<String, String>> fieldTypeStack = new ArrayDeque<>();
-
         int braceDepth = 0;
         int classBodyDepth = -1;
         String currentMethodId = null;
@@ -103,9 +87,7 @@ public class MethodExtractor {
             if (t.type == TokenType.SYMBOL) {
                 if ("{".equals(t.text)) {
                     braceDepth++;
-                    if (braceDepth == classStack.size() && classBodyDepth < braceDepth) {
-                        classBodyDepth = braceDepth;
-                    }
+                    if (braceDepth == classStack.size() && classBodyDepth < braceDepth) classBodyDepth = braceDepth;
                     i++;
                     continue;
                 }
@@ -132,12 +114,9 @@ public class MethodExtractor {
                         && tokens.get(i + 1).type == TokenType.IDENTIFIER) {
                     Token after2 = tokens.get(i + 2);
                     if (after2.type == TokenType.SYMBOL
-                            && (";".equals(after2.text) || "=".equals(after2.text)
-                            || ",".equals(after2.text))) {
+                            && (";".equals(after2.text) || "=".equals(after2.text) || ",".equals(after2.text))) {
                         Map<String, String> currentFieldMap = fieldTypeStack.peek();
-                        if (currentFieldMap != null) {
-                            currentFieldMap.put(tokens.get(i + 1).text, t.text);
-                        }
+                        if (currentFieldMap != null) currentFieldMap.put(tokens.get(i + 1).text, t.text);
                     }
                 }
 
@@ -166,14 +145,12 @@ public class MethodExtractor {
                                         && ("{".equals(after.text) || ";".equals(after.text))) {
                                     String methodName = t.text;
                                     String returnType = (prev.type == TokenType.IDENTIFIER
-                                            || (prev.type == TokenType.KEYWORD
-                                            && !MODIFIERS.contains(prev.text))) ? prev.text : "void";
+                                            || (prev.type == TokenType.KEYWORD && !MODIFIERS.contains(prev.text)))
+                                            ? prev.text : "void";
                                     boolean isStatic = false;
                                     for (int k = Math.max(0, i - 5); k < i; k++) {
                                         if (tokens.get(k).type == TokenType.KEYWORD
-                                                && "static".equals(tokens.get(k).text)) {
-                                            isStatic = true; break;
-                                        }
+                                                && "static".equals(tokens.get(k).text)) { isStatic = true; break; }
                                     }
                                     List<String> params = parseParamTypes(i + 1, closeParen);
                                     int line = lineOf(t.position);
@@ -214,9 +191,7 @@ public class MethodExtractor {
                                     receiverType = classStack.peek();
                                 } else {
                                     Map<String, String> fm = fieldTypeStack.peek();
-                                    if (fm != null && fm.containsKey(receiver.text)) {
-                                        receiverType = fm.get(receiver.text);
-                                    }
+                                    if (fm != null && fm.containsKey(receiver.text)) receiverType = fm.get(receiver.text);
                                 }
                             }
                         } else if (p.type == TokenType.KEYWORD && "new".equals(p.text)) {
@@ -230,8 +205,7 @@ public class MethodExtractor {
                     if (closeParen > 0) {
                         int argCount = countArgs(i + 1, closeParen);
                         int line = lineOf(t.position);
-                        rawCalls.add(new RawCall(currentMethodId, calleeName,
-                                receiverType, argCount, line, isCtor));
+                        rawCalls.add(new RawCall(currentMethodId, calleeName, receiverType, argCount, line, isCtor));
                     }
                 }
             }
@@ -257,11 +231,6 @@ public class MethodExtractor {
         return "";
     }
 
-    /**
-     * ★ 修复：原代码 `.equals(t.text))".equals(t.text)` 是笔误，应为 `")".equals(t.text)`。
-     * 该笔误导致括号匹配永远失败（除非遇到文本为 `...".equals(t.text)` 的 token），
-     * 使得整个方法级调用链抽取基本不可用。
-     */
     private int findMatchingParen(int openIdx) {
         if (openIdx >= tokens.size()) return -1;
         if (!"(".equals(tokens.get(openIdx).text)) return -1;
@@ -270,54 +239,69 @@ public class MethodExtractor {
             Token t = tokens.get(i);
             if (t.type != TokenType.SYMBOL) continue;
             if ("(".equals(t.text)) depth++;
-            else if (")".equals(t.text)) depth--;   // ✅ 修复后
+            else if (")".equals(t.text)) depth--;
             if (depth == 0) return i;
         }
         return -1;
     }
 
+    /**
+     * ★ [P1] 参数类型解析修复：
+     *  - 原实现把 token 直接拼接，得到 "List<String>list"（类型+变量名粘在一起）
+     *  - 现改为：按顶层逗号切分参数 → 跳过 final → 顶层最后一个 IDENTIFIER 视为变量名 → 其余 token 拼接为类型
+     */
     private List<String> parseParamTypes(int openIdx, int closeIdx) {
-        List<String> result = new ArrayList<>();
-        if (closeIdx <= openIdx + 1) return result;
-        StringBuilder current = new StringBuilder();
+        List<String> types = new ArrayList<>();
+        if (closeIdx <= openIdx + 1) return types;
+
+        List<int[]> paramRanges = new ArrayList<>();
         int depth = 0;
+        int segStart = openIdx + 1;
         for (int i = openIdx + 1; i < closeIdx; i++) {
             Token t = tokens.get(i);
             if (t.type == TokenType.SYMBOL) {
-                if ("<".equals(t.text)) { depth++; current.append("<"); continue; }
-                if (">".equals(t.text)) { depth--; current.append(">"); continue; }
-                if (",".equals(t.text) && depth == 0) {
-                    result.add(current.toString().trim());
-                    current.setLength(0);
-                    continue;
+                if ("<".equals(t.text) || "(".equals(t.text) || "[".equals(t.text)) depth++;
+                else if (">".equals(t.text) || ")".equals(t.text) || "]".equals(t.text)) depth--;
+                else if (",".equals(t.text) && depth == 0) {
+                    paramRanges.add(new int[]{segStart, i});
+                    segStart = i + 1;
                 }
-                if ("[".equals(t.text) || "]".equals(t.text)) { current.append(t.text); continue; }
-                if (".".equals(t.text)) { current.append("."); continue; }
             }
-            current.append(t.text);
         }
-        if (current.length() > 0) result.add(current.toString().trim());
-        List<String> types = new ArrayList<>();
-        for (String p : result) {
-            String[] parts = p.split("\\s+");
-            if (parts.length >= 2) {
-                StringBuilder type = new StringBuilder();
-                for (int k = 0; k < parts.length - 1; k++) {
-                    if (k > 0) type.append(" ");
-                    type.append(parts[k]);
-                }
-                types.add(type.toString());
-            } else {
-                types.add(p);
-            }
+        if (segStart < closeIdx) paramRanges.add(new int[]{segStart, closeIdx});
+
+        for (int[] range : paramRanges) {
+            String type = extractTypeFromParam(range[0], range[1]);
+            if (type != null && !type.isEmpty()) types.add(type);
         }
         return types;
     }
 
-    /**
-     * ★ 修复：同理，原代码 `".equals(t.text))".equals(t.text) || ">".equals(t.text)`
-     * 应拆分为 `")".equals(t.text) || ">".equals(t.text)`。
-     */
+    private String extractTypeFromParam(int start, int end) {
+        int i = start;
+        // 跳过 final
+        while (i < end && tokens.get(i).type == TokenType.KEYWORD && "final".equals(tokens.get(i).text)) i++;
+
+        int depth = 0;
+        int lastIdentifierAtDepth0 = -1;
+        for (int j = i; j < end; j++) {
+            Token t = tokens.get(j);
+            if (t.type == TokenType.SYMBOL) {
+                if ("<".equals(t.text) || "[".equals(t.text)) depth++;
+                else if (">".equals(t.text) || "]".equals(t.text)) depth--;
+            } else if (t.type == TokenType.IDENTIFIER && depth == 0) {
+                lastIdentifierAtDepth0 = j;
+            }
+        }
+        int typeEnd = (lastIdentifierAtDepth0 > i) ? lastIdentifierAtDepth0 : end;
+        StringBuilder type = new StringBuilder();
+        for (int j = i; j < typeEnd; j++) type.append(tokens.get(j).text);
+        String t = type.toString();
+        // varargs 归一化为数组
+        if (t.endsWith("...")) t = t.substring(0, t.length() - 3) + "[]";
+        return t;
+    }
+
     private int countArgs(int openIdx, int closeIdx) {
         if (closeIdx <= openIdx + 1) return 0;
         int count = 1, depth = 0;
@@ -325,7 +309,7 @@ public class MethodExtractor {
             Token t = tokens.get(i);
             if (t.type == TokenType.SYMBOL) {
                 if ("(".equals(t.text) || "<".equals(t.text)) depth++;
-                else if (")".equals(t.text) || ">".equals(t.text)) depth--;   // ✅ 修复后
+                else if (")".equals(t.text) || ">".equals(t.text)) depth--;
                 else if (",".equals(t.text) && depth == 0) count++;
             }
         }

@@ -1,4 +1,3 @@
-// 文件路径: com.omni.business.assistance.codestat.controller.CodeAnalysisController
 package com.omni.business.assistance.codestat.controller;
 
 import com.omni.business.assistance.codestat.service.CodeAnalysisService;
@@ -29,19 +28,35 @@ public class CodeAnalysisController {
     private CodeAnalysisService codeAnalysisService;
 
     /**
-     * 返回默认配置
-     * GET /code/api/config
+     * 允许下载的根目录白名单：user.dir + java.io.tmpdir。
+     * 如需扩大到其他目录，在 application.properties 中配置
+     * code.analysis.download.allowed-roots=D:/a,D:/b 即可。
      */
+    private static Path[] allowedRoots() {
+        String extra = com.omni.framework.spring.config.ConfigLoader
+                .getProperty("code.analysis.download.allowed-roots", "");
+        java.util.List<Path> roots = new java.util.ArrayList<>();
+        roots.add(Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize());
+        String tmp = System.getProperty("java.io.tmpdir");
+        if (tmp != null && !tmp.isEmpty()) {
+            roots.add(Paths.get(tmp).toAbsolutePath().normalize());
+        }
+        if (!extra.isEmpty()) {
+            for (String s : extra.split(",")) {
+                if (!s.trim().isEmpty()) {
+                    roots.add(Paths.get(s.trim()).toAbsolutePath().normalize());
+                }
+            }
+        }
+        return roots.toArray(new Path[0]);
+    }
+
     @RequestMapping("/config")
     @ResponseBody
     public String getDefaultConfig() {
         return codeAnalysisService.getDefaultConfigJson();
     }
 
-    /**
-     * 执行代码分析（行数统计）
-     * GET /code/api/analyze?...
-     */
     @RequestMapping("/analyze")
     @ResponseBody
     public String analyze() {
@@ -49,10 +64,6 @@ public class CodeAnalysisController {
         return codeAnalysisService.analyze(params);
     }
 
-    /**
-     * 执行依赖分析（类依赖图）
-     * GET /code/api/dependencies?rootDir=...&extensions=java&...
-     */
     @RequestMapping("/dependencies")
     @ResponseBody
     public String getDependencies() {
@@ -60,10 +71,6 @@ public class CodeAnalysisController {
         return codeAnalysisService.analyzeDependencies(params);
     }
 
-    /**
-     * 查询某个类的直接依赖（出向）
-     * GET /code/api/dependencies/outgoing?className=com.example.A
-     */
     @RequestMapping("/dependencies/outgoing")
     @ResponseBody
     public String getOutgoingDependencies() {
@@ -73,17 +80,12 @@ public class CodeAnalysisController {
             return errorResponse("缺少 className 参数");
         }
         try {
-            Map<String, Object> result = codeAnalysisService.getDirectDependencies(className, params);
-            return JsonUtil.toJson(result);
+            return JsonUtil.toJson(codeAnalysisService.getDirectDependencies(className, params));
         } catch (Exception e) {
             return errorResponse(e.getMessage());
         }
     }
 
-    /**
-     * 查询哪些类依赖了某个类（入向）
-     * GET /code/api/dependencies/incoming?className=com.example.A
-     */
     @RequestMapping("/dependencies/incoming")
     @ResponseBody
     public String getIncomingDependencies() {
@@ -93,16 +95,16 @@ public class CodeAnalysisController {
             return errorResponse("缺少 className 参数");
         }
         try {
-            Map<String, Object> result = codeAnalysisService.getInverseDependencies(className, params);
-            return JsonUtil.toJson(result);
+            return JsonUtil.toJson(codeAnalysisService.getInverseDependencies(className, params));
         } catch (Exception e) {
             return errorResponse(e.getMessage());
         }
     }
 
     /**
-     * 下载合并文件（原有功能）
-     * GET /code/api/download?filePath=...
+     * 下载合并文件。
+     * 修复：原实现先 normalize() 再 contains("..")，normalize 后几乎不可能包含 ".."，
+     *      导致任意文件可读。改为“白名单根目录 startsWith 校验”。
      */
     @RequestMapping("/download")
     public void downloadFile() throws Exception {
@@ -144,10 +146,26 @@ public class CodeAnalysisController {
             return;
         }
 
-        Path requestedPath = Paths.get(rawPath).normalize();
-        if (requestedPath.toString().contains("..")) {
+        // ★ [P0] 白名单校验
+        Path requestedPath;
+        try {
+            requestedPath = Paths.get(rawPath).toAbsolutePath().normalize();
+        } catch (Exception e) {
+            response.setStatus(400, "Bad Request");
+            response.write("Invalid path: " + e.getMessage());
+            response.send();
+            return;
+        }
+        boolean allowed = false;
+        for (Path root : allowedRoots()) {
+            if (requestedPath.startsWith(root)) {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed) {
             response.setStatus(403, "Forbidden");
-            response.write("Access denied: illegal path sequence");
+            response.write("Access denied: path outside allowed roots. Configure 'code.analysis.download.allowed-roots' if needed.");
             response.send();
             return;
         }
@@ -182,10 +200,11 @@ public class CodeAnalysisController {
         }
     }
 
+    /** ★ [P0] 统一错误格式：始终返回 JSON 结构 */
     private String errorResponse(String msg) {
         Map<String, Object> res = new HashMap<>();
         res.put("success", false);
-        res.put("error", msg);
+        res.put("error", msg == null ? "未知错误" : msg);
         return JsonUtil.toJson(res);
     }
 }

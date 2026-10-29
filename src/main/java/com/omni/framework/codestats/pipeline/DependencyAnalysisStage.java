@@ -8,11 +8,9 @@ import com.omni.framework.codestats.dependency.model.ExtractedResult;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class DependencyAnalysisStage implements Stage<List<Path>, DependencyResult> {
     private static final Logger log = LoggerFactory.getLogger(DependencyAnalysisStage.class);
@@ -32,61 +30,60 @@ public class DependencyAnalysisStage implements Stage<List<Path>, DependencyResu
         }
 
         long startTime = System.currentTimeMillis();
-
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        Map<String, ClassInfo> allClassInfo = new HashMap<>();
+        DependencyGraph globalGraph = new DependencyGraph();
         List<Future<ExtractedResult>> futures = new ArrayList<>();
+        List<String> failedFiles = Collections.synchronizedList(new ArrayList<>());
 
         for (Path file : files) {
             futures.add(executor.submit(() -> {
+                if (Thread.currentThread().isInterrupted()) return null;
                 try {
                     return extractor.extract(file);
-                } catch (IOException e) {
-                    log.error("解析文件失败: {}", file, e);
-                    return null;  // 返回 null 表示失败
+                } catch (Exception e) {
+                    failedFiles.add(file + " : " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                    return null;
                 }
             }));
         }
 
-        Map<String, ClassInfo> allClassInfo = new HashMap<>();
-        DependencyGraph globalGraph = new DependencyGraph();
-
-        int totalTasks = futures.size();
         int completed = 0;
-        for (Future<ExtractedResult> future : futures) {
+        for (int i = 0; i < futures.size(); i++) {
+            Future<ExtractedResult> f = futures.get(i);
             try {
-                ExtractedResult result = future.get(30, TimeUnit.SECONDS);
-                completed++;
-                if (result != null && result.getClassInfo() != null) {
-                    ClassInfo info = result.getClassInfo();
+                ExtractedResult r = f.get(60, TimeUnit.SECONDS);
+                if (r != null && r.getClassInfo() != null) {
+                    ClassInfo info = r.getClassInfo();
                     allClassInfo.put(info.getFullyQualifiedName(), info);
-                    for (String dep : result.getDependencies()) {
-                        // ★ 防御：addDependency 内部已做 null 检查
+                    for (String dep : r.getDependencies()) {
                         globalGraph.addDependency(info.getFullyQualifiedName(), dep);
                     }
                 }
+                completed++;
+            } catch (TimeoutException e) {
+                f.cancel(true);
+                failedFiles.add(files.get(i) + " : 解析超时(60s)");
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                log.warn("依赖分析被中断，已处理 {}/{} 个文件", completed, totalTasks);
                 break;
             } catch (ExecutionException e) {
-                log.error("解析任务执行异常", e);
-            } catch (TimeoutException e) {
-                log.warn("单个文件解析超时 (30s)，已处理 {}/{} 个文件", completed, totalTasks);
-                future.cancel(true);
+                failedFiles.add(files.get(i) + " : " + e.getCause());
             }
         }
 
         executor.shutdownNow();
         try {
-            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                log.warn("线程池未在 5 秒内完全终止");
-            }
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) log.warn("线程池未在 5 秒内终止");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
 
         long elapsed = System.currentTimeMillis() - startTime;
-        log.info("依赖分析完成，共分析 {} 个文件，成功 {} 个，耗时 {} ms", files.size(), completed, elapsed);
-        return new DependencyResult(allClassInfo, globalGraph, elapsed);
+        log.info("依赖分析完成，共 {} 个文件，成功 {} 个，失败 {} 个，耗时 {} ms",
+                files.size(), completed, failedFiles.size(), elapsed);
+        DependencyResult result = new DependencyResult(allClassInfo, globalGraph, elapsed);
+        result.setFailedFiles(failedFiles);
+        return result;
     }
 }

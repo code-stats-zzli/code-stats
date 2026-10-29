@@ -13,10 +13,15 @@
     const menuItems = document.querySelectorAll('.menu-item');
     const deployView = document.getElementById('deployView');
     const chatView = document.getElementById('chatView');
+    // ★ 新增：开源工具视图
+    const opensourceView = document.getElementById('opensourceView');
 
     function switchView(viewId) {
         deployView.classList.toggle('active', viewId === 'deploy');
         chatView.classList.toggle('active', viewId === 'chat');
+        if (opensourceView) {
+            opensourceView.classList.toggle('active', viewId === 'opensource');
+        }
         menuItems.forEach(item => {
             item.classList.toggle('active', item.dataset.view === viewId);
         });

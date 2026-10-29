@@ -23,6 +23,11 @@
                 <span class="menu-icon">⚙️</span>
                 <span>AI 部署</span>
             </li>
+            <!-- ★ 新增：开源工具入口（原独立 tab 迁移至此） -->
+            <li class="menu-item" data-view="opensource">
+                <span class="menu-icon">🧰</span>
+                <span>开源工具</span>
+            </li>
         </ul>
     </aside>
 
@@ -109,6 +114,14 @@
                 <button id="runModelBtn" class="btn btn-secondary">▶️ 运行模型</button>
                 <div id="runResult" class="status-area"></div>
             </div>
+        </div>
+
+        <!-- ★ 新增：开源工具视图（iframe 嵌入原 opensource.html，避免 DOM/CSS 冲突） -->
+        <div id="opensourceView" class="view-pane">
+            <iframe id="opensourceFrame"
+                    src="../opensource/opensource.html"
+                    class="opensource-iframe"
+                    title="开源工具"></iframe>
         </div>
     </main>
 </div>

@@ -210,3 +210,18 @@
 #customUrlGroup {
     transition: all 0.2s;
 }
+
+/* ===== 新增：开源工具视图（iframe 嵌入原 opensource.html） ===== */
+#opensourceView.active {
+    display: block;
+    height: calc(100vh - 120px);
+    overflow: hidden;
+}
+#opensourceView .opensource-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: transparent;
+    display: block;
+    border-radius: 24px;
+}

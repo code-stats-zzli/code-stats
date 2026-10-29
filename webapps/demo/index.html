@@ -42,9 +42,7 @@
         <button class="topbar-tab" data-tab="agent">
             <span class="tab-icon">🧠</span> Agent
         </button>
-        <button class="topbar-tab" data-tab="opensource">
-            <span class="tab-icon">🧰</span> 开源工具
-        </button>
+        <!-- ★ 已移除：「开源工具」独立 tab，已迁移到 Agent 模块内 -->
         <button class="topbar-tab" data-tab="apiexplorer">
             <span class="tab-icon">🔌</span> API 调试
         </button>
@@ -82,11 +80,10 @@
         <iframe id="iframeCodeStats" src="code/codeStats.html" title="代码分析" class="panel-iframe"></iframe>
     </div>
     <div class="tab-panel" id="panel-agent">
+        <!-- ★ Agent 内部现在包含「开源工具」子视图，无需独立 iframe -->
         <iframe id="iframeAgent" src="agent/agent.html" title="AI Agent" class="panel-iframe"></iframe>
     </div>
-    <div class="tab-panel" id="panel-opensource">
-        <iframe id="iframeOpensource" src="opensource/opensource.html" title="开源工具" class="panel-iframe"></iframe>
-    </div>
+    <!-- ★ 已删除：panel-opensource（开源工具已迁移至 Agent 模块内） -->
     <div class="tab-panel" id="panel-apiexplorer">
         <iframe src="apiexplorer/index.html" class="panel-iframe" title="API调试"></iframe>
     </div>

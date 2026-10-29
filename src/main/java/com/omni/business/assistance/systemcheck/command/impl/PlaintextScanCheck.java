@@ -55,7 +55,9 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
     public List<Finding> execute(SystemCheckContext ctx) throws Exception {
         List<Finding> list = new ArrayList<>();
         CheckConfig cfg = ctx.getConfig();
-        List<String> hits = new ArrayList<>();
+
+        // ★ 改为结构化命中，便于排序
+        List<HitInfo> hits = new ArrayList<>();
         List<String> docFiles = new ArrayList<>();
 
         String home = System.getProperty("user.home", "");
@@ -66,11 +68,11 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
         }
 
         long maxFile = cfg.getModuleLong("plaintext-scan", "maxFileSize", 15L * 1024 * 1024);
-        long maxDoc = cfg.getModuleLong("plaintext-scan", "maxDocSize", 3L * 1024 * 1024);
+        long maxDoc  = cfg.getModuleLong("plaintext-scan", "maxDocSize",  3L * 1024 * 1024);
         Set<String> textExts = new HashSet<>(cfg.getModuleList("plaintext-scan", "textExtensions", defaultTextExts()));
-        Set<String> docExts = new HashSet<>(cfg.getModuleList("plaintext-scan", "docExtensions", defaultDocExts()));
-        Set<String> skipDirs = new HashSet<>(cfg.getModuleList("plaintext-scan", "skipDirs", defaultSkipDirs()));
-        List<String> skipKws = cfg.getModuleList("plaintext-scan", "skipKeywords", defaultSkipKeywords());
+        Set<String> docExts  = new HashSet<>(cfg.getModuleList("plaintext-scan", "docExtensions",  defaultDocExts()));
+        Set<String> skipDirs = new HashSet<>(cfg.getModuleList("plaintext-scan", "skipDirs",        defaultSkipDirs()));
+        List<String> skipKws = cfg.getModuleList("plaintext-scan", "skipKeywords",      defaultSkipKeywords());
         List<String> placeholders = cfg.getModuleList("plaintext-scan", "placeholderBrackets",
                 Arrays.asList("{}", "<>", "()"));
         String assignRegex = cfg.getModuleString("plaintext-scan", "assignRegex", defaultAssignRegex());
@@ -85,13 +87,14 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
         }
 
         final Pattern finalPattern = assignPattern;
-        final List<String> finalSkipKws = skipKws;
+        final List<String> finalSkipKws      = skipKws;
         final List<String> finalPlaceholders = placeholders;
 
         try {
             Files.walkFileTree(rootPath, new SimpleFileVisitor<Path>() {
                 @Override
-                public FileVisitResult preVisitDirectory(Path dir, java.nio.file.attribute.BasicFileAttributes attrs) {
+                public FileVisitResult preVisitDirectory(Path dir,
+                                                         java.nio.file.attribute.BasicFileAttributes attrs) {
                     if (ctx.isCancelled()) return FileVisitResult.TERMINATE;
                     String name = dir.getFileName() == null ? "" : dir.getFileName().toString().toLowerCase();
                     if (skipDirs.contains(name)) return FileVisitResult.SKIP_SUBTREE;
@@ -99,7 +102,8 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
                 }
 
                 @Override
-                public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) {
+                public FileVisitResult visitFile(Path file,
+                                                 java.nio.file.attribute.BasicFileAttributes attrs) {
                     if (ctx.isCancelled()) return FileVisitResult.TERMINATE;
                     String name = file.getFileName().toString().toLowerCase();
                     long len = attrs.size();
@@ -107,7 +111,6 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
                     try {
                         if (textExts.contains(ext)) {
                             if (len > maxFile) return FileVisitResult.CONTINUE;
-                            // ★ 新增：上报当前正在检查的文件（仅真正会被读取的文件才上报）
                             ctx.reportProgress(file.getFileName().toString());
 
                             String content = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
@@ -115,23 +118,39 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
                             int cnt = 0;
                             while (m.find() && cnt < 5) {
                                 String g = m.group();
-                                String val = g.replaceFirst("^[^:=：]*[:=：]\\s*", "");
-                                if (isPlaceholder(val, finalPlaceholders)) { cnt++; continue; }
+                                String rawVal = g.replaceFirst("^[^:=：]*[:=：]\\s*", "");
+
+                                // ★ 去掉引号包裹，让长度/加密判定更准确
+                                String pwdVal = rawVal.trim();
+                                if (pwdVal.length() >= 2) {
+                                    char first = pwdVal.charAt(0);
+                                    char last  = pwdVal.charAt(pwdVal.length() - 1);
+                                    if ((first == '"'  && last == '"')
+                                            || (first == '\'' && last == '\'')) {
+                                        pwdVal = pwdVal.substring(1, pwdVal.length() - 1);
+                                    }
+                                }
+
+                                // 占位符用去引号后的值判断更准确
+                                if (isPlaceholder(pwdVal, finalPlaceholders)) { cnt++; continue; }
+
                                 int start = m.start();
                                 int lineStart = content.lastIndexOf('\n', start);
-                                int lineEnd = content.indexOf('\n', start);
+                                int lineEnd   = content.indexOf('\n', start);
                                 if (lineEnd < 0) lineEnd = content.length();
                                 String line = content.substring(lineStart + 1, lineEnd).trim();
+
                                 boolean skip = false;
                                 for (String kw : finalSkipKws) {
                                     if (line.contains(kw)) { skip = true; break; }
                                 }
-                                if (!skip) hits.add(file + " : " + line);
+                                if (!skip) {
+                                    hits.add(new HitInfo(file.toString(), line, pwdVal));
+                                }
                                 cnt++;
                             }
                         } else if (docExts.contains(ext)) {
                             if (len > maxDoc) return FileVisitResult.CONTINUE;
-                            // ★ 新增：上报当前正在检查的文档
                             ctx.reportProgress(file.getFileName().toString());
 
                             byte[] b = Files.readAllBytes(file);
@@ -156,11 +175,21 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
             return list;
         }
 
+        // ★ 排序：明文在前 → 短密码在前 → 疑似加密/密钥靠后 → 同条件按文件路径稳定
+        hits.sort(Comparator
+                .comparing((HitInfo h) -> h.encryptedLike)   // false(明文) 在前，true(加密) 在后
+                .thenComparingInt(h -> h.passwordLen)        // 同分类下，短密码排前面
+                .thenComparing(h -> h.file));                // 兜底稳定排序
+
         if (hits.isEmpty()) {
             list.add(new Finding("明文密码", "配置文件明文密码扫描", "合规", "信息", "未发现疑似明文密码"));
         } else {
-            for (String h : hits) {
-                list.add(new Finding("明文密码", "配置文件疑似明文凭据", "不合规", "高", h));
+            for (HitInfo h : hits) {
+                String tag = h.encryptedLike
+                        ? " [疑似加密/密钥,len=" + h.passwordLen + "]"
+                        : " [明文,len=" + h.passwordLen + "]";
+                list.add(new Finding("明文密码", "配置文件疑似明文凭据", "不合规", "高",
+                        h.file + " : " + h.line + tag));
             }
         }
         if (!docFiles.isEmpty()) {
@@ -170,11 +199,13 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
         return list;
     }
 
+    // ==================== 辅助方法 ====================
+
     private boolean isPlaceholder(String v, List<String> placeholders) {
         if (v == null || v.isEmpty()) return false;
         for (String bracket : placeholders) {
             if (bracket.length() != 2) continue;
-            char open = bracket.charAt(0);
+            char open  = bracket.charAt(0);
             char close = bracket.charAt(1);
             if (v.charAt(0) == open && v.indexOf(close) > 0) return true;
         }
@@ -197,7 +228,53 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
         return sb.toString();
     }
 
-    // 默认值
+    /**
+     * ★ 结构化命中信息
+     *   passwordLen   = 去掉 key、去掉引号后的密码值长度
+     *   encryptedLike = 是否像"加密 / 密钥"（长度长且字符集像 hash/base64/key）
+     */
+    private static class HitInfo {
+        final String file;
+        final String line;
+        final String password;
+        final int passwordLen;
+        final boolean encryptedLike;
+
+        HitInfo(String file, String line, String password) {
+            this.file = file;
+            this.line = line;
+            this.password = password;
+            this.passwordLen = password == null ? 0 : password.length();
+            this.encryptedLike = isLikelyEncrypted(password);
+        }
+
+        /**
+         * 判断是否像"加密 / 密钥"：
+         *  - 长度 < 16              → 明文
+         *  - 含非 [A-Za-z0-9+/=_-]  → 明文（有特殊符号说明是人写的口令）
+         *  - 同时含字母 + 数字      → base64 / hex / UUID，视为疑似加密
+         *  - 纯字母或纯数字且长度 ≥ 32 → 密钥 / 哈希
+         * 其余 → 明文
+         */
+        private static boolean isLikelyEncrypted(String pwd) {
+            if (pwd == null) return false;
+            int len = pwd.length();
+            if (len < 16) return false;
+            if (!pwd.matches("[A-Za-z0-9+/=_-]+")) return false;
+
+            boolean hasLetter = false, hasDigit = false;
+            for (int i = 0; i < len; i++) {
+                char c = pwd.charAt(i);
+                if (c >= '0' && c <= '9') hasDigit = true;
+                else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) hasLetter = true;
+                if (hasLetter && hasDigit) break;
+            }
+            if (hasLetter && hasDigit) return true;  // 字母数字混合 → 基本是 hash/base64
+            return len >= 32;                        // 单类字符但很长 → 密钥
+        }
+    }
+
+    // ==================== 默认值 ====================
     private static List<String> defaultKeywords() {
         return Arrays.asList("password", "passwd", "pwd", "access_key", "api_key",
                 "private_key", "密钥", "密码", "口令", "账号", "账户", "secret", "token", "credential");
@@ -222,6 +299,7 @@ public class PlaintextScanCheck extends AbstractSystemCheckCommand {
         return "(?i)(password|passwd|pwd|access[_]?key|api[_]?key|private[_]?key|密钥|密码|口令|账号|账户|secret|token|credential)\\s*[:=：]\\s*\\S+";
     }
 
+    // ==================== 配置字段工具 ====================
     private Map<String, Object> field(String key, String label, String type, Object value, String hint) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("key", key); m.put("label", label); m.put("type", type);

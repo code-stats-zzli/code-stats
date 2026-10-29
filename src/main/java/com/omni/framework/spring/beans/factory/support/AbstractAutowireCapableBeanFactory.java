@@ -1,5 +1,7 @@
 package com.omni.framework.spring.beans.factory.support;
 
+import com.omni.framework.log.LoggerFactory;
+import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Primary;
 import com.omni.framework.spring.annotation.Qualifier;
@@ -9,6 +11,9 @@ import java.lang.reflect.Field;
 import java.util.Map;
 
 public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory {
+
+    // ★ 修复1：新增 logger，替换 System.out.println
+    private static final Logger log = LoggerFactory.getLogger(AbstractAutowireCapableBeanFactory.class);
 
     protected Object createBean(String beanName, BeanDefinition bd) throws Exception {
         // 1. 实例化
@@ -27,9 +32,11 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
         if (bd.getBeanClass() == null) {
             bd.setBeanClass(Class.forName(bd.getBeanClassName()));
         }
-        System.out.println("Instantiating bean: " + bd.getBeanClass().getName());
+        // ★ 修复1：改用日志框架（原 System.out.println 不受 log-config.xml 控制）
+        log.debug("Instantiating bean: {}", bd.getBeanClass().getName());
         return bd.getBeanClass().getDeclaredConstructor().newInstance();
     }
+
     protected void populateBean(Object bean, BeanDefinition bd) throws Exception {
         for (Field field : bean.getClass().getDeclaredFields()) {
             if (field.isAnnotationPresent(Autowired.class)) {

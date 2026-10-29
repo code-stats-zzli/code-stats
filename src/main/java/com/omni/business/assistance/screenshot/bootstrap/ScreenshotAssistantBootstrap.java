@@ -91,12 +91,8 @@ public class ScreenshotAssistantBootstrap {
 
                 try {
                     tray.add(trayIcon);
-                    // ★ 启动时弹一次托盘提示，告诉用户快捷键
-                    trayIcon.displayMessage(
-                            "截图助手已启动",
-                            "按 Ctrl+Shift+S 显示工具栏，或双击托盘图标",
-                            TrayIcon.MessageType.INFO
-                    );
+                    // ★ 修复3：移除启动弹窗，改为日志输出，避免打扰
+                    log.info("截图助手已启动，按 Ctrl+Shift+S 显示工具栏，或双击托盘图标");
                 } catch (AWTException e) {
                     log.error("托盘添加失败", e);
                 }
@@ -131,7 +127,6 @@ public class ScreenshotAssistantBootstrap {
         addMenuItem(trayMenu, "显示/隐藏工具栏", itemFont, () -> toolbar.setVisible(!toolbar.isVisible()));
         trayMenu.addSeparator();
         addMenuItem(trayMenu, "全屏截图", itemFont, () -> toolbar.doFullScreenCapture());
-        // ★ 「实时全屏」已被替换为「文字识别」
         addMenuItem(trayMenu, "文字识别", itemFont, () -> toolbar.doOcrCapture());
         addMenuItem(trayMenu, "区域截图", itemFont, () -> toolbar.doAreaCapture());
         trayMenu.addSeparator();

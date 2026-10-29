@@ -37,8 +37,7 @@ public class SpringApplication {
         printBanner();
         log.info("Omni startup time: {} ms", System.currentTimeMillis() - startTime);
 
-        // 4. ★ 执行所有业务扩展点（ApplicationRunner）
-        //    框架层不再硬编码 ScreenshotAssistantBootstrap 等业务逻辑
+        // 4. 执行所有业务扩展点（ApplicationRunner）
         executeApplicationRunners(context, args);
 
         // 5. 优雅关闭
@@ -64,6 +63,9 @@ public class SpringApplication {
             log.warn("Main thread interrupted");
         }
         log.info("Application shutdown complete.");
+
+        // ★ 修复2：强制退出 JVM，防止 Swing EDT 等非守护线程残留导致需要点两次 Stop
+        System.exit(0);
     }
 
     /**

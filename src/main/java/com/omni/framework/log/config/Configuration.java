@@ -112,17 +112,21 @@ public class Configuration {
     }
 
     private Appender createAppender(String className, Element elem, Map<String, String> props) throws Exception {
-        if ("com.framework.log.appender.ConsoleAppender".equals(className)) {
+        if ("com.framework.log.appender.ConsoleAppender".equals(className)
+                || "com.omni.framework.log.appender.ConsoleAppender".equals(className)) {
             return new ConsoleAppender();
-        } else if ("com.framework.log.appender.FileAppender".equals(className)) {
+        } else if ("com.framework.log.appender.FileAppender".equals(className)
+                || "com.omni.framework.log.appender.FileAppender".equals(className)) {
             String file = getParamValue(elem, "file", props);
             return new FileAppender(file);
-        } else if ("com.framework.log.appender.RollingFileAppender".equals(className)) {
+        } else if ("com.framework.log.appender.RollingFileAppender".equals(className)
+                || "com.omni.framework.log.appender.RollingFileAppender".equals(className)) {
             String file = getParamValue(elem, "file", props);
             long maxSize = parseSize(getParamValue(elem, "maxFileSize", props));
             int maxBackup = Integer.parseInt(getParamValue(elem, "maxBackupIndex", props));
             return new RollingFileAppender(file, maxSize, maxBackup);
-        } else if ("com.framework.log.appender.AsyncAppender".equals(className)) {
+        } else if ("com.framework.log.appender.AsyncAppender".equals(className)
+                || "com.omni.framework.log.appender.AsyncAppender".equals(className)) {
             int queueSize = Integer.parseInt(getParamValue(elem, "queueSize", props));
             NodeList refs = elem.getElementsByTagName("appender-ref");
             if (refs.getLength() == 0) throw new IllegalArgumentException("AsyncAppender missing delegate appender");
@@ -170,7 +174,8 @@ public class Configuration {
     }
 
     /**
-     * 创建默认配置（仅控制台输出，级别 INFO）
+     * 创建默认配置（仅控制台输出）
+     * ★ 修复：默认级别从 INFO 改为 DEBUG，使 log.debug(...) 也能输出
      */
     public void useDefaultConsoleConfig() {
         PatternLayout layout = new PatternLayout("%d [%t] %-5level %logger - %msg%n");
@@ -179,7 +184,8 @@ public class Configuration {
         console.setName("CONSOLE");
         appenders.put("CONSOLE", console);
 
-        rootConfig = new LoggerConfig("ROOT", Level.INFO, true);
+        // ★ 修复：改为 DEBUG（之前是 INFO，导致 Instantiating bean 等 debug 日志不输出）
+        rootConfig = new LoggerConfig("ROOT", Level.DEBUG, true);
         rootConfig.addAppender(console);
     }
 

@@ -23,18 +23,27 @@ public class Connector implements Lifecycle {
     private ExecutorService threadPool;
     private volatile boolean running;
     private ServerSocket serverSocket;
+    private Thread listenerThread;   // ★ 新增：保留监听线程引用
 
     public Connector(int port) { this.port = port; }
 
     public void setService(Service service) { this.service = service; }
 
     @Override
-    public void init() { threadPool = Executors.newCachedThreadPool(); }
+    public void init() {
+        // ★ 修复2：所有工作线程设为守护线程，JVM 可以正常退出
+        threadPool = Executors.newCachedThreadPool(r -> {
+            Thread t = new Thread(r, "tomcat-connector-worker");
+            t.setDaemon(true);
+            return t;
+        });
+    }
 
     @Override
     public void start() {
         running = true;
-        new Thread(() -> {
+        // ★ 修复2：监听线程也设为守护线程，避免阻塞 JVM 退出（原先非守护线程需手动 stop 才能退出）
+        listenerThread = new Thread(() -> {
             try {
                 serverSocket = new ServerSocket(port);
                 log.info("Connector listening on {}", port);
@@ -56,7 +65,9 @@ public class Connector implements Lifecycle {
             } catch (IOException e) {
                 log.error("Connector error", e);
             }
-        }).start();
+        }, "tomcat-connector-listener");
+        listenerThread.setDaemon(true);
+        listenerThread.start();
     }
 
     private void process(Socket socket) {

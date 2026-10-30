@@ -154,6 +154,10 @@ public class Configuration {
         for (Map.Entry<String, String> e : props.entrySet()) {
             val = val.replace("${" + e.getKey() + "}", e.getValue());
         }
+        // ★ 额外支持系统属性占位符，让配置路径也能跨机器
+        val = val.replace("${user.home}", System.getProperty("user.home", "."))
+                .replace("${user.dir}",  System.getProperty("user.dir",  "."))
+                .replace("${java.io.tmpdir}", System.getProperty("java.io.tmpdir", "."));
         return val;
     }
 

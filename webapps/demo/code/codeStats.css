@@ -67,7 +67,7 @@ body {
     background: transparent;
 }
 
-/* ========== 目录树面板（★ 窄化：260 → 220） ========== */
+/* ========== 目录树面板 ========== */
 .dir-tree-panel {
     width: 220px;
     flex-shrink: 0;
@@ -111,7 +111,6 @@ body {
     border-radius: 8px;
     transition: outline 0.2s;
 }
-/* ★ 拾取模式下高亮整个目录树容器 */
 .dir-tree-wrapper.picking-mode {
     outline: 2px dashed var(--accent-primary);
     outline-offset: -4px;
@@ -231,7 +230,6 @@ body {
     cursor: pointer;
 }
 
-/* ★ 目录选择按钮 */
 .dir-picker-btn {
     background: rgba(0, 102, 255, 0.08);
     border: 1px solid rgba(0, 102, 255, 0.3);
@@ -495,3 +493,230 @@ body {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0, 102, 255, 0.4); border-radius: 4px; }
+
+/* ================================================================== */
+/* ==================== 代码导入面板（新增） ==================== */
+/* ================================================================== */
+.import-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 20px;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+}
+.import-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(0, 102, 255, 0.15);
+    border-radius: 16px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.import-input-card { flex-shrink: 0; }
+.import-main-card {
+    flex: 1;
+    flex-direction: row;
+    padding: 0;
+    overflow: hidden;
+    min-height: 0;
+}
+.import-action-card { flex-shrink: 0; }
+
+.import-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed rgba(0, 102, 255, 0.15);
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    flex-shrink: 0;
+}
+.import-toolbar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.import-toolbar .btn-sm,
+.import-card-header .btn-sm {
+    padding: 4px 12px;
+    font-size: 12px;
+    border-radius: 16px;
+}
+
+.import-md-input {
+    width: 100%;
+    height: 140px;
+    padding: 10px 14px;
+    border: 1px solid rgba(0, 102, 255, 0.3);
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: #f8fafc;
+    color: #1e293b;
+    resize: vertical;
+    outline: none;
+}
+.import-md-input:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+}
+
+.import-status {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+    min-height: 16px;
+}
+
+/* 主区域：左树 + 右预览 */
+.import-main-tree,
+.import-main-preview {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+}
+.import-main-tree {
+    width: 380px;
+    flex-shrink: 0;
+    border-right: 1px solid rgba(0, 102, 255, 0.15);
+}
+.import-main-tree .import-card-header {
+    padding: 10px 14px 8px;
+    margin: 0;
+    border-bottom: 1px solid rgba(0, 102, 255, 0.1);
+}
+.import-main-preview {
+    flex: 1;
+}
+.import-main-preview .import-card-header {
+    padding: 10px 14px 8px;
+    margin: 0;
+    border-bottom: 1px solid rgba(0, 102, 255, 0.1);
+}
+
+.import-file-tree {
+    flex: 1;
+    overflow: auto;
+    padding: 8px 10px;
+    font-size: 13px;
+    min-height: 0;
+}
+.import-tree-footer {
+    padding: 6px 14px;
+    border-top: 1px solid rgba(0, 102, 255, 0.1);
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    font-family: monospace;
+}
+.import-preview-content {
+    flex: 1;
+    margin: 0;
+    padding: 12px 16px;
+    background: #0a0f1a;
+    color: #e2e8f0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    line-height: 1.55;
+    overflow: auto;
+    white-space: pre;
+    min-height: 0;
+}
+
+/* 导入树节点 */
+.tn-dir, .tn-file {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    user-select: none;
+}
+.tn-dir:hover, .tn-file:hover { background: rgba(0, 102, 255, 0.08); }
+.tn-file.active { background: var(--accent-primary); color: #fff; }
+.tn-file.active .tn-meta { color: #e2e8f0; }
+.tn-toggle {
+    width: 14px;
+    text-align: center;
+    font-size: 10px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+.tn-icon { font-size: 14px; flex-shrink: 0; }
+.tn-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.tn-meta {
+    font-size: 10px;
+    color: #94a3b8;
+    font-family: monospace;
+    flex-shrink: 0;
+}
+.tn-children { padding-left: 16px; display: none; }
+.tn-children.open { display: block; }
+.tn-check {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    accent-color: var(--accent-primary);
+}
+
+/* 操作区 */
+.import-action-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.import-action-row .field-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-primary);
+}
+.import-action-row .field-input {
+    flex: 1;
+    min-width: 200px;
+    padding: 8px 12px;
+    border: 1px solid rgba(0, 102, 255, 0.3);
+    border-radius: 10px;
+    font-size: 13px;
+    background: #fff;
+    color: var(--text-dark);
+}
+.import-action-row .field-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+.import-action-row .btn-primary {
+    padding: 8px 24px;
+    border-radius: 20px;
+}
+.import-result {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: rgba(0, 102, 255, 0.05);
+    border-radius: 12px;
+    font-size: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+.import-result .res-line {
+    padding: 2px 0;
+    font-family: monospace;
+}
+.import-result .res-ok   { color: #15803d; }
+.import-result .res-skip { color: #b45309; }
+.import-result .res-err  { color: #dc2626; }

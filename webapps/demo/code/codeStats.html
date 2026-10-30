@@ -18,6 +18,7 @@
             <li class="mode-item" data-mode="webspider">🕷️ 网页爬虫</li>
             <li class="mode-item" data-mode="questionbank">📚 题库分析</li>
             <li class="mode-item" data-mode="systemcheck">🛡️ 系统检查</li>
+            <li class="mode-item" data-mode="import">📥 代码导入</li>
         </ul>
     </aside>
 
@@ -65,7 +66,6 @@
                         <input type="text" id="extraPaths" placeholder="点击右侧 📁 追加目录，可多次添加；此路径内文件不受扩展名限制">
                         <button class="dir-picker-btn" data-target="extraPaths" title="点击后在左侧目录树选择目录（可连续添加）">📁</button>
                     </div>
-                    <!-- ★ 新增：.gitignore 开关，默认关闭以保持旧行为 -->
                     <div class="form-row full-width">
                         <label>启用 .gitignore 过滤:</label>
                         <input type="checkbox" id="useGitIgnore">
@@ -181,8 +181,95 @@
     <main class="workspace fullscreen" id="systemcheckWorkspace" style="display: none;">
         <iframe id="systemcheckFrame" src="../systemcheck/systemcheck.html" title="系统检查"></iframe>
     </main>
+
+    <!-- ============ 代码导入工作区 ============ -->
+    <main class="workspace" id="importWorkspace" style="display: none;">
+        <aside class="dir-tree-panel">
+            <div class="dir-panel-header">
+                <span>📂 目标根目录选择</span>
+                <button id="importRefreshTreeBtn" class="mini-btn" title="刷新">🔄</button>
+            </div>
+            <div class="dir-tree-wrapper" id="importDirTree">
+                <div class="loading">加载中...</div>
+            </div>
+            <div class="dir-panel-footer">
+                <div class="dir-current-tip" id="importDirTip">点击目录作为导入目标根</div>
+            </div>
+        </aside>
+
+        <div class="import-panel">
+            <!-- 1. 内容输入 -->
+            <section class="import-card import-input-card">
+                <div class="import-card-header">
+                    <span>📥 内容输入</span>
+                    <div class="import-toolbar">
+                        <button id="importPasteBtn" class="btn-secondary btn-sm">📋 粘贴</button>
+                        <button id="importUploadBtn" class="btn-secondary btn-sm">📂 上传</button>
+                        <input type="file" id="importFileInput" accept=".md,.txt,.markdown,.log" style="display:none;">
+                        <button id="importClearBtn" class="btn-secondary btn-sm">🗑️ 清空</button>
+                        <select id="importFormatSelect" class="btn-sm" style="padding:4px 10px;">
+                            <option value="auto">自动识别</option>
+                        </select>
+                        <button id="importParseBtn" class="btn-primary btn-sm">🔍 解析</button>
+                    </div>
+                </div>
+                <textarea id="importMdInput" class="import-md-input"
+                          placeholder="粘贴 AI 输出的 Markdown（```file:path / ```omni-pack）或合并文件内容（// ======== path ========）"></textarea>
+                <div id="importParseStatus" class="import-status"></div>
+            </section>
+
+            <!-- 2. 结构树 + 预览 -->
+            <section class="import-card import-main-card">
+                <div class="import-main-tree">
+                    <div class="import-card-header">
+                        <span>📂 解析结果</span>
+                        <div class="import-toolbar">
+                            <button id="importExpandAllBtn" class="btn-secondary btn-sm">展开</button>
+                            <button id="importCollapseAllBtn" class="btn-secondary btn-sm">折叠</button>
+                            <button id="importSelectAllBtn" class="btn-secondary btn-sm">全选</button>
+                            <button id="importSelectNoneBtn" class="btn-secondary btn-sm">全不选</button>
+                        </div>
+                    </div>
+                    <div id="importFileTree" class="import-file-tree">
+                        <div class="empty-tip">尚未解析</div>
+                    </div>
+                    <div class="import-tree-footer">
+                        <span id="importTreeSummary" class="summary-text">0 个文件</span>
+                    </div>
+                </div>
+                <div class="import-main-preview">
+                    <div class="import-card-header">
+                        <span id="importPreviewTitle">📄 文件预览</span>
+                        <div class="import-toolbar">
+                            <span id="importPreviewMeta" class="meta-text"></span>
+                            <button id="importCopyFileBtn" class="btn-secondary btn-sm">📋 复制</button>
+                        </div>
+                    </div>
+                    <pre id="importPreviewContent" class="import-preview-content"><div class="empty-tip">从左侧选择文件预览</div></pre>
+                </div>
+            </section>
+
+            <!-- 3. 操作区 -->
+            <section class="import-card import-action-card">
+                <div class="import-action-row">
+                    <label class="field-label">目标根目录:</label>
+                    <input type="text" id="importTargetRoot" class="field-input"
+                           placeholder="从左侧目录树选择，或手动输入绝对路径">
+                    <label class="field-label">冲突处理:</label>
+                    <select id="importConflictSelect" class="field-input" style="width:140px;">
+                        <option value="OVERWRITE" selected>覆盖（默认）</option>
+                        <option value="SKIP">跳过</option>
+                        <option value="RENAME">重命名</option>
+                    </select>
+                    <button id="importExecBtn" class="btn-primary" disabled>🚀 执行导入</button>
+                </div>
+                <div id="importResult" class="import-result" style="display:none;"></div>
+            </section>
+        </div>
+    </main>
 </div>
 
 <script src="codeStats.js"></script>
+<script src="codeImport.js"></script>
 </body>
 </html>

@@ -18,6 +18,7 @@
     const spiderWorkspace = document.getElementById('spiderWorkspace');
     const qbWorkspace = document.getElementById('qbWorkspace');
     const systemcheckWorkspace = document.getElementById('systemcheckWorkspace');
+    const importWorkspace = document.getElementById('importWorkspace');   // ★ 新增
 
     const serverDirTree = document.getElementById('serverDirTree');
     const serverRefreshTreeBtn = document.getElementById('serverRefreshTreeBtn');
@@ -89,12 +90,17 @@
         spiderWorkspace.style.display = 'none';
         qbWorkspace.style.display = 'none';
         if (systemcheckWorkspace) systemcheckWorkspace.style.display = 'none';
+        if (importWorkspace) importWorkspace.style.display = 'none';        // ★ 新增
 
         if (mode === 'server') serverWorkspace.style.display = 'flex';
         else if (mode === 'local') { localWorkspace.style.display = 'flex'; initLocalFileManager(); }
         else if (mode === 'webspider') spiderWorkspace.style.display = 'flex';
         else if (mode === 'questionbank') qbWorkspace.style.display = 'flex';
         else if (mode === 'systemcheck') systemcheckWorkspace.style.display = 'flex';
+        else if (mode === 'import') {                                        // ★ 新增
+            if (importWorkspace) importWorkspace.style.display = 'flex';
+            if (window.ImportModule && window.ImportModule.onShow) window.ImportModule.onShow();
+        }
     }
 
     modeList.addEventListener('click', (e) => {
@@ -298,7 +304,6 @@
     function toggleMergeRow() { mergeRow.style.display = mergeEnabledCheck.checked ? 'flex' : 'none'; }
     mergeEnabledCheck.addEventListener('change', toggleMergeRow);
 
-    // ★ base64 转换：先按 UTF-8 编码，再 btoa
     function utf8ToBase64(str) {
         const bytes = new TextEncoder().encode(str);
         let binary = '';
@@ -335,7 +340,6 @@
             if (data.error) { showMsg('❌ 分析失败：' + data.error); progressBar.style.display = 'none'; return; }
             renderResults(data);
 
-            // ★ 后端返回的 mergeOutput 已是归一化后的绝对路径，直接回填输入框
             if (data.mergeOutput && data.mergeOutput.trim() !== '') {
                 currentMergeFilePath = data.mergeOutput;
                 if (mergeOutputFileInput) mergeOutputFileInput.value = data.mergeOutput;
@@ -534,7 +538,7 @@
         URL.revokeObjectURL(url);
     }
 
-    // ==================== ★ 下载合并文件（修复版） ====================
+    // ==================== 下载合并文件 ====================
     async function downloadMergeFile() {
         if (!currentMergeFilePath) {
             showMsg('没有可用的合并文件，请先执行分析');
@@ -549,7 +553,6 @@
             return;
         }
 
-        // ★ 关键修复 1：base64 必须 encodeURIComponent，否则 + 会变成空格
         const downloadUrl = window.apiUrl(
             `/code/api/download?filePath=${encodeURIComponent(encodedPath)}&addTimestamp=false`
         );
@@ -561,7 +564,6 @@
             const response = await fetch(downloadUrl);
             const contentType = (response.headers.get('content-type') || '').toLowerCase();
 
-            // ★ 关键修复 2：非 200 或非二进制 → 解析 JSON 错误后提示
             if (!response.ok || !contentType.includes('application/octet-stream')) {
                 let errMsg = `HTTP ${response.status} ${response.statusText}`;
                 try {
@@ -578,7 +580,6 @@
                 return;
             }
 
-            // ★ 关键修复 3：从 Content-Disposition 解析真实文件名
             let filename = currentMergeFilePath.split(/[\\/]/).pop() || 'merged.txt';
             const cd = response.headers.get('content-disposition') || '';
             const m1 = cd.match(/filename\*=UTF-8''([^;]+)/i);
@@ -601,7 +602,6 @@
 
             showMsg('✅ 合并文件已开始下载：' + filename);
         } catch (err) {
-            // ★ 关键修复 4：fetch 失败（大文件内存/跨域/网络）→ 用 window.open 兜底
             console.error('[downloadMergeFile] fetch 失败，尝试 window.open 兜底', err);
             try {
                 window.open(downloadUrl, '_blank');

@@ -28,32 +28,35 @@
 
     function bindDom() {
         d = {
-            workspace:       $('importWorkspace'),
-            dirTree:         $('importDirTree'),
-            refreshTree:     $('importRefreshTreeBtn'),
-            dirTip:          $('importDirTip'),
-            mdInput:         $('importMdInput'),
-            formatSel:       $('importFormatSelect'),
-            parseBtn:        $('importParseBtn'),
-            pasteBtn:        $('importPasteBtn'),
-            uploadBtn:       $('importUploadBtn'),
-            fileInput:       $('importFileInput'),
-            clearBtn:        $('importClearBtn'),
-            parseStatus:     $('importParseStatus'),
-            fileTree:        $('importFileTree'),
-            treeSummary:     $('importTreeSummary'),
-            expandAllBtn:    $('importExpandAllBtn'),
-            collapseAllBtn:  $('importCollapseAllBtn'),
-            selectAllBtn:    $('importSelectAllBtn'),
-            selectNoneBtn:   $('importSelectNoneBtn'),
-            previewTitle:    $('importPreviewTitle'),
-            previewMeta:     $('importPreviewMeta'),
-            previewContent:  $('importPreviewContent'),
-            copyFileBtn:     $('importCopyFileBtn'),
-            targetRoot:      $('importTargetRoot'),
-            conflictSel:     $('importConflictSelect'),
-            execBtn:         $('importExecBtn'),
-            result:          $('importResult')
+            workspace:        $('importWorkspace'),
+            dirTree:          $('importDirTree'),
+            refreshTree:      $('importRefreshTreeBtn'),
+            dirTip:           $('importDirTip'),
+            mdInput:          $('importMdInput'),
+            formatSel:        $('importFormatSelect'),
+            parseBtn:         $('importParseBtn'),
+            pasteBtn:         $('importPasteBtn'),
+            uploadBtn:        $('importUploadBtn'),
+            fileInput:        $('importFileInput'),
+            clearBtn:         $('importClearBtn'),
+            // ★ 新增
+            copyFormatBtn:    $('importCopyFormatBtn'),
+            downloadFormatBtn:$('importDownloadFormatBtn'),
+            parseStatus:      $('importParseStatus'),
+            fileTree:         $('importFileTree'),
+            treeSummary:      $('importTreeSummary'),
+            expandAllBtn:     $('importExpandAllBtn'),
+            collapseAllBtn:   $('importCollapseAllBtn'),
+            selectAllBtn:     $('importSelectAllBtn'),
+            selectNoneBtn:    $('importSelectNoneBtn'),
+            previewTitle:     $('importPreviewTitle'),
+            previewMeta:      $('importPreviewMeta'),
+            previewContent:   $('importPreviewContent'),
+            copyFileBtn:      $('importCopyFileBtn'),
+            targetRoot:       $('importTargetRoot'),
+            conflictSel:      $('importConflictSelect'),
+            execBtn:          $('importExecBtn'),
+            result:           $('importResult')
         };
     }
 
@@ -72,6 +75,192 @@
     function setStatus(msg, color) {
         d.parseStatus.textContent = msg || '';
         d.parseStatus.style.color = color || 'var(--text-muted)';
+    }
+
+    // ==================== ★ 新增：解析格式说明（Markdown） ====================
+    /**
+     * 生成完整解析格式说明（Markdown）。
+     * 结构与合并文件末尾的「AI 提示 · 代码导入解析格式」保持一致，
+     * 便于 AI 与人工双向理解。
+     */
+    function getFormatSpecMarkdown() {
+        return [
+            '# CodeStats 代码导入解析格式说明',
+            '',
+            '> 本文件由 CodeStats「代码分析 → 代码导入」自动生成，用于说明导入文件支持的三种格式。',
+            '> 如需从 AI 生成的回答中恢复为独立源代码文件，请让 AI 使用以下任一格式输出。',
+            '',
+            '## 一、Merge File 格式（合并文件）',
+            '',
+            'CodeStats 代码分析生成的合并文件本身即为此格式：',
+            '',
+            '```text',
+            '// ======== <文件路径> ========',
+            '<文件原始内容>',
+            '// ======== <文件路径> ========',
+            '<文件原始内容>',
+            '```',
+            '',
+            '**规则**：',
+            '- 分隔头必须独占一行，行首严格为 `// ======== `（8 个等号 + 空格）',
+            '- `<文件路径>` 建议使用相对路径（相对目标根目录）',
+            '- 分隔头之后紧跟文件原始内容，原样保留，不转义、不缩进',
+            '- 支持 .java / .js / .ts / .py / .go / .c / .cpp / .h / .md / .xml / .json / .yml / .yaml / .properties / .sql / .html / .css',
+            '',
+            '**示例**：',
+            '',
+            '```text',
+            '// ======== src/main/java/com/example/Foo.java ========',
+            'package com.example;',
+            'public class Foo {',
+            '    public static void main(String[] args) {',
+            '        System.out.println("Hello");',
+            '    }',
+            '}',
+            '',
+            '// ======== src/main/resources/config.yaml ========',
+            'name: demo',
+            'version: 1.0',
+            '```',
+            '',
+            '---',
+            '',
+            '## 二、File Block 格式（Markdown 代码块）',
+            '',
+            'AI 在 Markdown 回答中常用的多文件输出格式：',
+            '',
+            '````text',
+            '```file:src/main/java/com/example/Foo.java',
+            'package com.example;',
+            'public class Foo { ... }',
+            '```',
+            '',
+            '```file:src/main/resources/config.yaml',
+            'name: demo',
+            'version: 1.0',
+            '```',
+            '````',
+            '',
+            '**规则**：',
+            '- 每个代码块以 ` ```file:<文件路径> ` 开始',
+            '- 以 ` ``` ` 结束',
+            '- 路径同样建议使用相对路径',
+            '',
+            '---',
+            '',
+            '## 三、Omni Pack 格式（扩展格式）',
+            '',
+            '在 File Block 格式基础上增加 JSON 元数据块，可指定目标根目录与冲突策略：',
+            '',
+            '````text',
+            '```omni-pack',
+            '{',
+            '  "name": "demo-pack",',
+            '  "version": "1.0",',
+            '  "targetRoot": "D:/import",',
+            '  "conflict": "OVERWRITE"',
+            '}',
+            '```',
+            '',
+            '```file:src/main/java/com/example/Foo.java',
+            'package com.example;',
+            'public class Foo { ... }',
+            '```',
+            '````',
+            '',
+            '**元数据字段**：',
+            '',
+            '| 字段 | 说明 | 可选值 |',
+            '|------|------|--------|',
+            '| name | 包名 | 字符串 |',
+            '| version | 版本 | 字符串 |',
+            '| description | 描述 | 字符串 |',
+            '| targetRoot | 目标根目录 | 绝对路径 |',
+            '| conflict | 冲突处理 | OVERWRITE / SKIP / RENAME |',
+            '| encoding | 编码 | UTF-8 |',
+            '',
+            '---',
+            '',
+            '## 四、目标根目录与冲突处理',
+            '',
+            '- 所有导入文件写入「目标根目录」',
+            '- 相对路径 → `目标根目录/相对路径`',
+            '- 绝对路径 → 仅当在白名单内才允许（安全校验）',
+            '',
+            '| 策略 | 说明 |',
+            '|------|------|',
+            '| OVERWRITE | 直接覆盖（默认） |',
+            '| SKIP | 已存在则跳过 |',
+            '| RENAME | 已存在则重命名为 `xxx_1.ext` |',
+            '',
+            '---',
+            '',
+            '## 五、给 AI 的提示模板（可直接复制使用）',
+            '',
+            '> 请将以下内容作为「代码导入」的输入。要求：',
+            '> 1. 使用 File Block 格式输出多文件（```` ```file:路径 ````）',
+            '> 2. 路径使用相对路径，以 `src/` 开头',
+            '> 3. 每个文件独立成块，块外不要添加解释文字',
+            '> 4. 示例：',
+            '>    ```` ```file:src/main/java/com/example/Demo.java ````',
+            '>    `package com.example; ...`',
+            '>    ```` ``` ````',
+            '',
+            '---',
+            '',
+            '*本说明由 CodeStats 自动生成 · 可在「代码分析 → 代码导入」中使用*',
+            ''
+        ].join('\n');
+    }
+
+    // ==================== ★ 新增：复制格式说明 ====================
+    async function copyFormatSpec() {
+        const md = getFormatSpecMarkdown();
+        // 优先使用 Clipboard API
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            try {
+                await navigator.clipboard.writeText(md);
+                setStatus('✅ 格式说明已复制到剪贴板（' + md.length + ' 字符）', '#15803d');
+                return;
+            } catch (e) {
+                console.warn('[ImportModule] Clipboard API 复制失败，降级到 execCommand', e);
+            }
+        }
+        // 降级方案
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = md;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            ta.style.top = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (ok) {
+                setStatus('✅ 格式说明已复制到剪贴板（' + md.length + ' 字符）', '#15803d');
+            } else {
+                setStatus('❌ 复制失败：浏览器不支持自动复制，请手动选择内容', '#dc2626');
+            }
+        } catch (e) {
+            setStatus('❌ 复制失败：' + e.message, '#dc2626');
+        }
+    }
+
+    // ==================== ★ 新增：下载格式说明 ====================
+    function downloadFormatSpec() {
+        const md = getFormatSpecMarkdown();
+        const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'CodeStats-代码导入解析格式说明.md';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setStatus('✅ 格式说明已下载（' + md.length + ' 字符）', '#15803d');
     }
 
     // ==================== 加载可用格式 ====================
@@ -183,7 +372,6 @@
             };
             d.dirTree.appendChild(createDirNode(rootNode, 0, onDirClick));
 
-            // 默认展开根节点
             const rootToggle = d.dirTree.querySelector('.tree-item .toggle');
             if (rootToggle && rootToggle.textContent === '▶') rootToggle.click();
         } catch (e) {
@@ -223,7 +411,6 @@
             setStatus(msg, '#15803d');
             d.execBtn.disabled = parsedFiles.length === 0;
 
-            // omni-pack 元数据自动带入
             if (parsedPack) {
                 if (parsedPack.conflict && ['SKIP', 'OVERWRITE', 'RENAME'].includes(parsedPack.conflict.toUpperCase())) {
                     d.conflictSel.value = parsedPack.conflict.toUpperCase();
@@ -471,6 +658,10 @@
             } catch (e) { alert('复制失败：' + e.message); }
         });
 
+        // ★ 新增：复制 / 下载解析格式说明
+        if (d.copyFormatBtn) d.copyFormatBtn.addEventListener('click', copyFormatSpec);
+        if (d.downloadFormatBtn) d.downloadFormatBtn.addEventListener('click', downloadFormatSpec);
+
         d.execBtn.addEventListener('click', doImport);
         d.refreshTree.addEventListener('click', loadDirTree);
     }
@@ -487,7 +678,6 @@
 
     function onShow() {
         if (!inited) init();
-        // 首次显示时如果目录树仍在 loading 状态则重新加载
         if (d.dirTree && d.dirTree.querySelector('.loading')) {
             loadDirTree();
         }

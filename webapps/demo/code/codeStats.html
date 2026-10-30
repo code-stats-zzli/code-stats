@@ -198,7 +198,6 @@
         </aside>
 
         <div class="import-panel">
-            <!-- 1. 内容输入 -->
             <section class="import-card import-input-card">
                 <div class="import-card-header">
                     <span>📥 内容输入</span>
@@ -207,9 +206,10 @@
                         <button id="importUploadBtn" class="btn-secondary btn-sm">📂 上传</button>
                         <input type="file" id="importFileInput" accept=".md,.txt,.markdown,.log" style="display:none;">
                         <button id="importClearBtn" class="btn-secondary btn-sm">🗑️ 清空</button>
-                        <!-- ★ 新增：解析格式复制 / 下载 -->
                         <button id="importCopyFormatBtn" class="btn-secondary btn-sm" title="复制完整解析格式说明到剪贴板">📋 复制格式</button>
                         <button id="importDownloadFormatBtn" class="btn-secondary btn-sm" title="下载完整解析格式说明为 .md 文件">⬇️ 下载格式</button>
+                        <!-- ★ 生成示例按钮（静态 HTML，100% 存在） -->
+                        <button id="importSampleBtn" type="button" class="btn-secondary btn-sm" title="一键生成简单示例（4 个文件）">🎬 生成示例</button>
                         <select id="importFormatSelect" class="btn-sm" style="padding:4px 10px;">
                             <option value="auto">自动识别</option>
                         </select>
@@ -221,7 +221,6 @@
                 <div id="importParseStatus" class="import-status"></div>
             </section>
 
-            <!-- 2. 结构树 + 预览 -->
             <section class="import-card import-main-card">
                 <div class="import-main-tree">
                     <div class="import-card-header">
@@ -252,7 +251,6 @@
                 </div>
             </section>
 
-            <!-- 3. 操作区 -->
             <section class="import-card import-action-card">
                 <div class="import-action-row">
                     <label class="field-label">目标根目录:</label>
@@ -274,5 +272,80 @@
 
 <script src="codeStats.js"></script>
 <script src="codeImport.js"></script>
+
+<!-- ★ 生成示例：按钮点击 → 填入 4 个简单文件 → 自动解析 -->
+<script>
+    (function () {
+        'use strict';
+        console.log('[sample] ✅ 加载');
+
+        var SAMPLE = [
+            '// ======== Hello.java ========',
+            'public class Hello {',
+            '    public static void main(String[] args) {',
+            '        System.out.println("Hello, CodeStats!");',
+            '    }',
+            '}',
+            '',
+            '// ======== Calculator.java ========',
+            'public class Calculator {',
+            '    public int add(int a, int b) { return a + b; }',
+            '    public int sub(int a, int b) { return a - b; }',
+            '    public int mul(int a, int b) { return a * b; }',
+            '    public int div(int a, int b) {',
+            '        if (b == 0) throw new IllegalArgumentException("除数不能为 0");',
+            '        return a / b;',
+            '    }',
+            '}',
+            '',
+            '// ======== README.md ========',
+            '# 简单示例项目',
+            '',
+            '这是「生成示例」按钮生成的演示内容。',
+            '',
+            '包含 3 个文件：',
+            '- Hello.java',
+            '- Calculator.java',
+            '- README.md',
+            '',
+            '// ======== pom.xml ========',
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<project>',
+            '    <modelVersion>4.0.0</modelVersion>',
+            '    <groupId>com.demo</groupId>',
+            '    <artifactId>hello</artifactId>',
+            '    <version>1.0</version>',
+            '</project>',
+            ''
+        ].join('\n');
+
+        function fill() {
+            var input = document.getElementById('importMdInput');
+            if (!input) { alert('找不到输入框'); return; }
+            input.value = SAMPLE;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            console.log('[sample] 已填入 ' + SAMPLE.length + ' 字符');
+            var btn = document.getElementById('importParseBtn');
+            if (btn) setTimeout(function () { btn.click(); }, 50);
+        }
+
+        function bind() {
+            var btn = document.getElementById('importSampleBtn');
+            if (!btn) return false;
+            if (btn.dataset.bound) return true;
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', fill);
+            console.log('[sample] ✅ 按钮已绑定');
+            return true;
+        }
+
+        if (!bind()) {
+            var n = 0, t = setInterval(function () {
+                n++;
+                if (bind() || n > 50) clearInterval(t);
+            }, 100);
+        }
+    })();
+</script>
 </body>
 </html>

@@ -35,7 +35,6 @@
                 <div class="dir-current-tip" id="serverDirTip">点击目录填充分析根路径</div>
             </div>
         </aside>
-
         <div class="analysis-panel">
             <section class="config-panel" id="codeStatsConfig">
                 <h2>代码统计配置</h2>
@@ -80,7 +79,6 @@
                     <button id="clearConfigBtn" class="btn-secondary">🗑️ 清空</button>
                 </div>
             </section>
-
             <section class="result-section" id="codeStatsResult">
                 <div class="progress-bar" id="progressBar" style="display: none;">
                     <div class="progress-fill" id="progressFill"></div>
@@ -97,13 +95,10 @@
                 </div>
                 <div class="tab-content" id="codeStatsContent">
                     <div class="table-wrapper" id="filesTable" style="display: block;">
-                        <table>
-                            <thead><tr>
-                                <th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th>
-                                <th>空行</th><th>语言</th><th>复杂度</th>
-                            </tr></thead>
-                            <tbody id="fileTableBody"></tbody>
-                        </table>
+                        <table><thead><tr>
+                            <th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th>
+                            <th>空行</th><th>语言</th><th>复杂度</th>
+                        </tr></thead><tbody id="fileTableBody"></tbody></table>
                     </div>
                     <div class="summary-content" id="summaryContent" style="display: none;">
                         <div id="summaryInfo"></div>
@@ -135,13 +130,11 @@
                 <div class="loading">加载中...</div>
             </div>
         </aside>
-
         <div class="local-file-manager">
             <div id="localPathBar" class="path-bar">
                 <span class="path-label">当前路径：</span>
                 <span id="localCurrentPath" class="path-value">/</span>
             </div>
-
             <div id="localFileListPanel" class="file-list-panel">
                 <div class="toolbar">
                     <button id="localNewFolderBtn" class="btn-icon">📁 新建目录</button>
@@ -150,13 +143,10 @@
                     <button id="localRefreshBtn" class="btn-icon">🔄 刷新</button>
                 </div>
                 <table class="local-file-table">
-                    <thead>
-                    <tr><th>名称</th><th>类型</th><th>大小</th><th>修改时间</th><th>操作</th></tr>
-                    </thead>
+                    <thead><tr><th>名称</th><th>类型</th><th>大小</th><th>修改时间</th><th>操作</th></tr></thead>
                     <tbody id="localFileTableBody"></tbody>
                 </table>
             </div>
-
             <div id="localEditorPanel" class="editor-panel" style="display: none;">
                 <div class="editor-header">
                     <span id="localEditFileName"></span>
@@ -184,10 +174,13 @@
 
     <!-- ============ 代码导入工作区 ============ -->
     <main class="workspace" id="importWorkspace" style="display: none;">
-        <aside class="dir-tree-panel">
+        <aside class="dir-tree-panel import-dir-panel" id="importDirPanel">
             <div class="dir-panel-header">
-                <span>📂 目标根目录选择</span>
-                <button id="importRefreshTreeBtn" class="mini-btn" title="刷新">🔄</button>
+                <span>📂 目标根目录</span>
+                <div class="dir-panel-btns">
+                    <button id="importRefreshTreeBtn" class="mini-btn" title="刷新">🔄</button>
+                    <button id="importToggleTreeBtn" class="mini-btn toggle-btn" title="折叠/展开目录树">◀</button>
+                </div>
             </div>
             <div class="dir-tree-wrapper" id="importDirTree">
                 <div class="loading">加载中...</div>
@@ -197,8 +190,9 @@
             </div>
         </aside>
 
-        <div class="import-panel">
-            <section class="import-card import-input-card">
+        <div class="import-panel" id="importPanel">
+            <!-- 1. 内容输入 -->
+            <section class="import-card import-input-card" id="importInputCard">
                 <div class="import-card-header">
                     <span>📥 内容输入</span>
                     <div class="import-toolbar">
@@ -208,12 +202,14 @@
                         <button id="importClearBtn" class="btn-secondary btn-sm">🗑️ 清空</button>
                         <button id="importCopyFormatBtn" class="btn-secondary btn-sm" title="复制完整解析格式说明到剪贴板">📋 复制格式</button>
                         <button id="importDownloadFormatBtn" class="btn-secondary btn-sm" title="下载完整解析格式说明为 .md 文件">⬇️ 下载格式</button>
-                        <!-- ★ 生成示例按钮（静态 HTML，100% 存在） -->
+                        <!-- ★ 生成示例（静态按钮，必存在） -->
                         <button id="importSampleBtn" type="button" class="btn-secondary btn-sm" title="一键生成简单示例（4 个文件）">🎬 生成示例</button>
                         <select id="importFormatSelect" class="btn-sm" style="padding:4px 10px;">
                             <option value="auto">自动识别</option>
                         </select>
                         <button id="importParseBtn" class="btn-primary btn-sm">🔍 解析</button>
+                        <!-- ★ 折叠输入卡 -->
+                        <button id="importToggleInputBtn" class="btn-secondary btn-sm toggle-btn" title="折叠/展开输入区">▲</button>
                     </div>
                 </div>
                 <textarea id="importMdInput" class="import-md-input"
@@ -221,36 +217,43 @@
                 <div id="importParseStatus" class="import-status"></div>
             </section>
 
-            <section class="import-card import-main-card">
-                <div class="import-main-tree">
-                    <div class="import-card-header">
-                        <span>📂 解析结果</span>
-                        <div class="import-toolbar">
-                            <button id="importExpandAllBtn" class="btn-secondary btn-sm">展开</button>
-                            <button id="importCollapseAllBtn" class="btn-secondary btn-sm">折叠</button>
-                            <button id="importSelectAllBtn" class="btn-secondary btn-sm">全选</button>
-                            <button id="importSelectNoneBtn" class="btn-secondary btn-sm">全不选</button>
-                        </div>
-                    </div>
-                    <div id="importFileTree" class="import-file-tree">
-                        <div class="empty-tip">尚未解析</div>
-                    </div>
-                    <div class="import-tree-footer">
-                        <span id="importTreeSummary" class="summary-text">0 个文件</span>
+            <!-- 2. 结构树 + 预览 -->
+            <section class="import-card import-main-card" id="importMainCard">
+                <div class="import-card-header">
+                    <span>📂 解析结果</span>
+                    <div class="import-toolbar">
+                        <button id="importToggleFileTreeBtn" class="btn-secondary btn-sm toggle-btn" title="折叠/展开文件树">◀</button>
+                        <button id="importExpandAllBtn" class="btn-secondary btn-sm">展开全部</button>
+                        <button id="importCollapseAllBtn" class="btn-secondary btn-sm">折叠全部</button>
+                        <button id="importSelectAllBtn" class="btn-secondary btn-sm">全选</button>
+                        <button id="importSelectNoneBtn" class="btn-secondary btn-sm">全不选</button>
+                        <!-- ★ 折叠主卡 -->
+                        <button id="importToggleMainBtn" class="btn-secondary btn-sm toggle-btn" title="折叠/展开主卡">▲</button>
                     </div>
                 </div>
-                <div class="import-main-preview">
-                    <div class="import-card-header">
-                        <span id="importPreviewTitle">📄 文件预览</span>
-                        <div class="import-toolbar">
-                            <span id="importPreviewMeta" class="meta-text"></span>
-                            <button id="importCopyFileBtn" class="btn-secondary btn-sm">📋 复制</button>
+                <div class="import-main-body" id="importMainBody">
+                    <div class="import-main-tree" id="importFileTreePanel">
+                        <div id="importFileTree" class="import-file-tree">
+                            <div class="empty-tip">尚未解析</div>
+                        </div>
+                        <div class="import-tree-footer">
+                            <span id="importTreeSummary" class="summary-text">0 个文件</span>
                         </div>
                     </div>
-                    <pre id="importPreviewContent" class="import-preview-content"><div class="empty-tip">从左侧选择文件预览</div></pre>
+                    <div class="import-main-preview">
+                        <div class="import-preview-header">
+                            <span id="importPreviewTitle">📄 文件预览</span>
+                            <div class="import-toolbar">
+                                <span id="importPreviewMeta" class="meta-text"></span>
+                                <button id="importCopyFileBtn" class="btn-secondary btn-sm">📋 复制</button>
+                            </div>
+                        </div>
+                        <pre id="importPreviewContent" class="import-preview-content"><div class="empty-tip">从左侧选择文件预览</div></pre>
+                    </div>
                 </div>
             </section>
 
+            <!-- 3. 操作区 -->
             <section class="import-card import-action-card">
                 <div class="import-action-row">
                     <label class="field-label">目标根目录:</label>
@@ -272,80 +275,7 @@
 
 <script src="codeStats.js"></script>
 <script src="codeImport.js"></script>
-
-<!-- ★ 生成示例：按钮点击 → 填入 4 个简单文件 → 自动解析 -->
-<script>
-    (function () {
-        'use strict';
-        console.log('[sample] ✅ 加载');
-
-        var SAMPLE = [
-            '// ======== Hello.java ========',
-            'public class Hello {',
-            '    public static void main(String[] args) {',
-            '        System.out.println("Hello, CodeStats!");',
-            '    }',
-            '}',
-            '',
-            '// ======== Calculator.java ========',
-            'public class Calculator {',
-            '    public int add(int a, int b) { return a + b; }',
-            '    public int sub(int a, int b) { return a - b; }',
-            '    public int mul(int a, int b) { return a * b; }',
-            '    public int div(int a, int b) {',
-            '        if (b == 0) throw new IllegalArgumentException("除数不能为 0");',
-            '        return a / b;',
-            '    }',
-            '}',
-            '',
-            '// ======== README.md ========',
-            '# 简单示例项目',
-            '',
-            '这是「生成示例」按钮生成的演示内容。',
-            '',
-            '包含 3 个文件：',
-            '- Hello.java',
-            '- Calculator.java',
-            '- README.md',
-            '',
-            '// ======== pom.xml ========',
-            '<?xml version="1.0" encoding="UTF-8"?>',
-            '<project>',
-            '    <modelVersion>4.0.0</modelVersion>',
-            '    <groupId>com.demo</groupId>',
-            '    <artifactId>hello</artifactId>',
-            '    <version>1.0</version>',
-            '</project>',
-            ''
-        ].join('\n');
-
-        function fill() {
-            var input = document.getElementById('importMdInput');
-            if (!input) { alert('找不到输入框'); return; }
-            input.value = SAMPLE;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-            console.log('[sample] 已填入 ' + SAMPLE.length + ' 字符');
-            var btn = document.getElementById('importParseBtn');
-            if (btn) setTimeout(function () { btn.click(); }, 50);
-        }
-
-        function bind() {
-            var btn = document.getElementById('importSampleBtn');
-            if (!btn) return false;
-            if (btn.dataset.bound) return true;
-            btn.dataset.bound = '1';
-            btn.addEventListener('click', fill);
-            console.log('[sample] ✅ 按钮已绑定');
-            return true;
-        }
-
-        if (!bind()) {
-            var n = 0, t = setInterval(function () {
-                n++;
-                if (bind() || n > 50) clearInterval(t);
-            }, 100);
-        }
-    })();
-</script>
+<!-- ★ 生成示例：独立文件，静态按钮已在上方 -->
+<script src="codeSample.js"></script>
 </body>
 </html>

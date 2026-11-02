@@ -17,15 +17,22 @@
 
     <!-- ==================== 主体左右布局 ==================== -->
     <div class="cm-body-layout">
-        <!-- ---------- 左侧：资源关联 / 示例 双 Tab ---------- -->
+        <!-- ---------- 左侧：示例 / 上传驱动 双 Tab ---------- -->
         <aside class="cm-left">
             <div class="left-tabs-bar">
-                <button class="left-tab-btn active" data-tab="resource">📁 资源关联</button>
-                <button class="left-tab-btn" data-tab="sample">📋 示例</button>
+                <button class="left-tab-btn active" data-tab="sample">📋 示例</button>
+                <button class="left-tab-btn" data-tab="resource">📤 上传驱动</button>
             </div>
 
-            <!-- Tab 1：资源关联 -->
-            <div class="left-tab-pane active" id="leftPaneResource">
+            <!-- Tab 1：示例（默认激活） -->
+            <div class="left-tab-pane active" id="leftPaneSample">
+                <div class="sample-list" id="sampleList">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+
+            <!-- Tab 2：上传驱动 -->
+            <div class="left-tab-pane" id="leftPaneResource">
                 <div class="resource-toolbar">
                     <button id="uploadDriverBtn" class="btn-primary btn-sm">📤 上传驱动</button>
                     <button id="refreshDriversBtn" class="btn-secondary btn-sm">🔄 刷新</button>
@@ -39,18 +46,10 @@
                 </div>
                 <div id="driverEditor" class="driver-editor-panel" style="display:none;"></div>
             </div>
-
-            <!-- Tab 2：示例 -->
-            <div class="left-tab-pane" id="leftPaneSample">
-                <div class="sample-list" id="sampleList">
-                    <div class="loading">加载中...</div>
-                </div>
-            </div>
         </aside>
 
         <!-- ---------- 右侧：操作步骤（默认折叠） + 连接配置 ---------- -->
         <main class="cm-right">
-            <!-- ★ 默认折叠：guide-card 初始带 collapsed，图标显示 ▶ -->
             <div class="guide-card collapsed" id="guideCard">
                 <div class="guide-header" id="guideHeader">
                     <div class="guide-title">
@@ -64,7 +63,7 @@
                         <div class="step-num">1</div>
                         <div class="step-content">
                             <strong>上传 / 选择驱动</strong>
-                            <span>在左侧「资源关联」中上传 .jar，或选择已有驱动文件</span>
+                            <span>在左侧「上传驱动」中上传 .jar，或选择已有驱动文件</span>
                         </div>
                     </div>
                     <div class="guide-step" data-step="2">

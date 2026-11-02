@@ -1,8 +1,7 @@
 (function () {
     'use strict';
 
-    // ==================== 通用工具 ====================
-
+    // ==================== Context Path ====================
     function getContextPath() {
         var path = window.location.pathname;
         var parts = path.split('/');
@@ -17,7 +16,6 @@
 
     const API_BASE = apiUrl('/driver/api');
 
-    // 允许的类型（与后端 DriverFileNameParser.ALLOWED_DB_TYPES 一致）
     const ALLOWED_DB_TYPES = ['mysql', 'oracle', 'sqlserver', 'postgresql'];
     const DB_TYPE_LABELS = {
         mysql: 'MySQL',
@@ -25,13 +23,9 @@
         sqlserver: 'SQL Server',
         postgresql: 'PostgreSQL'
     };
-
-    // 版本正则：至少两段数字，最多四段
-    // 与后端 DriverFileNameParser.VERSION_PATTERN 完全一致
     const VERSION_PATTERN = /(\d+(?:\.\d+){1,3})/;
 
     // ==================== 文件名识别 ====================
-
     function detectDbTypeFromFileName(fileName) {
         if (!fileName) return null;
         const lower = fileName.toLowerCase();
@@ -44,7 +38,6 @@
         }
         return null;
     }
-
     function detectVersionFromFileName(fileName) {
         if (!fileName) return null;
         const m = fileName.match(VERSION_PATTERN);
@@ -52,42 +45,39 @@
     }
 
     // ==================== DOM ====================
-
     const $ = id => document.getElementById(id);
 
-    const tableBody          = $('driverTableBody');
-    const modal              = $('driverModal');
-    const modalTitle         = $('modalTitle');
-    const editIdInput        = $('editId');
-    const dbTypeSelect       = $('dbType');
-    const driverVersionInput = $('driverVersion');
-    const jarFileInput       = $('jarFile');
-    const filePicker         = $('filePicker');
-    const filePickerName     = $('filePickerName');
-    const fileOptionalHint   = $('fileOptionalHint');
-    const detectBanner       = $('detectBanner');
-    const saveBtn            = $('saveDriverBtn');
-    const cancelBtn          = $('cancelDriverBtn');
-    const addBtn             = $('addDriverBtn');
-    const closeSpan          = $('closeModalBtn');
-    const filterDbType       = $('filterDbType');
-    const formError          = $('formError');
+    const tableBody            = $('driverTableBody');
+    const modal                = $('driverModal');
+    const modalTitle           = $('modalTitle');
+    const editIdInput          = $('editId');
+    const dbTypeSelect         = $('dbType');
+    const driverVersionInput   = $('driverVersion');
+    const jarFileInput         = $('jarFile');
+    const filePicker           = $('filePicker');
+    const filePickerName       = $('filePickerName');
+    const fileOptionalHint     = $('fileOptionalHint');
+    const detectBanner         = $('detectBanner');
+    const saveBtn              = $('saveDriverBtn');
+    const cancelBtn            = $('cancelDriverBtn');
+    const addBtn               = $('addDriverBtn');
+    const closeSpan            = $('closeModalBtn');
+    const filterDbType         = $('filterDbType');
+    const formError            = $('formError');
 
-    // 资源目录
-    const importFromDirBtn        = $('importFromDirBtn');
-    const resourceDirModal        = $('resourceDirModal');
-    const closeResourceDirBtn     = $('closeResourceDirBtn');
-    const closeResourceDirFooterBtn = $('closeResourceDirFooterBtn');
-    const syncResourceDirBtn      = $('syncResourceDirBtn');
-    const resourceDirInfo         = $('resourceDirInfo');
-    const resourceDirList         = $('resourceDirList');
-    const resourceDirError        = $('resourceDirError');
+    const importFromDirBtn         = $('importFromDirBtn');
+    const resourceDirModal         = $('resourceDirModal');
+    const closeResourceDirBtn      = $('closeResourceDirBtn');
+    const closeResourceDirFooterBtn= $('closeResourceDirFooterBtn');
+    const syncResourceDirBtn       = $('syncResourceDirBtn');
+    const resourceDirInfo          = $('resourceDirInfo');
+    const resourceDirList          = $('resourceDirList');
+    const resourceDirError         = $('resourceDirError');
 
     let drivers = [];
     let isEditMode = false;
 
-    // ==================== 通用 ====================
-
+    // ==================== 工具 ====================
     function escapeHtml(str) {
         if (!str) return '';
         return String(str).replace(/[&<>"]/g, m => ({
@@ -106,64 +96,102 @@
         detectBanner.innerHTML = html;
     }
 
-    // ==================== 列表 ====================
-
+    // ==================== ★ 核心改动：使用 entry/list 合并视图 ====================
     async function loadDrivers() {
         try {
             const type = filterDbType ? filterDbType.value : '';
-            const url = API_BASE + '/list' + (type ? '?dbType=' + encodeURIComponent(type) : '');
-            const resp = await fetch(url);
+            const resp = await fetch(API_BASE + '/entry/list');
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            drivers = await resp.json();
+            const data = await resp.json();
+            if (!data.success) throw new Error(data.error || '加载失败');
+            let items = data.items || [];
+            if (type) items = items.filter(d => d.dbType === type);
+            drivers = items;
             renderTable();
         } catch (err) {
             console.error(err);
-            tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:red;">加载驱动列表失败</td></tr>';
+            tableBody.innerHTML =
+                '<tr><td colspan="6" style="text-align:center;color:red;">加载驱动列表失败</td></tr>';
         }
     }
 
     function renderTable() {
         if (!drivers.length) {
-            tableBody.innerHTML = '<tr class="empty-row"><td colspan="6">暂无驱动，请点击「新增驱动」上传 jar 文件</td></tr>';
+            tableBody.innerHTML =
+                '<tr class="empty-row"><td colspan="6">暂无驱动，请点击「新增驱动」上传 jar 文件</td></tr>';
             return;
         }
         tableBody.innerHTML = drivers.map(d => {
             const storageName = d.dbType + '_' + d.version + '_' + d.fileName;
+            const sourceLabel = d.source === 'db' ? '数据库'
+                : d.source === 'dir' ? '目录'
+                    : '双来源';
+            const sourceClass = d.source === 'db' ? 'src-db'
+                : d.source === 'dir' ? 'src-dir'
+                    : 'src-both';
+            const hasDb = d.source === 'db' || d.source === 'both';
             return `
                 <tr>
                     <td><span class="badge ${escapeAttr(d.dbType || 'default')}">${escapeHtml(d.dbType || '-')}</span></td>
                     <td>${escapeHtml(d.version || '-')}</td>
                     <td title="${escapeAttr(d.fileName)}">${escapeHtml(d.fileName)}</td>
                     <td title="${escapeAttr(storageName)}" style="font-family:monospace;font-size:12px;color:#64748b;">${escapeHtml(storageName)}</td>
-                    <td>${d.createTime ? new Date(d.createTime).toLocaleString() : '-'}</td>
+                    <td><span class="src-badge ${sourceClass}">${sourceLabel}</span></td>
                     <td class="action-btns">
-                        <button class="edit-driver" data-id="${escapeAttr(d.id)}">✏️ 编辑</button>
-                        <button class="download-driver" data-id="${escapeAttr(d.id)}">⬇️ 下载</button>
-                        <button class="delete-driver" data-id="${escapeAttr(d.id)}">🗑️ 删除</button>
+                        ${hasDb ? `
+                            <button class="edit-driver" data-key="${escapeAttr(d.key)}">✏️ 编辑</button>
+                            <button class="download-driver" data-key="${escapeAttr(d.key)}">⬇️ 下载</button>
+                        ` : `
+                            <button class="import-driver" data-key="${escapeAttr(d.key)}">📥 导入数据库</button>
+                        `}
+                        <button class="delete-driver" data-key="${escapeAttr(d.key)}">🗑️ 删除</button>
                     </td>
                 </tr>
             `;
         }).join('');
 
+        // 编辑（仅 DB 来源）
         document.querySelectorAll('.edit-driver').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const d = drivers.find(x => x.id === btn.dataset.id);
-                if (d) openEditModal(d);
+                const d = drivers.find(x => x.key === btn.dataset.key);
+                if (d && d.id) openEditModal(d);
             });
         });
+        // 下载（仅 DB 来源）
         document.querySelectorAll('.download-driver').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                window.open(API_BASE + '/download?id=' + encodeURIComponent(btn.dataset.id), '_blank');
+                const d = drivers.find(x => x.key === btn.dataset.key);
+                if (d && d.id) {
+                    window.open(API_BASE + '/download?id=' + encodeURIComponent(d.id), '_blank');
+                }
             });
         });
+        // 目录来源：导入数据库
+        document.querySelectorAll('.import-driver').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const d = drivers.find(x => x.key === btn.dataset.key);
+                if (!d) return;
+                if (confirm(`将从 resources/drivers 目录同步所有驱动到数据库\n（含「${DB_TYPE_LABELS[d.dbType] || d.dbType} ${d.version}」）\n\n继续？`)) {
+                    syncAll(true);
+                }
+            });
+        });
+        // 删除（DB / 目录都会删）
         document.querySelectorAll('.delete-driver').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
-                if (!confirm('确定删除该驱动吗？（会同时删除 resources/drivers 中的文件）')) return;
+                const d = drivers.find(x => x.key === btn.dataset.key);
+                if (!d) return;
+                if (!confirm(`确定删除驱动 ${DB_TYPE_LABELS[d.dbType] || d.dbType} ${d.version} 吗？\n（数据库记录 + resources/drivers 目录文件都会删除）`)) return;
                 try {
-                    const resp = await fetch(API_BASE + '/delete?id=' + encodeURIComponent(btn.dataset.id), { method: 'POST' });
+                    const resp = await fetch(API_BASE + '/entry/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key: d.key, dbType: d.dbType, version: d.version })
+                    });
                     const data = await resp.json();
                     if (data.success) loadDrivers();
                     else alert('删除失败：' + (data.error || '未知错误'));
@@ -174,8 +202,7 @@
         });
     }
 
-    // ==================== 弹窗 ====================
-
+    // ==================== 新增 / 编辑弹窗 ====================
     function resetFilePicker() {
         filePicker.classList.remove('has-file');
         filePickerName.textContent = '点击选择 .jar 文件';
@@ -201,8 +228,10 @@
         dbTypeSelect.value = d.dbType || 'mysql';
         driverVersionInput.value = d.version || '';
         resetFilePicker();
-        filePicker.classList.add('has-file');
-        filePickerName.textContent = d.fileName + '（不选则保持原文件）';
+        if (d.fileName) {
+            filePicker.classList.add('has-file');
+            filePickerName.textContent = d.fileName + '（不选则保持原文件）';
+        }
         modalTitle.innerText = '编辑驱动';
         fileOptionalHint.textContent = '（可选）';
         setDetectBanner('info', '不选新文件则保持原有 jar');
@@ -212,17 +241,12 @@
 
     function closeModal() { modal.style.display = 'none'; }
 
-    // ==================== 文件选择 → 自动识别 ====================
-
+    // ==================== 文件选择 ====================
     filePicker.addEventListener('click', () => jarFileInput.click());
 
     jarFileInput.addEventListener('change', () => {
         const file = jarFileInput.files[0];
-        if (!file) {
-            resetFilePicker();
-            return;
-        }
-        // 严格校验扩展名
+        if (!file) { resetFilePicker(); return; }
         if (!file.name.toLowerCase().endsWith('.jar')) {
             showError('只允许上传 .jar 文件');
             jarFileInput.value = '';
@@ -230,24 +254,15 @@
             return;
         }
         showError('');
-
-        // 显示文件名
         filePicker.classList.add('has-file');
         filePickerName.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
 
-        // 自动识别
         const detectedType = detectDbTypeFromFileName(file.name);
         const detectedVersion = detectVersionFromFileName(file.name);
 
-        // 预填表单（识别到则填，识别不到保持原值或空，由用户填）
-        if (detectedType) {
-            dbTypeSelect.value = detectedType;
-        }
-        if (detectedVersion) {
-            driverVersionInput.value = detectedVersion;
-        }
+        if (detectedType) dbTypeSelect.value = detectedType;
+        if (detectedVersion) driverVersionInput.value = detectedVersion;
 
-        // 展示识别结果提示
         const parts = [];
         if (detectedType) parts.push('<b>类型</b>：' + (DB_TYPE_LABELS[detectedType] || detectedType));
         if (detectedVersion) parts.push('<b>版本</b>：' + escapeHtml(detectedVersion));
@@ -264,31 +279,25 @@
         }
     });
 
-    // ==================== 提交保存 ====================
-
+    // ==================== 保存驱动 ====================
     async function saveDriver() {
         showError('');
         const dbType = dbTypeSelect.value;
         const version = driverVersionInput.value.trim();
         const file = jarFileInput.files[0];
 
-        // 前端校验
         if (!ALLOWED_DB_TYPES.includes(dbType)) {
-            showError('不支持的数据库类型：' + dbType);
-            return;
+            showError('不支持的数据库类型：' + dbType); return;
         }
         if (!version) {
             showError('驱动版本不能为空，请手动填写');
-            driverVersionInput.focus();
-            return;
+            driverVersionInput.focus(); return;
         }
         if (version.indexOf('_') >= 0) {
-            showError('驱动版本不能包含下划线 _');
-            return;
+            showError('驱动版本不能包含下划线 _'); return;
         }
         if (!isEditMode && !file) {
-            showError('请选择 Jar 文件');
-            return;
+            showError('请选择 Jar 文件'); return;
         }
 
         saveBtn.disabled = true;
@@ -320,7 +329,6 @@
     }
 
     // ==================== 资源目录导入 ====================
-
     async function openResourceDirModal() {
         resourceDirModal.style.display = 'flex';
         resourceDirInfo.textContent = '';
@@ -342,7 +350,8 @@
                 '<br><span style="color:#94a3b8;font-size:11px;">命名规范：{类型}_{版本}_{原始文件名}.jar</span>';
 
             if (!data.items || data.items.length === 0) {
-                resourceDirList.innerHTML = '<div style="text-align:center;padding:30px;color:#64748b;">目录为空，或文件名不符合 {类型}_{版本}_{文件名}.jar 规范</div>';
+                resourceDirList.innerHTML =
+                    '<div style="text-align:center;padding:30px;color:#64748b;">目录为空，或文件名不符合 {类型}_{版本}_{文件名}.jar 规范</div>';
                 syncResourceDirBtn.disabled = true;
                 return;
             }
@@ -368,21 +377,21 @@
         }
     }
 
-    async function syncAll() {
+    async function syncAll(silent) {
         syncResourceDirBtn.disabled = true;
         syncResourceDirBtn.textContent = '⏳ 导入中...';
         try {
             const resp = await fetch(API_BASE + '/resource/sync', { method: 'POST' });
             const data = await resp.json();
             if (data.success) {
-                alert('✅ 导入完成，新增 ' + data.imported + ' 条');
+                if (!silent) alert('✅ 导入完成，新增 ' + data.imported + ' 条');
                 await loadDrivers();
-                await openResourceDirModal();
+                if (resourceDirModal.style.display === 'flex') await openResourceDirModal();
             } else {
-                alert('❌ 导入失败：' + (data.error || '未知'));
+                if (!silent) alert('❌ 导入失败：' + (data.error || '未知'));
             }
         } catch (e) {
-            alert('请求异常：' + e.message);
+            if (!silent) alert('请求异常：' + e.message);
         } finally {
             syncResourceDirBtn.disabled = false;
             syncResourceDirBtn.textContent = '🔄 全部导入到数据库';
@@ -390,7 +399,6 @@
     }
 
     // ==================== 事件绑定 ====================
-
     addBtn.addEventListener('click', openAddModal);
     saveBtn.addEventListener('click', saveDriver);
     cancelBtn.addEventListener('click', closeModal);
@@ -408,7 +416,7 @@
     closeResourceDirFooterBtn.addEventListener('click', () => {
         resourceDirModal.style.display = 'none';
     });
-    syncResourceDirBtn.addEventListener('click', syncAll);
+    syncResourceDirBtn.addEventListener('click', () => syncAll(false));
 
     loadDrivers();
 })();

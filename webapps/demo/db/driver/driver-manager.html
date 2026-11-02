@@ -50,6 +50,10 @@
         .badge.postgresql { background: #d1ecf1; color: #0c5460; }
         .badge.sqlserver  { background: #e0e7ff; color: #3730a3; }
         .badge.default    { background: #e2e8f0; color: #57606a; }
+        .src-badge { display:inline-block; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:600; }
+        .src-badge.src-db   { background:#e0e7ff; color:#3730a3; }
+        .src-badge.src-dir  { background:#fef3c7; color:#b45309; }
+        .src-badge.src-both { background:#d4f4dd; color:#1a7f37; }
         .action-btns button {
             margin-right: 8px; padding: 4px 12px;
             background: rgba(0,102,255,0.1); border: none;
@@ -107,12 +111,8 @@
         .detect-banner.info    { background: #e2e8f0; color: #57606a; border: 1px solid #cbd5e1; }
         .file-picker {
             border: 2px dashed rgba(0,102,255,0.4);
-            border-radius: 14px;
-            padding: 18px;
-            text-align: center;
-            cursor: pointer;
-            transition: 0.2s;
-            background: #f8fafc;
+            border-radius: 14px; padding: 18px; text-align: center;
+            cursor: pointer; transition: 0.2s; background: #f8fafc;
         }
         .file-picker:hover { border-color: #0066ff; background: #eef6ff; }
         .file-picker.has-file { border-style: solid; border-color: #22c55e; background: #f0fdf4; }
@@ -142,7 +142,7 @@
             <th>版本</th>
             <th>原始文件名</th>
             <th>存储名</th>
-            <th>上传时间</th>
+            <th>来源</th>
             <th>操作</th>
         </tr>
         </thead>
@@ -152,7 +152,7 @@
     </table>
 </div>
 
-<!-- 上传/编辑弹窗 -->
+<!-- 上传/编辑弹窗（保持原样，略） -->
 <div id="driverModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -161,8 +161,6 @@
         </div>
         <div class="modal-body">
             <input type="hidden" id="editId">
-
-            <!-- 文件选择区 -->
             <div class="form-group">
                 <label>Jar 文件 <span id="fileOptionalHint" style="color:#dc2626;">*</span></label>
                 <input type="file" id="jarFile" accept=".jar,application/java-archive" style="display:none;">
@@ -171,13 +169,9 @@
                     <div class="file-picker-hint">仅允许 .jar 格式</div>
                 </div>
             </div>
-
-            <!-- 识别结果提示 -->
             <div id="detectBanner" class="detect-banner info">
                 选择文件后自动识别数据库类型与版本
             </div>
-
-            <!-- 数据库类型 -->
             <div class="form-group">
                 <label>数据库类型 <span style="color:#dc2626;">*</span></label>
                 <select id="dbType">
@@ -188,14 +182,11 @@
                 </select>
                 <div class="hint">仅支持这 4 种类型；name 字段自动等于类型</div>
             </div>
-
-            <!-- 版本 -->
             <div class="form-group">
                 <label>驱动版本 <span style="color:#dc2626;">*</span></label>
                 <input type="text" id="driverVersion" placeholder="如 8.0.33；识别不到请手动填写">
                 <div class="hint">唯一性：类型 + 版本 组合不可重复；不能包含下划线 _</div>
             </div>
-
             <div id="formError" class="error-text"></div>
         </div>
         <div class="modal-footer">
@@ -205,7 +196,7 @@
     </div>
 </div>
 
-<!-- 资源目录导入弹窗 -->
+<!-- 资源目录导入弹窗（保持原样，略） -->
 <div id="resourceDirModal" class="modal">
     <div class="modal-content" style="width: 800px; max-width: 92%;">
         <div class="modal-header">

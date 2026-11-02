@@ -73,15 +73,50 @@
         .form-row { display: flex; gap: 12px; flex-wrap: wrap; }
         .form-row .form-group { flex: 1; min-width: 140px; }
 
-        /* datalist 的小箭头提示（可选） */
-        .combo-input-wrap { position: relative; }
-        .combo-input-wrap::after {
-            content: '▾';
-            position: absolute; right: 12px; top: 50%;
+        /* ==================== 自定义下拉（输入框 + 面板） ==================== */
+        .combo-wrap { position: relative; }
+        .combo-wrap input { padding-right: 32px; }
+        .combo-btn {
+            position: absolute; right: 4px; top: 50%;
             transform: translateY(-50%);
-            pointer-events: none; color: #94a3b8; font-size: 12px;
+            width: 24px; height: 24px;
+            background: rgba(0,102,255,0.1);
+            border: none; border-radius: 6px;
+            cursor: pointer; color: var(--accent-primary);
+            font-size: 12px; line-height: 1;
+            transition: 0.15s;
+            display: flex; align-items: center; justify-content: center;
         }
-        .combo-input-wrap input { padding-right: 28px; }
+        .combo-btn:hover { background: rgba(0,102,255,0.25); }
+        .combo-panel {
+            display: none;
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            max-height: 260px; overflow-y: auto;
+            background: white;
+            border: 1px solid rgba(0,102,255,0.3);
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            z-index: 100;
+        }
+        .combo-panel.show { display: block; }
+        .combo-option {
+            padding: 8px 14px;
+            font-size: 13px;
+            font-family: 'JetBrains Mono', monospace;
+            cursor: pointer;
+            transition: 0.1s;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .combo-option:hover { background: rgba(0,102,255,0.1); color: var(--accent-primary); }
+        .combo-option.selected { background: rgba(0,102,255,0.15); color: var(--accent-primary); font-weight: 600; }
+        .combo-option.hint { color: #94a3b8; font-style: italic; cursor: default; }
+        .combo-option.hint:hover { background: transparent; color: #94a3b8; }
+        .combo-option .sub-hint {
+            font-size: 11px; color: #94a3b8; margin-left: 8px;
+        }
+        .combo-option.selected .sub-hint { color: rgba(0,102,255,0.7); }
 
         .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
         .btn-row button, .btn-row a { padding: 9px 22px; border-radius: 24px; font-size: 13px; }
@@ -175,21 +210,23 @@
                         <option value="postgresql">PostgreSQL</option>
                     </select>
                 </div>
+                <!-- ★ 版本：自定义下拉 -->
                 <div class="form-group">
-                    <label>驱动版本（可选）</label>
-                    <div class="combo-input-wrap">
-                        <input type="text" id="connVersion" list="versionOptions"
-                               placeholder="自动取最新；可下拉或手输">
+                    <label>驱动版本（选择后自动关联驱动类）</label>
+                    <div class="combo-wrap">
+                        <input type="text" id="connVersion" placeholder="选择数据库类型后自动加载" autocomplete="off">
+                        <button type="button" class="combo-btn" id="connVersionBtn" title="展开版本列表">▾</button>
+                        <div class="combo-panel" id="connVersionPanel"></div>
                     </div>
-                    <datalist id="versionOptions"></datalist>
                 </div>
+                <!-- ★ 驱动类：自定义下拉 -->
                 <div class="form-group">
-                    <label>驱动类（可选）</label>
-                    <div class="combo-input-wrap">
-                        <input type="text" id="connDriverClass" list="driverClassOptions"
-                               placeholder="自动匹配；可下拉或手输">
+                    <label>驱动类（随版本自动切换，可手动修改）</label>
+                    <div class="combo-wrap">
+                        <input type="text" id="connDriverClass" placeholder="选择版本后自动匹配" autocomplete="off">
+                        <button type="button" class="combo-btn" id="connDriverClassBtn" title="展开驱动类列表">▾</button>
+                        <div class="combo-panel" id="connDriverClassPanel"></div>
                     </div>
-                    <datalist id="driverClassOptions"></datalist>
                 </div>
             </div>
 
@@ -202,7 +239,6 @@
             <div id="parseResult" class="parse-result" style="display:none;"></div>
             <div id="statusMsg" style="display:none;"></div>
 
-            <!-- SQL 执行 -->
             <div id="sqlSection" style="display:none;">
                 <h3 class="section-title">📝 执行 SQL 查询</h3>
                 <div class="form-group">
@@ -216,7 +252,6 @@
                 <div id="sqlResult" style="margin-top:16px;"></div>
             </div>
 
-            <!-- 保存为正式数据源 -->
             <div id="saveSection" style="display:none;">
                 <h3 class="section-title">💾 保存为正式数据源</h3>
                 <div class="form-row">
@@ -243,29 +278,31 @@
         let currentParsed = null;
 
         const $ = id => document.getElementById(id);
-        const connUrl           = $('connUrl');
-        const connUsername      = $('connUsername');
-        const connPassword      = $('connPassword');
-        const connDbType        = $('connDbType');
-        const connDriverClass   = $('connDriverClass');
-        const connVersion       = $('connVersion');
-        const versionOptions    = $('versionOptions');
-        const driverClassOptions= $('driverClassOptions');
-        const connStatus        = $('connStatus');
-        const parseBtn          = $('parseBtn');
-        const testBtn           = $('testBtn');
-        const closeBtn          = $('closeBtn');
-        const parseResult       = $('parseResult');
-        const statusMsg         = $('statusMsg');
-        const sqlSection        = $('sqlSection');
-        const sqlInput          = $('sqlInput');
-        const execSqlBtn        = $('execSqlBtn');
-        const clearSqlBtn       = $('clearSqlBtn');
-        const sqlResult         = $('sqlResult');
-        const saveSection       = $('saveSection');
-        const dsName            = $('dsName');
-        const saveDsBtn         = $('saveDsBtn');
-        const sampleList        = $('sampleList');
+        const connUrl            = $('connUrl');
+        const connUsername       = $('connUsername');
+        const connPassword       = $('connPassword');
+        const connDbType         = $('connDbType');
+        const connDriverClass    = $('connDriverClass');
+        const connVersion        = $('connVersion');
+        const connVersionBtn     = $('connVersionBtn');
+        const connVersionPanel   = $('connVersionPanel');
+        const connDriverClassBtn = $('connDriverClassBtn');
+        const connDriverClassPanel = $('connDriverClassPanel');
+        const connStatus         = $('connStatus');
+        const parseBtn           = $('parseBtn');
+        const testBtn            = $('testBtn');
+        const closeBtn           = $('closeBtn');
+        const parseResult        = $('parseResult');
+        const statusMsg          = $('statusMsg');
+        const sqlSection         = $('sqlSection');
+        const sqlInput           = $('sqlInput');
+        const execSqlBtn         = $('execSqlBtn');
+        const clearSqlBtn        = $('clearSqlBtn');
+        const sqlResult          = $('sqlResult');
+        const saveSection        = $('saveSection');
+        const dsName             = $('dsName');
+        const saveDsBtn          = $('saveDsBtn');
+        const sampleList         = $('sampleList');
 
         // ==================== 工具 ====================
         function esc(s) {
@@ -297,17 +334,186 @@
             }
         }
 
-        // ==================== ★ 版本 + 驱动类 联动 ====================
+        // ==================== ★ 版本 / 驱动类 联动状态 ====================
+        let currentVersions = [];            // 当前数据库类型的所有版本（含预置 + 目录）
+        let currentDriverClasses = [];       // 当前数据库类型的所有驱动类
+        let currentVersionDriverMap = {};    // ★ 版本 → 驱动类 的映射
+
+        // ==================== ★ 自定义下拉：通用实现 ====================
+
+        function openComboPanel(inputEl, btnEl, panelEl, options, showSubHint) {
+            closeAllComboPanels(panelEl);
+
+            if (!options || options.length === 0) {
+                panelEl.innerHTML = '<div class="combo-option hint">（无可用选项，请手动输入）</div>';
+                panelEl.classList.add('show');
+                return;
+            }
+
+            const currentValue = (inputEl.value || '').trim();
+            let html = '';
+            for (const opt of options) {
+                const selected = (opt === currentValue) ? ' selected' : '';
+                let subHint = '';
+                if (showSubHint) {
+                    // 版本下拉里，右侧显示该版本对应的驱动类
+                    const cls = currentVersionDriverMap[opt];
+                    if (cls) {
+                        subHint = `<span class="sub-hint">→ ${esc(cls)}</span>`;
+                    }
+                }
+                html += `<div class="combo-option${selected}" data-value="${esc(opt)}">${esc(opt)}${subHint}</div>`;
+            }
+            panelEl.innerHTML = html;
+
+            panelEl.querySelectorAll('.combo-option').forEach(el => {
+                el.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const val = el.getAttribute('data-value');
+                    if (val != null) {
+                        inputEl.value = val;
+                        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                    panelEl.classList.remove('show');
+                });
+            });
+
+            panelEl.classList.add('show');
+        }
+
+        function closeAllComboPanels(except) {
+            [connVersionPanel, connDriverClassPanel].forEach(p => {
+                if (p && p !== except) p.classList.remove('show');
+            });
+        }
+
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.combo-wrap')) return;
+            closeAllComboPanels();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeAllComboPanels();
+        });
+
+        // 版本下拉
+        connVersion.addEventListener('click', () => {
+            openComboPanel(connVersion, connVersionBtn, connVersionPanel, currentVersions, true);
+        });
+        connVersionBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openComboPanel(connVersion, connVersionBtn, connVersionPanel, currentVersions, true);
+        });
+
+        // 驱动类下拉
+        connDriverClass.addEventListener('click', () => {
+            openComboPanel(connDriverClass, connDriverClassBtn, connDriverClassPanel, currentDriverClasses, false);
+        });
+        connDriverClassBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openComboPanel(connDriverClass, connDriverClassBtn, connDriverClassPanel, currentDriverClasses, false);
+        });
+
+        // 输入过滤
+        function filterPanel(inputEl, panelEl, options) {
+            if (!panelEl.classList.contains('show')) return;
+            const kw = (inputEl.value || '').trim().toLowerCase();
+            const filtered = kw
+                ? options.filter(o => o.toLowerCase().includes(kw))
+                : options;
+            if (filtered.length === 0) {
+                panelEl.innerHTML = '<div class="combo-option hint">（无匹配项）</div>';
+                return;
+            }
+            let html = '';
+            for (const opt of filtered) {
+                const cls = currentVersionDriverMap[opt];
+                const subHint = (cls && panelEl === connVersionPanel)
+                    ? `<span class="sub-hint">→ ${esc(cls)}</span>` : '';
+                html += `<div class="combo-option" data-value="${esc(opt)}">${esc(opt)}${subHint}</div>`;
+            }
+            panelEl.innerHTML = html;
+            panelEl.querySelectorAll('.combo-option').forEach(el => {
+                el.addEventListener('mousedown', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    const val = el.getAttribute('data-value');
+                    if (val != null) {
+                        inputEl.value = val;
+                        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                    panelEl.classList.remove('show');
+                });
+            });
+        }
+
+        connVersion.addEventListener('input', () => {
+            filterPanel(connVersion, connVersionPanel, currentVersions);
+            // ★ 版本变化 → 自动关联驱动类
+            syncDriverClassFromVersion();
+        });
+
+        connDriverClass.addEventListener('input', () => {
+            filterPanel(connDriverClass, connDriverClassPanel, currentDriverClasses);
+        });
+
+        // ==================== ★ 版本 → 驱动类 联动 ====================
 
         /**
-         * 加载下拉数据：dbType → /driver/api/combobox → 填充两个 datalist
-         * 默认选第一个（仅当输入框为空时）
-         * @param {string} dbType
-         * @param {boolean} forceReset  是否强制覆盖已填内容（dbType 切换时用 true）
+         * 根据当前版本输入框的值，自动匹配驱动类：
+         *   ① 精确匹配 versionDriverMap
+         *   ② 匹配不到，按主版本匹配（如手输 8.0.33 → 用 8 的驱动类）
+         *   ③ 都匹配不到，不动（保留用户已填的驱动类）
          */
+        function syncDriverClassFromVersion() {
+            const v = connVersion.value.trim();
+            if (!v) return;
+
+            // ① 精确匹配
+            if (currentVersionDriverMap[v]) {
+                connDriverClass.value = currentVersionDriverMap[v];
+                return;
+            }
+
+            // ② 按主版本匹配（手动输入 8.0.33，但映射里只有 8.0/8 时的兜底）
+            const major = parseInt(v, 10);
+            if (!isNaN(major)) {
+                for (const ver of Object.keys(currentVersionDriverMap)) {
+                    const mj = parseInt(ver, 10);
+                    if (mj === major) {
+                        connDriverClass.value = currentVersionDriverMap[ver];
+                        return;
+                    }
+                }
+            }
+
+            // ③ 兜底：按当前 dbType 推断
+            connDriverClass.value = inferDriverClassFallback(connDbType.value, v);
+        }
+
+        /** 前端兜底推断（与后端 inferDriverClass 保持一致） */
+        function inferDriverClassFallback(dbType, version) {
+            if (!dbType) return connDriverClass.value || '';
+            const t = dbType.toLowerCase();
+            if (t === 'mysql') {
+                const major = parseInt(version, 10);
+                return (!isNaN(major) && major >= 8)
+                    ? 'com.mysql.cj.jdbc.Driver'
+                    : 'com.mysql.jdbc.Driver';
+            }
+            if (t === 'oracle') return 'oracle.jdbc.OracleDriver';
+            if (t === 'postgresql' || t === 'pg') return 'org.postgresql.Driver';
+            if (t === 'sqlserver') return 'com.microsoft.sqlserver.jdbc.SQLServerDriver';
+            return connDriverClass.value || '';
+        }
+
+        // ==================== ★ 加载下拉数据 ====================
+
         async function loadComboboxOptions(dbType, forceReset) {
-            versionOptions.innerHTML = '';
-            driverClassOptions.innerHTML = '';
+            currentVersions = [];
+            currentDriverClasses = [];
+            currentVersionDriverMap = {};
+
             if (!dbType) {
                 if (forceReset) {
                     connVersion.value = '';
@@ -315,6 +521,7 @@
                 }
                 return;
             }
+
             try {
                 const resp = await fetch(DRIVER_API + '/combobox?dbType=' + encodeURIComponent(dbType));
                 const data = await resp.json();
@@ -322,32 +529,29 @@
                     console.warn('combobox 加载失败:', data.error);
                     return;
                 }
-                // 填充 datalist
-                versionOptions.innerHTML = (data.versions || [])
-                    .map(v => `<option value="${esc(v)}"></option>`).join('');
-                driverClassOptions.innerHTML = (data.driverClasses || [])
-                    .map(c => `<option value="${esc(c)}"></option>`).join('');
+                currentVersions = data.versions || [];
+                currentDriverClasses = data.driverClasses || [];
+                currentVersionDriverMap = data.versionDriverMap || {};
 
-                // 默认选第一个（forceReset 强制覆盖；否则只在输入框为空时填）
-                const versions = data.versions || [];
-                const classes  = data.driverClasses || [];
-                if (versions.length > 0 && (forceReset || !connVersion.value)) {
-                    connVersion.value = versions[0];
-                }
-                if (classes.length > 0 && (forceReset || !connDriverClass.value)) {
-                    connDriverClass.value = classes[0];
+                // 默认选第一个版本，并按版本自动切驱动类
+                if (currentVersions.length > 0 && (forceReset || !connVersion.value)) {
+                    connVersion.value = currentVersions[0];
+                    const cls = currentVersionDriverMap[currentVersions[0]];
+                    if (cls) connDriverClass.value = cls;
+                } else if (connVersion.value) {
+                    // 保留用户原有版本，但重新匹配驱动类
+                    syncDriverClassFromVersion();
                 }
             } catch (e) {
                 console.warn('加载 combobox 失败:', e);
             }
         }
 
-        // dbType 变化 → 重置并重新加载下拉数据
         connDbType.addEventListener('change', () => {
             loadComboboxOptions(connDbType.value, true);
         });
 
-        // 初始时也加载一次（如果已选中）
+        // 初始加载
         loadComboboxOptions(connDbType.value, false);
 
         // ==================== 示例连接串 ====================
@@ -375,7 +579,6 @@
                         connUsername.value = s.username || '';
                         connPassword.value = '';
                         connDbType.value = s.dbType || '';
-                        // 触发联动
                         loadComboboxOptions(connDbType.value, true);
                         doParse();
                     });
@@ -414,7 +617,6 @@
                     <div class="kv"><b>端口</b><span>${esc(parsed.port || '-')}</span></div>
                     <div class="kv"><b>数据库名</b><span>${esc(parsed.databaseName || '-')}</span></div>
                 `;
-                // 如果解析出类型且当前没选，自动选上并触发联动
                 if (parsed.dbType && !connDbType.value) {
                     connDbType.value = parsed.dbType;
                     loadComboboxOptions(connDbType.value, true);
@@ -587,7 +789,6 @@
             sqlResult.innerHTML = '';
         });
 
-        // 输入框变化自动解析（防抖）
         let parseTimer = null;
         connUrl.addEventListener('input', () => {
             if (parseTimer) clearTimeout(parseTimer);
@@ -596,7 +797,6 @@
             }, 400);
         });
 
-        // 页面卸载时关闭临时连接
         window.addEventListener('beforeunload', () => {
             if (currentTempId) {
                 try {

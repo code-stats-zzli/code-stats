@@ -26,6 +26,7 @@ public class DirectoryService {
     public static final String RES_TYPE_PAGES       = "pages";
     public static final String RES_TYPE_SQL         = "sql";
     public static final String RES_TYPE_ATTACHMENTS = "attachments";
+    public static final String RES_TYPE_DRIVERS     = "drivers";     // ★ 新增默认驱动目录
     public static final String RES_TYPE_OTHERS      = "others";
 
     private static final Map<String, String> RESOURCE_TYPES = new LinkedHashMap<>();
@@ -34,10 +35,10 @@ public class DirectoryService {
         RESOURCE_TYPES.put(RES_TYPE_PAGES,       "导出页面");
         RESOURCE_TYPES.put(RES_TYPE_SQL,         "SQL管理");
         RESOURCE_TYPES.put(RES_TYPE_ATTACHMENTS, "附件");
+        RESOURCE_TYPES.put(RES_TYPE_DRIVERS,     "驱动管理");    // ★ 新增
         RESOURCE_TYPES.put(RES_TYPE_OTHERS,      "其他");
     }
 
-    /** ★ 完整 32 位 UUID，兼容历史 12 位 */
     private static final String UUID_REGEX = "[0-9a-f]{12,32}";
 
     private final Path localRoot;
@@ -51,11 +52,12 @@ public class DirectoryService {
         this.resourcesRoot = Paths.get(System.getProperty("user.dir"), "resources")
                 .normalize().toAbsolutePath();
         ensureRootExists(resourcesRoot);
-        // ★ 自查：所有资源类型目录在启动时自动创建
+        // ★ 启动时自动创建所有资源类型目录（含 drivers）
         for (String type : RESOURCE_TYPES.keySet()) {
             ensureRootExists(resourcesRoot.resolve(type));
         }
-        log.info("资源管理根目录已就绪: {}", resourcesRoot);
+        log.info("资源管理根目录已就绪: {}, 驱动目录: {}",
+                resourcesRoot, resourcesRoot.resolve(RES_TYPE_DRIVERS));
     }
 
     private void ensureRootExists(Path root) {
@@ -65,7 +67,7 @@ public class DirectoryService {
         }
     }
 
-    // ==================== 本地目录（保持不变） ====================
+    // ==================== 本地目录 ====================
 
     public Path getRootPath(String rootType) {
         return ROOT_TYPE_RESOURCES.equals(rootType) ? resourcesRoot : localRoot;
@@ -183,7 +185,6 @@ public class DirectoryService {
         return path;
     }
 
-    /** 安全解析资源类型内的相对路径 */
     private Path resolveResourcePath(String type, String relPath) {
         Path typeRoot = getResourceTypePath(type);
         Path target = typeRoot.resolve(relPath == null ? "" : relPath).normalize();
@@ -191,7 +192,6 @@ public class DirectoryService {
         return target;
     }
 
-    /** 生成 名称_<32位uuid>.ext */
     private String generateStoredName(String originalName) {
         String baseName = originalName;
         String ext = "";
@@ -200,11 +200,10 @@ public class DirectoryService {
             baseName = originalName.substring(0, dotIdx);
             ext = originalName.substring(dotIdx);
         }
-        String uuid = UUID.randomUUID().toString().replace("-", ""); // 32 位
+        String uuid = UUID.randomUUID().toString().replace("-", "");
         return baseName + "_" + uuid + ext;
     }
 
-    /** 从存储名还原显示名（去除 uuid 后缀） */
     public String parseDisplayName(String storedName) {
         if (storedName == null || storedName.isEmpty()) return storedName;
         int dotIdx = storedName.lastIndexOf('.');
@@ -220,10 +219,6 @@ public class DirectoryService {
         return storedName;
     }
 
-    /**
-     * 列出资源（目录 + 文件）
-     * @param relPath 相对于类型根目录的路径（空 / 子目录 / 子目录/子子目录）
-     */
     public List<Map<String, Object>> listResources(String type, String relPath) throws IOException {
         Path dir = resolveResourcePath(type, relPath);
         if (!Files.isDirectory(dir)) throw new IOException("不是目录: " + relPath);
@@ -237,8 +232,8 @@ public class DirectoryService {
                 String displayName = isDir ? name : parseDisplayName(name);
 
                 Map<String, Object> item = new LinkedHashMap<>();
-                item.put("name", name);                    // 存储名（目录名 / 文件存储名）
-                item.put("displayName", displayName);      // 显示名（文件去 uuid）
+                item.put("name", name);
+                item.put("displayName", displayName);
                 item.put("isDirectory", isDir);
                 item.put("type", type);
                 item.put("parentPath", relPath == null ? "" : relPath);
@@ -249,7 +244,6 @@ public class DirectoryService {
                 list.add(item);
             }
         }
-        // 目录在前，文件在后，名称升序
         list.sort((a, b) -> {
             boolean da = (Boolean) a.get("isDirectory");
             boolean db = (Boolean) b.get("isDirectory");
@@ -259,7 +253,6 @@ public class DirectoryService {
         return list;
     }
 
-    /** 新增子目录 */
     public Map<String, Object> createSubDirectory(String type, String parentRelPath, String dirName) throws IOException {
         if (dirName == null || dirName.trim().isEmpty()) throw new IllegalArgumentException("目录名不能为空");
         if (dirName.contains("/") || dirName.contains("\\")) throw new IllegalArgumentException("目录名不能包含斜杠");
@@ -281,7 +274,6 @@ public class DirectoryService {
         return result;
     }
 
-    /** 上传资源到指定子目录，命名 名称_<32位uuid>.ext */
     public Map<String, Object> uploadResource(String type, String subPath, String originalName, byte[] content) throws IOException {
         Path dir = resolveResourcePath(type, subPath);
         if (!Files.isDirectory(dir)) throw new IOException("上传路径不是目录: " + subPath);
@@ -303,7 +295,6 @@ public class DirectoryService {
         return result;
     }
 
-    /** 删除资源（文件或目录，递归删除） */
     public void deleteResource(String type, String fullRelPath) throws IOException {
         Path target = resolveResourcePath(type, fullRelPath);
         Path typeRoot = getResourceTypePath(type);
@@ -322,20 +313,17 @@ public class DirectoryService {
         log.info("删除资源: type={}, path={}", type, fullRelPath);
     }
 
-    /** 获取资源文件的物理路径 */
     public Path getResourceFilePath(String type, String fullRelPath) throws IOException {
         Path target = resolveResourcePath(type, fullRelPath);
         if (!Files.isRegularFile(target)) throw new IOException("不是文件: " + fullRelPath);
         return target;
     }
 
-    /** 读取文本内容（SQL 等） */
     public String readResourceContent(String type, String fullRelPath) throws IOException {
         Path file = getResourceFilePath(type, fullRelPath);
         return new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
     }
 
-    /** 各类型资源数量（递归） */
     public Map<String, Integer> countResources() {
         Map<String, Integer> counts = new LinkedHashMap<>();
         for (String type : RESOURCE_TYPES.keySet()) {

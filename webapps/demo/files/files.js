@@ -2,7 +2,7 @@
     const API_BASE = window.apiUrl('/files/api');
 
     let currentType = 'images';
-    let currentSubPath = '';    // 相对于类型根的相对路径，'' 表示根
+    let currentSubPath = '';
     let resourceTypes = {};
 
     const resourceTypeList    = document.getElementById('resourceTypeList');
@@ -19,6 +19,7 @@
         pages:       '📄',
         sql:         '🗃️',
         attachments: '📎',
+        drivers:     '🔌',   // ★ 新增：驱动管理
         others:      '📦'
     };
     function getTypeIcon(type) { return TYPE_ICONS[type] || '📦'; }
@@ -34,9 +35,7 @@
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
-    function showMsg(msg, isError = false) { alert(msg); }
-
-    // ==================== 类型列表 ====================
+    function showMsg(msg) { alert(msg); }
 
     async function loadResourceTypes() {
         try {
@@ -90,8 +89,6 @@
         refreshList();
     }
 
-    // ==================== 面包屑 ====================
-
     function renderBreadcrumb() {
         const typeLabel = resourceTypes[currentType] || currentType;
         const parts = currentSubPath ? currentSubPath.split('/') : [];
@@ -109,8 +106,6 @@
             });
         });
     }
-
-    // ==================== 列表加载 ====================
 
     async function refreshList() {
         renderBreadcrumb();
@@ -177,9 +172,7 @@
         html += '</div>';
         resourceListPanel.innerHTML = html;
 
-        // 卡片事件
         resourceListPanel.querySelectorAll('.resource-card').forEach(card => {
-            // 双击
             card.addEventListener('dblclick', (e) => {
                 if (e.target.closest('.res-action-btn')) return;
                 const isDir = card.dataset.isDir === 'true';
@@ -193,7 +186,6 @@
             });
         });
 
-        // 按钮事件
         resourceListPanel.querySelectorAll('.res-action-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -206,8 +198,6 @@
         });
     }
 
-    // ==================== 双击行为 ====================
-
     function getFileExt(name) {
         const i = name.lastIndexOf('.');
         return i >= 0 ? name.substring(i + 1).toLowerCase() : '';
@@ -217,7 +207,6 @@
         const name = fullPath.split('/').pop();
         const ext = getFileExt(name);
 
-        // ★ SQL 文件 → 打开数据库页面并加载
         if (ext === 'sql') {
             const url = window.apiUrl('/demo/db/dbclient.html')
                 + '?loadSql=' + encodeURIComponent(fullPath)
@@ -225,26 +214,18 @@
             window.open(url, '_blank');
             return;
         }
-
-        // ★ HTML 页面 → 新窗口预览
         if (ext === 'html' || ext === 'htm') {
             const url = `${API_BASE}/resources/preview?type=${encodeURIComponent(currentType)}&path=${encodeURIComponent(fullPath)}`;
             window.open(url, '_blank');
             return;
         }
-
-        // 图片 / PDF → 预览
         if (['png','jpg','jpeg','gif','svg','webp','bmp','ico','pdf'].includes(ext)) {
             const url = `${API_BASE}/resources/preview?type=${encodeURIComponent(currentType)}&path=${encodeURIComponent(fullPath)}`;
             window.open(url, '_blank');
             return;
         }
-
-        // 其他 → 下载
         downloadResource(fullPath);
     }
-
-    // ==================== 操作 ====================
 
     function downloadResource(fullPath) {
         const url = `${API_BASE}/resources/download?type=${encodeURIComponent(currentType)}&path=${encodeURIComponent(fullPath)}`;
@@ -253,8 +234,7 @@
 
     async function deleteResource(fullPath) {
         const name = fullPath.split('/').pop();
-        const displayName = name;
-        if (!confirm(`确定删除「${displayName}」吗？如果是目录会递归删除其内所有文件。`)) return;
+        if (!confirm(`确定删除「${name}」吗？如果是目录会递归删除其内所有文件。`)) return;
         try {
             const resp = await fetch(`${API_BASE}/resources/delete`, {
                 method: 'POST',
@@ -268,9 +248,9 @@
                 await loadResourceTypes();
                 highlightType(currentType);
             } else {
-                showMsg(data.error || '删除失败', true);
+                showMsg(data.error || '删除失败');
             }
-        } catch (err) { showMsg(err.message, true); }
+        } catch (err) { showMsg(err.message); }
     }
 
     async function createSubDirectory() {
@@ -283,13 +263,9 @@
                 body: JSON.stringify({ type: currentType, path: currentSubPath, name: name.trim() })
             });
             const data = await resp.json();
-            if (data.success) {
-                showMsg('子目录创建成功');
-                await refreshList();
-            } else {
-                showMsg(data.error || '创建失败', true);
-            }
-        } catch (err) { showMsg(err.message, true); }
+            if (data.success) { showMsg('子目录创建成功'); await refreshList(); }
+            else showMsg(data.error || '创建失败');
+        } catch (err) { showMsg(err.message); }
     }
 
     async function uploadResources(files) {
@@ -316,13 +292,11 @@
             }
         }
 
-        showMsg(`上传完成：成功 ${successCount} 个${failCount > 0 ? `，失败 ${failCount} 个` : ''}`, failCount > 0);
+        showMsg(`上传完成：成功 ${successCount} 个${failCount > 0 ? `，失败 ${failCount} 个` : ''}`);
         await refreshList();
         await loadResourceTypes();
         highlightType(currentType);
     }
-
-    // ==================== 事件绑定 ====================
 
     uploadResourceBtn.addEventListener('click', () => {
         resourceFileInput.value = '';
@@ -338,6 +312,5 @@
         await refreshList();
     });
 
-    // ==================== 启动 ====================
     loadResourceTypes();
 })();

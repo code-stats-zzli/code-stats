@@ -7,6 +7,7 @@ import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestMapping;
+import com.omni.framework.spring.annotation.RequestParam;
 import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.spring.mvc.FileItem;
 import com.omni.framework.spring.mvc.MultipartResolver;
@@ -25,11 +26,12 @@ public class DriverController {
     @Autowired
     private DriverJarService driverService;
 
+    /** ★ 支持按 dbType 过滤 */
     @RequestMapping("/list")
     @ResponseBody
-    public String list() {
+    public String list(@RequestParam(value = "dbType", required = false) String dbType) {
         try {
-            return JsonUtil.toJson(driverService.listAll());
+            return JsonUtil.toJson(driverService.listByDbType(dbType));
         } catch (Exception e) {
             log.error("查询驱动列表失败", e);
             return error("查询驱动列表失败: " + rootCauseMessage(e));
@@ -48,9 +50,7 @@ public class DriverController {
         }
     }
 
-    /**
-     * ★ 修复：包 try-catch，异常时返回 JSON 而不是让 DispatcherServlet 抛 500 HTML
-     */
+    /** ★ 上传：新增必填 dbType、version；按唯一键校验重复 */
     @RequestMapping("/upload")
     @ResponseBody
     public String upload() {
@@ -65,39 +65,40 @@ public class DriverController {
             if (fileItem == null) return error("缺少文件字段 file");
 
             String name = multipart.getParameter("name");
-            if (name == null || name.trim().isEmpty()) {
-                return error("驱动名称 name 不能为空");
-            }
+            String dbType = multipart.getParameter("dbType");
+            String version = multipart.getParameter("version");
+
+            if (name == null || name.trim().isEmpty()) return error("驱动名称 name 不能为空");
+            if (dbType == null || dbType.trim().isEmpty()) return error("数据库类型 dbType 不能为空");
+            if (version == null || version.trim().isEmpty()) return error("驱动版本 version 不能为空");
+
             String fileName = fileItem.getFileName();
-            if (fileName == null || fileName.trim().isEmpty()) {
-                return error("文件名不能为空");
-            }
+            if (fileName == null || fileName.trim().isEmpty()) return error("文件名不能为空");
 
             byte[] data = fileItem.getBytes();
-            if (data == null || data.length == 0) {
-                return error("文件内容为空");
-            }
+            if (data == null || data.length == 0) return error("文件内容为空");
 
             DriverJar driver = new DriverJar();
             driver.setName(name.trim());
+            driver.setDbType(dbType.trim().toLowerCase());
+            driver.setVersion(version.trim());
             driver.setFileName(fileName.trim());
             driver.setJarData(data);
 
             boolean ok = driverService.save(driver);
             if (!ok) return error("保存失败（数据库影响行数为 0）");
 
-            log.info("驱动上传成功: name={}, file={}, size={} bytes",
-                    name, fileName, data.length);
+            log.info("驱动上传成功: dbType={}, name={}, version={}, file={}, size={} bytes",
+                    dbType, name, version, fileName, data.length);
             return JsonUtil.toJson(Map.of("success", true));
+        } catch (IllegalStateException e) {
+            return error(e.getMessage());
         } catch (Exception e) {
             log.error("驱动上传失败", e);
             return error("驱动上传失败: " + rootCauseMessage(e));
         }
     }
 
-    /**
-     * ★ 修复：同上
-     */
     @RequestMapping("/update")
     @ResponseBody
     public String update() {
@@ -110,6 +111,8 @@ public class DriverController {
 
             String id = multipart.getParameter("id");
             String name = multipart.getParameter("name");
+            String dbType = multipart.getParameter("dbType");
+            String version = multipart.getParameter("version");
             if (id == null || id.trim().isEmpty()) return error("id 不能为空");
             if (name == null || name.trim().isEmpty()) return error("驱动名称 name 不能为空");
 
@@ -118,6 +121,8 @@ public class DriverController {
             DriverJar driver = new DriverJar();
             driver.setId(id.trim());
             driver.setName(name.trim());
+            driver.setDbType(dbType == null ? null : dbType.trim().toLowerCase());
+            driver.setVersion(version == null ? null : version.trim());
             if (fileItem != null) {
                 driver.setJarData(fileItem.getBytes());
                 driver.setFileName(fileItem.getFileName());
@@ -137,9 +142,7 @@ public class DriverController {
     public void download(String id) {
         try {
             DriverJar driver = driverService.getById(id);
-            if (driver == null) {
-                throw new RuntimeException("驱动不存在: " + id);
-            }
+            if (driver == null) throw new RuntimeException("驱动不存在: " + id);
             var resp = com.omni.framework.spring.mvc.ResponseContextHolder.getResponse();
             resp.setHeader("Content-Disposition", "attachment; filename=\"" + driver.getFileName() + "\"");
             resp.setContentType("application/java-archive");
@@ -150,21 +153,14 @@ public class DriverController {
         }
     }
 
-    // ==================== 工具 ====================
-
     private String error(String msg) {
         return JsonUtil.toJson(Map.of("success", false, "error", msg));
     }
 
-    /**
-     * 从异常链中取出最底层的信息，避免前端只看到 "Update failed: INSERT ..." 这种外壳
-     */
     private String rootCauseMessage(Throwable e) {
         if (e == null) return "未知错误";
         Throwable cur = e;
-        while (cur.getCause() != null && cur.getCause() != cur) {
-            cur = cur.getCause();
-        }
+        while (cur.getCause() != null && cur.getCause() != cur) cur = cur.getCause();
         String msg = cur.getMessage();
         return cur.getClass().getSimpleName() + ": " + (msg == null ? "(no message)" : msg);
     }

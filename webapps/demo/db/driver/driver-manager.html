@@ -5,158 +5,116 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>驱动管理 - CodeStats</title>
     <style>
-        /* 内联样式，不依赖外部CSS */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%);
             font-family: 'Inter', 'Segoe UI', sans-serif;
             min-height: 100vh;
         }
-        .container {
-            padding: 24px;
-            background: transparent;
-            height: 100vh;
-        }
-        .toolbar {
-            margin-bottom: 20px;
-        }
+        .container { padding: 24px; height: 100vh; }
+        .toolbar { margin-bottom: 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
         .btn-primary {
-            background: #0066ff;
-            color: white;
-            border: none;
-            padding: 8px 20px;
-            border-radius: 40px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: 0.2s;
+            background: #0066ff; color: white; border: none;
+            padding: 8px 20px; border-radius: 40px; cursor: pointer;
+            font-size: 14px; transition: 0.2s;
         }
-        .btn-primary:hover {
-            background: #0050cc;
-            transform: translateY(-1px);
-        }
+        .btn-primary:hover { background: #0050cc; transform: translateY(-1px); }
         .btn-secondary {
             background: rgba(0,102,255,0.1);
             border: 1px solid rgba(0,102,255,0.3);
-            padding: 8px 20px;
-            border-radius: 40px;
-            cursor: pointer;
-            transition: 0.2s;
+            padding: 8px 20px; border-radius: 40px;
+            cursor: pointer; transition: 0.2s;
         }
-        .btn-secondary:hover {
-            background: rgba(0,102,255,0.2);
-            transform: translateY(-1px);
+        .btn-secondary:hover { background: rgba(0,102,255,0.2); transform: translateY(-1px); }
+        select {
+            padding: 8px 14px; border-radius: 20px; border: 1px solid rgba(0,102,255,0.3);
+            background: white; font-size: 13px; min-width: 180px;
         }
         table {
-            width: 100%;
-            background: rgba(255,255,255,0.7);
-            backdrop-filter: blur(16px);
-            border-radius: 20px;
-            overflow: hidden;
-            border-collapse: collapse;
+            width: 100%; background: rgba(255,255,255,0.7);
+            backdrop-filter: blur(16px); border-radius: 20px;
+            overflow: hidden; border-collapse: collapse;
         }
         th, td {
-            padding: 12px 16px;
-            text-align: left;
+            padding: 12px 16px; text-align: left;
             border-bottom: 1px solid rgba(0,102,255,0.2);
         }
-        th {
-            background: rgba(0,102,255,0.1);
-            color: #0066ff;
-            font-weight: 600;
+        th { background: rgba(0,102,255,0.1); color: #0066ff; font-weight: 600; }
+        .badge {
+            display: inline-block; padding: 2px 10px; border-radius: 12px;
+            font-size: 11px; font-weight: 600;
         }
+        .badge.mysql { background: #fff3cd; color: #856404; }
+        .badge.oracle { background: #f8d7da; color: #721c24; }
+        .badge.postgresql { background: #d1ecf1; color: #0c5460; }
+        .badge.default { background: #e2e8f0; color: #57606a; }
         .action-btns button {
-            margin-right: 8px;
-            padding: 4px 12px;
-            background: rgba(0,102,255,0.1);
-            border: none;
-            border-radius: 16px;
-            cursor: pointer;
-            transition: 0.2s;
+            margin-right: 8px; padding: 4px 12px;
+            background: rgba(0,102,255,0.1); border: none;
+            border-radius: 16px; cursor: pointer; transition: 0.2s;
         }
-        .action-btns button:hover {
-            background: #0066ff;
-            color: white;
-        }
+        .action-btns button:hover { background: #0066ff; color: white; }
         .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.6);
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; background: rgba(0,0,0,0.6);
             backdrop-filter: blur(4px);
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
+            justify-content: center; align-items: center; z-index: 1000;
         }
         .modal-content {
-            background: white;
-            border-radius: 24px;
-            width: 500px;
-            max-width: 90%;
+            background: white; border-radius: 24px;
+            width: 540px; max-width: 90%;
             box-shadow: 0 20px 35px rgba(0,0,0,0.2);
         }
         .modal-header {
-            padding: 16px 24px;
-            border-bottom: 1px solid #e2e8f0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            padding: 16px 24px; border-bottom: 1px solid #e2e8f0;
+            display: flex; justify-content: space-between; align-items: center;
         }
-        .close {
-            font-size: 28px;
-            cursor: pointer;
-            color: #94a3b8;
-        }
-        .close:hover {
-            color: #ef4444;
-        }
-        .modal-body {
-            padding: 24px;
-        }
-        .form-group {
-            margin-bottom: 16px;
-        }
+        .close { font-size: 28px; cursor: pointer; color: #94a3b8; }
+        .close:hover { color: #ef4444; }
+        .modal-body { padding: 24px; }
+        .form-group { margin-bottom: 16px; }
         .form-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 600;
-            color: #1e293b;
+            display: block; margin-bottom: 6px;
+            font-weight: 600; color: #1e293b; font-size: 13px;
         }
-        .form-group input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #cbd5e1;
-            border-radius: 12px;
-            font-size: 14px;
+        .form-group input, .form-group select {
+            width: 100%; padding: 10px;
+            border: 1px solid #cbd5e1; border-radius: 12px; font-size: 14px;
         }
         .modal-footer {
-            padding: 16px 24px;
-            border-top: 1px solid #e2e8f0;
-            text-align: right;
-            gap: 12px;
-            display: flex;
-            justify-content: flex-end;
+            padding: 16px 24px; border-top: 1px solid #e2e8f0;
+            text-align: right; gap: 12px; display: flex; justify-content: flex-end;
         }
-        .empty-row td {
-            text-align: center;
-            padding: 40px;
-            color: #64748b;
-        }
+        .empty-row td { text-align: center; padding: 40px; color: #64748b; }
+        .hint { font-size: 12px; color: #64748b; margin-top: 4px; }
+        .error-text { color: #dc2626; font-size: 12px; margin-top: 4px; min-height: 16px; }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="toolbar">
         <button id="addDriverBtn" class="btn-primary">➕ 新增驱动</button>
+        <label style="margin-left: 20px; color: #0066ff; font-weight: 600;">按类型筛选：</label>
+        <select id="filterDbType">
+            <option value="">全部</option>
+            <option value="mysql">MySQL</option>
+            <option value="oracle">Oracle</option>
+            <option value="postgresql">PostgreSQL</option>
+        </select>
     </div>
     <table id="driverTable">
         <thead>
-        <tr><th>驱动名称</th><th>文件名</th><th>上传时间</th><th>操作</th></tr>
+        <tr>
+            <th>驱动名称</th>
+            <th>数据库类型</th>
+            <th>版本</th>
+            <th>文件名</th>
+            <th>上传时间</th>
+            <th>操作</th>
+        </tr>
         </thead>
         <tbody id="driverTableBody">
-        <tr class="empty-row"><td colspan="4">暂无驱动，请点击“新增驱动”上传 jar 文件</td></tr>
+        <tr class="empty-row"><td colspan="6">暂无驱动，请点击「新增驱动」上传 jar 文件</td></tr>
         </tbody>
     </table>
 </div>
@@ -171,13 +129,27 @@
         <div class="modal-body">
             <input type="hidden" id="editId">
             <div class="form-group">
-                <label>驱动名称 *</label>
-                <input type="text" id="driverName" placeholder="例如: MySQL Connector 8.0">
+                <label>数据库类型 *</label>
+                <select id="dbType">
+                    <option value="mysql">MySQL</option>
+                    <option value="oracle">Oracle</option>
+                    <option value="postgresql">PostgreSQL</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>驱动名称 * <span style="color:#94a3b8;font-weight:400;">（如 mysql-connector-java）</span></label>
+                <input type="text" id="driverName" placeholder="mysql-connector-java">
+            </div>
+            <div class="form-group">
+                <label>驱动版本 * <span style="color:#94a3b8;font-weight:400;">（如 8.0.33）</span></label>
+                <input type="text" id="driverVersion" placeholder="8.0.33">
+                <div class="hint">唯一性校验：数据库类型 + 驱动名称 + 版本 三者组合不可重复</div>
             </div>
             <div class="form-group" id="fileGroup">
                 <label>Jar 文件 <span id="fileOptionalHint"></span></label>
                 <input type="file" id="jarFile" accept=".jar">
             </div>
+            <div id="formError" class="error-text"></div>
         </div>
         <div class="modal-footer">
             <button id="saveDriverBtn" class="btn-primary">保存</button>

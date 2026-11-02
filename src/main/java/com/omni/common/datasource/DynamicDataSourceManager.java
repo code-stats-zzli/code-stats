@@ -3,6 +3,8 @@ package com.omni.common.datasource;
 import com.omni.common.datasource.model.DataSourceConfig;
 import com.omni.common.datasource.type.DataSourceType;
 import com.omni.common.datasource.type.impl.MysqlDataSourceType;
+import com.omni.common.datasource.type.impl.OracleDataSourceType;
+import com.omni.common.datasource.type.impl.PostgresqlDataSourceType;
 import com.omni.common.util.DriverLoader;
 import com.omni.framework.pool.SimpleDataSource;
 import org.slf4j.Logger;
@@ -19,8 +21,11 @@ public class DynamicDataSourceManager {
     private static final Map<String, DataSourceType> typeRegistry = new ConcurrentHashMap<>();
 
     static {
+        // ★ 注册三种数据库类型
         registerType("mysql", new MysqlDataSourceType());
-        // 可扩展 oracle, postgresql 等
+        registerType("oracle", new OracleDataSourceType());
+        registerType("postgresql", new PostgresqlDataSourceType());
+        registerType("pg", new PostgresqlDataSourceType());
     }
 
     public static void registerType(String dbType, DataSourceType type) {
@@ -29,11 +34,8 @@ public class DynamicDataSourceManager {
 
     public static SimpleDataSource getOrCreateDataSource(DataSourceConfig config) {
         return dataSourcePool.computeIfAbsent(config.getId(), id -> {
-            // 1. 使用 DriverLoader 加载驱动并注册
             try {
                 Driver driver = DriverLoader.getDriver(config.getDbType(), config.getVersion());
-                // 注册驱动（如果 DriverManager 尚未注册）
-                // 注意：每个驱动实例只需要注册一次，这里简单注册，避免重复注册可做缓存
                 DriverManager.registerDriver(new DriverProxy(driver));
                 log.info("驱动加载成功: {} -> {}", config.getDbType(), driver.getClass().getName());
             } catch (Exception e) {
@@ -65,9 +67,7 @@ public class DynamicDataSourceManager {
 
     public static Connection getConnection(String dataSourceId) throws SQLException {
         SimpleDataSource ds = dataSourcePool.get(dataSourceId);
-        if (ds == null) {
-            throw new SQLException("数据源未加载: " + dataSourceId);
-        }
+        if (ds == null) throw new SQLException("数据源未加载: " + dataSourceId);
         return ds.getConnection();
     }
 
@@ -82,49 +82,15 @@ public class DynamicDataSourceManager {
         if (ds != null) ds.close();
     }
 
-    /**
-     * 驱动代理类，解决动态加载的驱动可能没有正确注册到 DriverManager 的问题
-     */
     private static class DriverProxy implements Driver {
         private final Driver driver;
-
-        public DriverProxy(Driver driver) {
-            this.driver = driver;
-        }
-
-        @Override
-        public Connection connect(String url, Properties info) throws SQLException {
-            return driver.connect(url, info);
-        }
-
-        @Override
-        public boolean acceptsURL(String url) throws SQLException {
-            return driver.acceptsURL(url);
-        }
-
-        @Override
-        public DriverPropertyInfo[] getPropertyInfo(String url, Properties info) throws SQLException {
-            return driver.getPropertyInfo(url, info);
-        }
-
-        @Override
-        public int getMajorVersion() {
-            return driver.getMajorVersion();
-        }
-
-        @Override
-        public int getMinorVersion() {
-            return driver.getMinorVersion();
-        }
-
-        @Override
-        public boolean jdbcCompliant() {
-            return driver.jdbcCompliant();
-        }
-
-        @Override
-        public java.util.logging.Logger getParentLogger() throws SQLFeatureNotSupportedException {
-            return driver.getParentLogger();
-        }
+        public DriverProxy(Driver driver) { this.driver = driver; }
+        @Override public Connection connect(String url, Properties info) throws SQLException { return driver.connect(url, info); }
+        @Override public boolean acceptsURL(String url) throws SQLException { return driver.acceptsURL(url); }
+        @Override public DriverPropertyInfo[] getPropertyInfo(String url, Properties info) throws SQLException { return driver.getPropertyInfo(url, info); }
+        @Override public int getMajorVersion() { return driver.getMajorVersion(); }
+        @Override public int getMinorVersion() { return driver.getMinorVersion(); }
+        @Override public boolean jdbcCompliant() { return driver.jdbcCompliant(); }
+        @Override public java.util.logging.Logger getParentLogger() throws SQLFeatureNotSupportedException { return driver.getParentLogger(); }
     }
 }

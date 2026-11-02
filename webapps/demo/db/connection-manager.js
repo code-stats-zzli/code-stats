@@ -82,7 +82,7 @@
         if (btn) switchLeftTab(btn.dataset.tab);
     });
 
-    // ==================== 引导卡片（默认折叠，HTML 已带 collapsed） ====================
+    // ==================== 引导卡片 ====================
     const guideCard = $('guideCard');
     const guideHeader = $('guideHeader');
     const guideToggle = $('guideToggle');
@@ -178,10 +178,58 @@
         return 0;
     }
 
+    // ==================== ★ 点击驱动：联动右侧连接配置 ====================
     function selectDriver(key) {
         selectedDriverKey = key;
         renderDriverList();
         renderDriverEditor();
+        // ★ 新增：把驱动信息同步到右侧连接配置表单
+        const d = allDrivers.find(x => x.key === key);
+        if (d) applyDriverToConnection(d);
+    }
+
+    /**
+     * 将选中的驱动信息（类型 / 版本 / 驱动类）填充到右侧连接表单，
+     * 并加载对应类型的版本下拉与驱动类下拉数据。
+     */
+    async function applyDriverToConnection(d) {
+        if (!d) return;
+
+        // 1) 同步设置数据库类型（立即响应）
+        if (d.dbType) connDbType.value = d.dbType;
+
+        // 2) 异步加载该类型的版本列表 + 版本→驱动类映射（先重置旧数据）
+        try {
+            await loadComboboxOptions(d.dbType, true);
+        } catch (e) {
+            console.warn('[selectDriver] 加载版本下拉失败:', e);
+        }
+
+        // 3) 设置驱动版本（优先用驱动条目自身记录的版本）
+        if (d.version) connVersion.value = d.version;
+
+        // 4) 设置驱动类（优先级：驱动条目字段 > 版本映射表 > 按类型推断）
+        let cls = d.driverClass;
+        if (!cls) {
+            cls = currentVersionDriverMap[d.version]
+                || inferDriverClassFallback(d.dbType, d.version);
+        }
+        if (cls) connDriverClass.value = cls;
+
+        // 5) 高亮引导步骤
+        highlightStep(2);
+
+        // 6) 视觉反馈：短暂闪烁，提示用户已联动
+        [connVersion, connDriverClass].forEach(el => {
+            if (!el) return;
+            el.style.transition = 'background-color 0.4s';
+            el.style.backgroundColor = '#fef3c7';
+            setTimeout(() => { el.style.backgroundColor = ''; }, 600);
+        });
+
+        // 7) 右上角轻提示
+        showMsg(statusMsg, `已应用驱动：${DB_TYPE_LABELS[d.dbType] || d.dbType} ${d.version}`, 'ok');
+        setTimeout(() => hideMsg(statusMsg), 2000);
     }
 
     // ==================== 资源关联 Tab：驱动编辑面板 ====================
@@ -283,6 +331,11 @@
                 selectedDriverKey = data.key || d.key;
                 renderDriverList();
                 renderDriverEditor();
+                // ★ 编辑保存后如果正在被用于右侧连接配置，也刷新一下
+                if (selectedDriverKey) {
+                    const updated = allDrivers.find(x => x.key === selectedDriverKey);
+                    if (updated) applyDriverToConnection(updated);
+                }
             } else {
                 showEditorMsg('❌ ' + (data.error || '保存失败'), 'bad');
             }
@@ -305,7 +358,7 @@
             });
             const data = await resp.json();
             if (data.success) {
-                selectedDriverKey = null;
+                if (selectedDriverKey === d.key) selectedDriverKey = null;
                 await loadDrivers();
                 renderDriverEditor();
             } else {
@@ -441,7 +494,7 @@
         if (e.target === uploadModal) closeUploadModal();
     });
 
-    // ==================== 示例 Tab：加载示例连接串 ====================
+    // ==================== 示例 Tab ====================
     const sampleList = $('sampleList');
 
     async function loadSamples() {

@@ -21,7 +21,7 @@ public class DynamicDataSourceManager {
     private static final Map<String, DataSourceType> typeRegistry = new ConcurrentHashMap<>();
 
     static {
-        // ★ 注册三种数据库类型
+        // 注册三种数据库类型
         registerType("mysql", new MysqlDataSourceType());
         registerType("oracle", new OracleDataSourceType());
         registerType("postgresql", new PostgresqlDataSourceType());
@@ -34,24 +34,37 @@ public class DynamicDataSourceManager {
 
     public static SimpleDataSource getOrCreateDataSource(DataSourceConfig config) {
         return dataSourcePool.computeIfAbsent(config.getId(), id -> {
+            // ---------- ① 加载驱动 ----------
+            // DriverLoader 内部顺序：driver_jar 表 → resources/drivers 目录 → classpath（最后兜底）
             try {
                 Driver driver = DriverLoader.getDriver(config.getDbType(), config.getVersion());
                 DriverManager.registerDriver(new DriverProxy(driver));
                 log.info("驱动加载成功: {} -> {}", config.getDbType(), driver.getClass().getName());
             } catch (Exception e) {
-                throw new RuntimeException("加载数据库驱动失败: " + config.getDbType() + " " + config.getVersion(), e);
+                throw new RuntimeException("加载数据库驱动失败: " + config.getDbType()
+                        + " " + config.getVersion(), e);
             }
 
+            // ---------- ② 获取 DataSourceType ----------
             DataSourceType type = typeRegistry.get(config.getDbType().toLowerCase());
             if (type == null) {
                 throw new RuntimeException("不支持的数据库类型: " + config.getDbType());
             }
-            String driverClass = type.getDriverClass(config);
-            try {
-                Class.forName(driverClass);
-            } catch (ClassNotFoundException e) {
-                throw new RuntimeException("驱动类未找到: " + driverClass, e);
+
+            // ---------- ③ 二次 classpath 检查（仅当用户显式配置了 driverClass） ----------
+            // 驱动可能通过 ByteArrayClassLoader / URLClassLoader 动态加载，不在 classpath；
+            // 只有当用户显式配置了 driverClass 时才检查，且失败仅 warn 不抛异常。
+            String driverClass = config.getDriverClass();
+            if (driverClass != null && !driverClass.trim().isEmpty()) {
+                try {
+                    Class.forName(driverClass);
+                } catch (ClassNotFoundException e) {
+                    log.warn("用户配置的 driverClass={} 不在 classpath，"
+                            + "但驱动已通过 DriverLoader 动态加载，忽略此告警", driverClass);
+                }
             }
+
+            // ---------- ④ 构建数据源 ----------
             String url = type.getJdbcUrl(config);
             return new SimpleDataSource.Builder()
                     .url(url)

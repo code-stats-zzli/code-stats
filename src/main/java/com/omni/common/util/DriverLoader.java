@@ -13,11 +13,11 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 驱动加载器。
  *
- * <p>加载顺序（命中即返回）：</p>
+ * <p>加载顺序（命中即返回，classpath 放最后兜底）：</p>
  *   <ol>
  *     <li><b>driver_jar 表</b>（数据库 blob，dbType+version 精确；无 version 取该 dbType 最新）</li>
- *     <li><b>classpath</b> 内置驱动</li>
  *     <li><b>resources/drivers 目录</b>（文件名 {dbType}_{version}_{fileName}.jar）</li>
+ *     <li><b>classpath</b> 内置驱动（最后兜底）</li>
  *   </ol>
  */
 public class DriverLoader {
@@ -30,6 +30,7 @@ public class DriverLoader {
             throw new RuntimeException("不支持的数据库类型: " + dbType
                     + "（仅支持 " + String.join("/", DriverFileNameParser.ALLOWED_DB_TYPES) + "）");
         }
+
         String key = type + ":" + (version == null ? "" : version);
         Driver cached = driverCache.get(key);
         if (cached != null) return cached;
@@ -45,28 +46,32 @@ public class DriverLoader {
             return loadDriverFromJar(matched, className, key);
         }
 
-        // ---------- ② classpath 内置驱动 ----------
-        try {
-            Driver d = loadDefaultDriver(type);
-            driverCache.put(key, d);
-            log.info("classpath 加载驱动成功: dbType={}, class={}", type, d.getClass().getName());
-            return d;
-        } catch (ClassNotFoundException e) {
-            log.info("classpath 未找到驱动: dbType={}, 继续尝试资源目录", type);
-        }
-
-        // ---------- ③ resources/drivers 目录 ----------
+        // ---------- ② resources/drivers 目录 ----------
         Driver dirDriver = DriverResourceScanner.loadDriver(type, version);
         if (dirDriver != null) {
             driverCache.put(key, dirDriver);
+            log.info("resources/drivers 目录加载驱动成功: dbType={}, version={}, class={}",
+                    type, version, dirDriver.getClass().getName());
             return dirDriver;
+        }
+
+        // ---------- ③ classpath 兜底（最后） ----------
+        try {
+            Driver d = loadDefaultDriver(type);
+            driverCache.put(key, d);
+            log.info("classpath 兜底加载驱动成功: dbType={}, class={}", type, d.getClass().getName());
+            return d;
+        } catch (ClassNotFoundException e) {
+            log.info("classpath 也未找到驱动: dbType={}", type);
         }
 
         throw new RuntimeException("无法加载数据库驱动: dbType=" + type
                 + ", version=" + (version == null ? "null" : version)
-                + "（driver_jar 表无匹配，classpath 无该类，资源目录 "
-                + DriverResourceScanner.getDriversDir() + " 也无匹配 jar）");
+                + "（已依次尝试：driver_jar 表 → resources/drivers 目录 "
+                + DriverResourceScanner.getDriversDir() + " → classpath，均无匹配）");
     }
+
+    // ==================== ① driver_jar 表匹配 ====================
 
     private static DriverJar findMatchedDriver(String dbType, String version) {
         try {
@@ -101,6 +106,8 @@ public class DriverLoader {
         return driver;
     }
 
+    // ==================== ③ classpath 兜底 ====================
+
     private static Driver loadDefaultDriver(String dbType) throws Exception {
         switch (dbType.toLowerCase()) {
             case "mysql":
@@ -126,6 +133,7 @@ public class DriverLoader {
         }
     }
 
+    /** 清空缓存（运维/升级驱动时调用） */
     public static void clearCache() {
         driverCache.clear();
         log.info("DriverLoader 缓存已清空");

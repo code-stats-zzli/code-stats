@@ -1,5 +1,6 @@
 package com.omni.business.assistance.connection.service;
 
+import com.omni.common.util.DriverFileNameParser;
 import com.omni.common.util.DriverLoader;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
@@ -16,9 +17,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *  - 执行：仅允许查询类语句
  *  - 关闭：销毁连接池
  *
- * 驱动加载顺序：
- *   1. classpath 里已有驱动（Class.forName）
- *   2. classpath 没有 → 通过 DriverLoader 从 driver_jar 表加载（内部按 文件名 → 目录 → dbType 智能识别）
+ * 驱动加载顺序（classpath 放最后兜底）：
+ *   ① 用户显式指定 driverClass 且 classpath 上存在 → 直接用
+ *   ② 否则统一走 DriverLoader：driver_jar 表 → resources/drivers 目录 → classpath
  */
 @Service
 public class TempConnectionManager {
@@ -54,7 +55,13 @@ public class TempConnectionManager {
     public TempConn open(String url, String username, String password,
                          String dbType, String driverClass, String version) throws Exception {
         if (url == null || url.trim().isEmpty()) throw new IllegalArgumentException("连接串不能为空");
-        String type = (dbType == null || dbType.trim().isEmpty()) ? detectType(url) : dbType.trim().toLowerCase();
+        String type = (dbType == null || dbType.trim().isEmpty())
+                ? detectType(url)
+                : DriverFileNameParser.normalizeDbType(dbType);
+        if (!DriverFileNameParser.isAllowedDbType(type)) {
+            throw new IllegalArgumentException("不支持的数据库类型: " + dbType
+                    + "（仅支持 " + String.join("/", DriverFileNameParser.ALLOWED_DB_TYPES) + "）");
+        }
 
         ensureDriver(type, driverClass, version);
 
@@ -90,33 +97,34 @@ public class TempConnectionManager {
         if (u.startsWith("jdbc:mysql:")) return "mysql";
         if (u.startsWith("jdbc:oracle:")) return "oracle";
         if (u.startsWith("jdbc:postgresql:")) return "postgresql";
+        if (u.startsWith("jdbc:sqlserver:")) return "sqlserver";
         throw new IllegalArgumentException("无法识别的数据库类型，请指定 dbType");
     }
 
     /**
-     * 驱动加载：
-     *   1. 先尝试 classpath（Class.forName）
-     *   2. 失败则通过 DriverLoader（driver_jar 表 + DriverClassNameResolver 智能识别）
+     * 驱动加载（classpath 放最后兜底）：
+     *   ① 用户显式指定了 driverClass 且 classpath 上存在 → 直接用
+     *   ② 否则统一走 DriverLoader：driver_jar 表 → resources/drivers 目录 → classpath
      */
     private void ensureDriver(String dbType, String driverClass, String version) throws Exception {
-        String cls = driverClass;
-        if (cls == null || cls.trim().isEmpty()) {
-            switch (dbType) {
-                case "mysql": cls = "com.mysql.cj.jdbc.Driver"; break;
-                case "oracle": cls = "oracle.jdbc.OracleDriver"; break;
-                case "postgresql": cls = "org.postgresql.Driver"; break;
-                default: throw new IllegalArgumentException("不支持的数据库类型: " + dbType);
+        // ① 用户显式指定 driverClass → 优先使用（业务层显式要求，视为最高优先级）
+        if (driverClass != null && !driverClass.trim().isEmpty()) {
+            String cls = driverClass.trim();
+            try {
+                Class.forName(cls);
+                log.info("使用用户显式指定的驱动类: {}", cls);
+                return;
+            } catch (ClassNotFoundException e) {
+                log.warn("用户指定的驱动类 {} 不在 classpath，将回退到 DriverLoader 兜底", cls);
+                // fallthrough 到 ②
             }
         }
-        try {
-            Class.forName(cls);
-            return;
-        } catch (ClassNotFoundException ignored) {
-            // classpath 没有 → 走 driver_jar
-        }
+
+        // ② 统一交给 DriverLoader：driver_jar 表 → resources/drivers 目录 → classpath（最后兜底）
         Driver d = DriverLoader.getDriver(dbType, version);
         DriverManager.registerDriver(new DelegatingDriver(d));
-        log.info("已从 driver_jar 动态加载驱动: type={}, class={}", dbType, d.getClass().getName());
+        log.info("通过 DriverLoader 加载驱动成功: type={}, version={}, class={}",
+                dbType, version, d.getClass().getName());
     }
 
     public TempConn get(String id) { return REGISTRY.get(id); }

@@ -42,7 +42,6 @@
     const DB_TYPE_ORDER = ['mysql', 'oracle', 'sqlserver', 'postgresql'];
     const ALLOWED_DB_TYPES = DB_TYPE_ORDER;
 
-    // 文件名识别（与后端一致）
     const VERSION_PATTERN = /(\d+(?:\.\d+){1,3})/;
     function detectDbTypeFromFileName(fileName) {
         if (!fileName) return null;
@@ -62,25 +61,25 @@
         return m ? m[1] : null;
     }
 
-    // ==================== Tab 切换 ====================
-    const tabsBar = $('tabsBar');
-    const tabPanes = {
-        resource: $('tabResource'),
-        connection: $('tabConnection')
+    // ==================== ★ 左侧 Tab 切换 ====================
+    const leftTabsBar = document.querySelector('.left-tabs-bar');
+    const leftPanes = {
+        resource: $('leftPaneResource'),
+        sample: $('leftPaneSample')
     };
-    function switchTab(tabId) {
-        tabsBar.querySelectorAll('.tab-btn').forEach(btn => {
+    function switchLeftTab(tabId) {
+        leftTabsBar.querySelectorAll('.left-tab-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.tab === tabId);
         });
-        Object.keys(tabPanes).forEach(k => {
-            tabPanes[k].classList.toggle('active', k === tabId);
+        Object.keys(leftPanes).forEach(k => {
+            leftPanes[k].classList.toggle('active', k === tabId);
         });
-        if (tabId === 'resource') loadDrivers();
-        if (tabId === 'connection') highlightStep(3);
+        if (tabId === 'resource' && allDrivers.length === 0) loadDrivers();
+        if (tabId === 'sample' && sampleList.children.length <= 1) loadSamples();
     }
-    tabsBar.addEventListener('click', (e) => {
-        const btn = e.target.closest('.tab-btn');
-        if (btn) switchTab(btn.dataset.tab);
+    leftTabsBar.addEventListener('click', (e) => {
+        const btn = e.target.closest('.left-tab-btn');
+        if (btn) switchLeftTab(btn.dataset.tab);
     });
 
     // ==================== 引导卡片 ====================
@@ -99,7 +98,6 @@
     }
 
     // ==================== 资源关联 Tab：驱动列表 ====================
-
     async function loadDrivers() {
         const listEl = $('driverList');
         if (!listEl) return;
@@ -132,7 +130,6 @@
             return;
         }
 
-        // 按 dbType 分组
         const groups = {};
         DB_TYPE_ORDER.forEach(t => groups[t] = []);
         filtered.forEach(d => {
@@ -187,22 +184,24 @@
         renderDriverEditor();
     }
 
-    // ==================== 资源关联 Tab：右侧编辑面板 ====================
-
+    // ==================== 资源关联 Tab：驱动编辑面板 ====================
     function renderDriverEditor() {
         const editorEl = $('driverEditor');
         if (!editorEl) return;
-
         const d = allDrivers.find(x => x.key === selectedDriverKey);
         if (!d) {
-            editorEl.innerHTML = '<div class="empty-hint">👈 从左侧选择一个驱动进行编辑</div>';
+            editorEl.style.display = 'none';
+            editorEl.innerHTML = '';
             return;
         }
-
+        editorEl.style.display = 'block';
         editorEl.innerHTML = `
             <div class="editor-header">
-                <div class="editor-title">${DB_TYPE_ICONS[d.dbType] || '📦'} ${esc(DB_TYPE_LABELS[d.dbType] || d.dbType)} 驱动</div>
-                <div class="editor-subtitle">📄 ${esc(d.fileName)}</div>
+                <div>
+                    <div class="editor-title">${DB_TYPE_ICONS[d.dbType] || '📦'} ${esc(DB_TYPE_LABELS[d.dbType] || d.dbType)} 驱动</div>
+                    <div class="editor-subtitle">📄 ${esc(d.fileName)}</div>
+                </div>
+                <button id="closeEditorBtn" class="btn-close-editor" title="收起编辑面板">✖</button>
             </div>
             <div id="editorMsg" class="editor-msg" style="display:none;"></div>
             <div class="editor-field">
@@ -224,7 +223,7 @@
             ${d.jarPath ? `
             <div class="editor-field">
                 <label>物理路径</label>
-                <input type="text" value="${esc(d.jarPath)}" readonly style="background:#f8fafc;font-size:11px;">
+                <input type="text" value="${esc(d.jarPath)}" readonly style="background:#f8fafc;font-size:11px;word-break:break-all;">
             </div>` : ''}
             <div class="editor-actions">
                 <button id="saveEditBtn" class="btn-primary">💾 保存</button>
@@ -233,6 +232,12 @@
             </div>
         `;
 
+        $('closeEditorBtn').addEventListener('click', () => {
+            selectedDriverKey = null;
+            editorEl.style.display = 'none';
+            editorEl.innerHTML = '';
+            renderDriverList();
+        });
         $('saveEditBtn').addEventListener('click', () => saveDriverEdit(d));
         $('resetEditBtn').addEventListener('click', () => {
             $('editVersion').value = d.version || '';
@@ -257,14 +262,8 @@
     async function saveDriverEdit(d) {
         const newVersion = $('editVersion').value.trim();
         const newDriverClass = $('editDriverClass').value.trim();
-        if (!newVersion) {
-            showEditorMsg('版本号不能为空', 'bad');
-            return;
-        }
-        if (newVersion.indexOf('_') >= 0) {
-            showEditorMsg('版本号不能包含下划线 _', 'bad');
-            return;
-        }
+        if (!newVersion) { showEditorMsg('版本号不能为空', 'bad'); return; }
+        if (newVersion.indexOf('_') >= 0) { showEditorMsg('版本号不能包含下划线 _', 'bad'); return; }
         try {
             const resp = await fetch(DRIVER_API + '/entry/update', {
                 method: 'POST',
@@ -280,11 +279,8 @@
             const data = await resp.json();
             if (data.success) {
                 showEditorMsg('✅ 已保存', 'ok');
-                // 刷新列表
                 await loadDrivers();
-                // 保持选中
-                const newKey = data.key || d.key;
-                selectedDriverKey = newKey;
+                selectedDriverKey = data.key || d.key;
                 renderDriverList();
                 renderDriverEditor();
             } else {
@@ -320,7 +316,6 @@
         }
     }
 
-    // 过滤
     const driverFilter = $('driverFilter');
     if (driverFilter) {
         driverFilter.addEventListener('input', () => {
@@ -334,7 +329,6 @@
     }
 
     // ==================== 资源关联 Tab：上传驱动 ====================
-
     const uploadModal      = $('driverUploadModal');
     const closeUploadBtn   = $('closeDriverUploadModal');
     const jarFileInput     = $('driverJarFile');
@@ -447,8 +441,49 @@
         if (e.target === uploadModal) closeUploadModal();
     });
 
-    // ==================== 连接配置 Tab（原有逻辑） ====================
+    // ==================== 示例 Tab：加载示例连接串 ====================
+    const sampleList = $('sampleList');
 
+    async function loadSamples() {
+        if (!sampleList) return;
+        sampleList.innerHTML = '<div class="loading">加载中...</div>';
+        try {
+            const resp = await fetch(API + '/samples');
+            const data = await resp.json();
+            if (!data.success) throw new Error(data.error || '加载失败');
+            const list = data.samples || [];
+            if (!list.length) {
+                sampleList.innerHTML = '<div class="loading">暂无示例</div>';
+                return;
+            }
+            sampleList.innerHTML = list.map(s => `
+                <div class="sample-item" data-idx="${esc(s.dbType)}">
+                    <div class="sample-title">${esc(s.label || s.dbType)}</div>
+                    <div class="sample-url">${esc(s.url)}</div>
+                </div>
+            `).join('');
+            sampleList.querySelectorAll('.sample-item').forEach(el => {
+                el.addEventListener('click', () => {
+                    const s = list.find(x => x.dbType === el.dataset.idx);
+                    if (!s) return;
+                    connUrl.value = s.url || '';
+                    connUsername.value = s.username || '';
+                    connPassword.value = '';
+                    connDbType.value = s.dbType || '';
+                    loadComboboxOptions(connDbType.value, true);
+                    doParse();
+                    highlightStep(4);
+                    // ★ 提示用户已填充（可选）
+                    showMsg(statusMsg, '✅ 示例已填充到右侧，可直接测试连接', 'ok');
+                    setTimeout(() => hideMsg(statusMsg), 2500);
+                });
+            });
+        } catch (e) {
+            sampleList.innerHTML = `<div class="loading" style="color:#c62828;">加载失败：${esc(e.message)}</div>`;
+        }
+    }
+
+    // ==================== 连接配置表单（原逻辑保持不变） ====================
     const connUrl            = $('connUrl');
     const connUsername       = $('connUsername');
     const connPassword       = $('connPassword');
@@ -473,7 +508,6 @@
     const saveSection        = $('saveSection');
     const dsName             = $('dsName');
     const saveDsBtn          = $('saveDsBtn');
-    const sampleList         = $('sampleList');
 
     function setConnected(connected) {
         if (connected) {
@@ -653,41 +687,6 @@
         highlightStep(2);
     });
     loadComboboxOptions(connDbType.value, false);
-
-    // ---- 示例连接串 ----
-    async function loadSamples() {
-        try {
-            const resp = await fetch(API + '/samples');
-            const data = await resp.json();
-            if (!data.success) throw new Error(data.error || '加载失败');
-            const list = data.samples || [];
-            if (!list.length) {
-                sampleList.innerHTML = '<div class="loading">暂无示例</div>';
-                return;
-            }
-            sampleList.innerHTML = list.map(s => `
-                <div class="sample-item" data-idx="${esc(s.dbType)}">
-                    <div class="sample-title">${esc(s.label || s.dbType)}</div>
-                    <div class="sample-url">${esc(s.url)}</div>
-                </div>
-            `).join('');
-            sampleList.querySelectorAll('.sample-item').forEach(el => {
-                el.addEventListener('click', () => {
-                    const s = list.find(x => x.dbType === el.dataset.idx);
-                    if (!s) return;
-                    connUrl.value = s.url || '';
-                    connUsername.value = s.username || '';
-                    connPassword.value = '';
-                    connDbType.value = s.dbType || '';
-                    loadComboboxOptions(connDbType.value, true);
-                    doParse();
-                    highlightStep(4);
-                });
-            });
-        } catch (e) {
-            sampleList.innerHTML = `<div class="loading" style="color:#c62828;">加载失败：${esc(e.message)}</div>`;
-        }
-    }
 
     // ---- 解析 / 测试 / 执行 / 关闭 / 保存 ----
     async function doParse() {
@@ -877,9 +876,10 @@
 
     // ==================== 启动 ====================
     highlightStep(1);
-    loadSamples();
-    switchTab('resource');   // ★ 默认显示资源关联
+    loadDrivers();      // 左侧默认 tab 是「资源关联」，加载驱动列表
+    loadSamples();      // 预加载示例（切到示例 tab 时立即显示）
 
+    // URL 参数：?url=xxx&username=yyy 自动填充
     const urlParams = new URLSearchParams(window.location.search);
     const presetUrl = urlParams.get('url');
     if (presetUrl) {

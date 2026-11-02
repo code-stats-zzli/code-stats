@@ -2,42 +2,23 @@
 html, body { height: 100%; overflow: hidden; font-family: 'Inter', 'Segoe UI', sans-serif; }
 body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e293b; }
 
-.cm-layout { display: flex; height: 100vh; gap: 16px; padding: 16px; }
-
-/* ==================== 左侧示例 ==================== */
-.cm-sidebar {
-    width: 320px; flex-shrink: 0;
-    background: var(--bg-card); backdrop-filter: blur(16px);
-    border: 1px solid rgba(0,102,255,0.25); border-radius: 20px;
-    display: flex; flex-direction: column; overflow: hidden;
-}
-.cm-sidebar-header {
-    padding: 16px; border-bottom: 1px solid rgba(0,102,255,0.15);
-    font-weight: 600; color: var(--accent-primary); font-size: 15px;
-}
-.sample-list { flex: 1; overflow-y: auto; padding: 12px; }
-.sample-item {
-    background: white; border: 1px solid rgba(0,102,255,0.2);
-    border-radius: 14px; padding: 12px; margin-bottom: 10px;
-    cursor: pointer; transition: 0.15s;
-}
-.sample-item:hover { border-color: var(--accent-primary); transform: translateX(3px); }
-.sample-item .sample-title { font-weight: 600; color: var(--accent-primary); margin-bottom: 4px; }
-.sample-item .sample-url {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px;
-    color: #64748b; word-break: break-all; line-height: 1.4;
-}
-
-/* ==================== 主区域 ==================== */
-.cm-main {
-    flex: 1; display: flex; flex-direction: column;
-    background: var(--bg-card); backdrop-filter: blur(16px);
-    border: 1px solid rgba(0,102,255,0.25); border-radius: 20px;
-    overflow: hidden; min-width: 0;
+/* ==================== 主布局 ==================== */
+.cm-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 16px;
+    box-sizing: border-box;
+    gap: 12px;
 }
 .cm-main-header {
-    padding: 16px 20px; border-bottom: 1px solid rgba(0,102,255,0.15);
+    padding: 16px 20px;
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(0,102,255,0.25);
+    border-radius: 20px;
     display: flex; justify-content: space-between; align-items: center;
+    flex-shrink: 0;
 }
 .cm-main-header h2 { color: var(--accent-primary); font-size: 17px; }
 .status-badge {
@@ -46,103 +27,68 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
 .status-badge.disconnected { background: #e2e8f0; color: #57606a; }
 .status-badge.connected    { background: #d4f4dd; color: #1a7f37; }
 
-/* ==================== 引导卡片 ==================== */
-.guide-card {
-    margin: 12px 20px 0;
-    background: linear-gradient(135deg, rgba(0,102,255,0.08), rgba(124,58,237,0.06));
-    border: 1px solid rgba(0,102,255,0.25);
-    border-radius: 14px; overflow: hidden; flex-shrink: 0;
+.cm-body-layout {
+    flex: 1;
+    display: flex;
+    gap: 12px;
+    min-height: 0;
+    overflow: hidden;
 }
-.guide-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 16px; cursor: pointer; user-select: none; transition: background 0.15s;
-}
-.guide-header:hover { background: rgba(0,102,255,0.05); }
-.guide-title {
-    display: flex; align-items: center; gap: 8px;
-    font-weight: 600; color: var(--accent-primary); font-size: 13px;
-}
-.guide-title .num-badge {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 20px; height: 20px; border-radius: 50%;
-    background: var(--accent-primary); color: white;
-    font-size: 11px; font-weight: 700;
-}
-.guide-toggle {
-    font-size: 12px; color: var(--text-muted); transition: transform 0.2s;
-}
-.guide-card.collapsed .guide-toggle { transform: rotate(-90deg); }
-.guide-card.collapsed .guide-body { display: none; }
-.guide-body {
-    padding: 4px 16px 14px 16px;
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px;
-}
-.guide-step {
-    display: flex; gap: 10px; padding: 10px 12px;
-    background: rgba(255,255,255,0.7); border-radius: 10px;
-    border-left: 3px solid var(--accent-primary);
-    font-size: 12px; line-height: 1.6; transition: all 0.15s;
-}
-.guide-step:hover {
-    background: white; box-shadow: 0 2px 8px rgba(0,102,255,0.1); transform: translateY(-1px);
-}
-.guide-step .step-num {
-    flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
-    background: var(--accent-primary); color: white;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 11px; margin-top: 1px;
-}
-.guide-step .step-content { flex: 1; }
-.guide-step .step-content strong {
-    color: var(--accent-primary); display: block; margin-bottom: 2px; font-size: 12.5px;
-}
-.guide-step .step-content span { color: var(--text-muted); }
-.guide-step .step-content code {
-    background: rgba(0,102,255,0.1); color: var(--accent-primary);
-    padding: 1px 6px; border-radius: 4px; font-family: 'JetBrains Mono', monospace;
-    font-size: 11px; margin: 0 2px;
-}
-.guide-step.active { border-left-color: #22c55e; background: #f0fdf4; }
-.guide-step.active .step-num { background: #22c55e; }
 
-/* ==================== Tab 切换 ==================== */
-.tabs-bar {
-    display: flex; gap: 4px; padding: 12px 20px 0;
+/* ==================== 左侧（资源关联 / 示例 双 Tab） ==================== */
+.cm-left {
+    width: 460px;
+    flex-shrink: 0;
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(0,102,255,0.25);
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* --- 左侧 Tab 栏 --- */
+.left-tabs-bar {
+    display: flex;
+    gap: 4px;
+    padding: 10px 12px 0;
     border-bottom: 1px solid rgba(0,102,255,0.15);
     flex-shrink: 0;
 }
-.tab-btn {
-    padding: 10px 24px;
-    background: transparent; border: none;
+.left-tab-btn {
+    padding: 9px 22px;
+    background: transparent;
+    border: none;
     border-bottom: 2px solid transparent;
-    color: var(--text-muted); font-size: 14px; font-weight: 500;
+    color: var(--text-muted);
+    font-size: 13px; font-weight: 500;
     cursor: pointer; transition: 0.2s;
     border-radius: 8px 8px 0 0;
 }
-.tab-btn:hover { color: var(--accent-primary); background: rgba(0,102,255,0.05); }
-.tab-btn.active {
-    color: var(--accent-primary); border-bottom-color: var(--accent-primary);
-    background: rgba(0,102,255,0.08); font-weight: 600;
+.left-tab-btn:hover { color: var(--accent-primary); background: rgba(0,102,255,0.05); }
+.left-tab-btn.active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+    background: rgba(0,102,255,0.08);
+    font-weight: 600;
 }
 
-.tab-pane { display: none; flex: 1; overflow: hidden; min-height: 0; }
-.tab-pane.active { display: flex; }
+/* --- Tab 内容容器 --- */
+.left-tab-pane {
+    display: none;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+.left-tab-pane.active { display: flex; }
 
-/* ==================== 资源关联 Tab ==================== */
-#tabResource { flex-direction: row; }
-.resource-layout {
-    display: flex; width: 100%; height: 100%; gap: 12px; padding: 16px 20px;
-    overflow: hidden;
-}
-.resource-left {
-    width: 380px; flex-shrink: 0;
-    display: flex; flex-direction: column;
-    background: rgba(255,255,255,0.5); border-radius: 14px;
-    border: 1px solid rgba(0,102,255,0.15);
-    overflow: hidden;
-}
+/* --- 资源关联 Tab 内容 --- */
 .resource-toolbar {
-    padding: 12px; display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 10px 12px;
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
     border-bottom: 1px solid rgba(0,102,255,0.1);
     flex-shrink: 0;
 }
@@ -156,8 +102,15 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
 .driver-filter:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(0,102,255,0.1); }
 .btn-sm { padding: 6px 14px !important; font-size: 12px !important; border-radius: 20px !important; }
 
+.driver-list-wrapper {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
 .driver-list {
-    flex: 1; overflow-y: auto; padding: 8px; min-height: 0;
+    height: 100%;
+    overflow-y: auto;
+    padding: 8px;
 }
 .driver-group-title {
     font-size: 12px; font-weight: 600; color: var(--accent-primary);
@@ -194,69 +147,186 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
 .di-source.dir  { background: #fef3c7; color: #b45309; }
 .di-source.both { background: #d4f4dd; color: #1a7f37; }
 
-.resource-right {
-    flex: 1; background: rgba(255,255,255,0.5); border-radius: 14px;
-    border: 1px solid rgba(0,102,255,0.15);
-    overflow-y: auto; padding: 20px;
-    display: flex; flex-direction: column;
+/* --- 驱动编辑面板（选中驱动后在下方展示） --- */
+.driver-editor-panel {
+    flex-shrink: 0;
+    max-height: 45vh;
+    overflow-y: auto;
+    border-top: 2px solid rgba(0,102,255,0.25);
+    background: rgba(255,255,255,0.5);
+    padding: 14px 16px;
+    animation: slideUp 0.22s ease;
 }
-.empty-hint {
-    display: flex; align-items: center; justify-content: center;
-    height: 100%; color: var(--text-muted); font-size: 14px;
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
-
-/* 右侧编辑面板 */
 .editor-header {
-    padding-bottom: 16px; border-bottom: 1px solid rgba(0,102,255,0.1);
-    margin-bottom: 20px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding-bottom: 10px; margin-bottom: 12px;
+    border-bottom: 1px solid rgba(0,102,255,0.1);
+    gap: 8px;
 }
 .editor-title {
-    font-size: 16px; font-weight: 600; color: var(--accent-primary);
-    margin-bottom: 6px;
+    font-size: 14px; font-weight: 600; color: var(--accent-primary);
+    margin-bottom: 4px;
 }
 .editor-subtitle {
-    font-size: 12px; color: var(--text-muted);
-    font-family: 'JetBrains Mono', monospace; word-break: break-all;
+    font-size: 11px; color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    word-break: break-all;
+    max-width: 340px;
 }
+.btn-close-editor {
+    background: rgba(0,102,255,0.08);
+    border: 1px solid rgba(0,102,255,0.25);
+    color: var(--accent-primary);
+    width: 26px; height: 26px; border-radius: 8px;
+    cursor: pointer; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+    transition: 0.15s; flex-shrink: 0;
+}
+.btn-close-editor:hover { background: rgba(220,38,38,0.1); color: #dc2626; border-color: #dc2626; }
 
-.editor-field {
-    margin-bottom: 16px;
-}
+.editor-field { margin-bottom: 14px; }
 .editor-field label {
-    display: block; font-size: 13px; font-weight: 600;
-    color: var(--accent-primary); margin-bottom: 6px;
+    display: block; font-size: 12px; font-weight: 600;
+    color: var(--accent-primary); margin-bottom: 5px;
 }
 .editor-field input, .editor-field select {
-    width: 100%; padding: 10px 12px;
-    border: 1px solid rgba(0,102,255,0.3); border-radius: 12px;
-    background: white; font-size: 13px;
+    width: 100%; padding: 8px 10px;
+    border: 1px solid rgba(0,102,255,0.3); border-radius: 10px;
+    background: white; font-size: 12.5px;
     font-family: 'JetBrains Mono', monospace;
     transition: 0.15s; outline: none;
+    box-sizing: border-box;
 }
 .editor-field input:focus, .editor-field select:focus {
     border-color: var(--accent-primary);
     box-shadow: 0 0 0 3px rgba(0,102,255,0.15);
 }
-.editor-field .hint {
-    font-size: 11px; color: var(--text-muted); margin-top: 4px;
-}
-
+.editor-field .hint { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
 .editor-actions {
-    margin-top: auto; padding-top: 20px;
+    padding-top: 12px;
     border-top: 1px solid rgba(0,102,255,0.1);
-    display: flex; gap: 10px; flex-wrap: wrap;
+    display: flex; gap: 8px; flex-wrap: wrap;
 }
-.editor-msg {
-    padding: 10px 14px; border-radius: 10px;
-    font-size: 13px; margin-bottom: 16px;
-}
+.editor-actions button { font-size: 12px; padding: 7px 16px; border-radius: 20px; }
+.editor-msg { padding: 8px 12px; border-radius: 10px; font-size: 12px; margin-bottom: 12px; }
 .editor-msg.ok  { background: #d4f4dd; color: #1a7f37; }
 .editor-msg.bad { background: #fee2e2; color: #c62828; }
 
-/* ==================== 连接配置 Tab ==================== */
-#tabConnection { flex-direction: column; }
-.cm-body { flex: 1; overflow-y: auto; padding: 20px; }
+/* --- 示例 Tab 内容 --- */
+.sample-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    min-height: 0;
+}
+.sample-item {
+    background: white;
+    border: 1px solid rgba(0,102,255,0.2);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    cursor: pointer; transition: 0.15s;
+}
+.sample-item:hover { border-color: var(--accent-primary); transform: translateX(3px); }
+.sample-item .sample-title {
+    font-weight: 600; color: var(--accent-primary);
+    margin-bottom: 6px; font-size: 13px;
+}
+.sample-item .sample-url {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: #64748b; word-break: break-all; line-height: 1.5;
+}
 
+/* ==================== 右侧（操作步骤 + 连接配置） ==================== */
+.cm-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* --- 引导卡片 --- */
+.guide-card {
+    background: linear-gradient(135deg, rgba(0,102,255,0.08), rgba(124,58,237,0.06));
+    border: 1px solid rgba(0,102,255,0.25);
+    border-radius: 14px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.guide-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; cursor: pointer; user-select: none; transition: background 0.15s;
+}
+.guide-header:hover { background: rgba(0,102,255,0.05); }
+.guide-title {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 600; color: var(--accent-primary); font-size: 13px;
+}
+.guide-title .num-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--accent-primary); color: white;
+    font-size: 11px; font-weight: 700;
+}
+.guide-toggle { font-size: 12px; color: var(--text-muted); transition: transform 0.2s; }
+.guide-card.collapsed .guide-toggle { transform: rotate(-90deg); }
+.guide-card.collapsed .guide-body { display: none; }
+.guide-body {
+    padding: 4px 16px 14px 16px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;
+}
+.guide-step {
+    display: flex; gap: 10px; padding: 10px 12px;
+    background: rgba(255,255,255,0.7); border-radius: 10px;
+    border-left: 3px solid var(--accent-primary);
+    font-size: 12px; line-height: 1.6; transition: all 0.15s;
+}
+.guide-step:hover { background: white; box-shadow: 0 2px 8px rgba(0,102,255,0.1); transform: translateY(-1px); }
+.guide-step .step-num {
+    flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent-primary); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 11px; margin-top: 1px;
+}
+.guide-step .step-content { flex: 1; }
+.guide-step .step-content strong {
+    color: var(--accent-primary); display: block; margin-bottom: 2px; font-size: 12.5px;
+}
+.guide-step .step-content span { color: var(--text-muted); }
+.guide-step .step-content code {
+    background: rgba(0,102,255,0.1); color: var(--accent-primary);
+    padding: 1px 6px; border-radius: 4px; font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; margin: 0 2px;
+}
+.guide-step.active { border-left-color: #22c55e; background: #f0fdf4; }
+.guide-step.active .step-num { background: #22c55e; }
+
+/* --- 连接配置面板 --- */
+.connection-panel {
+    flex: 1;
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(0,102,255,0.25);
+    border-radius: 20px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.connection-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/* ==================== 表单 ==================== */
 .form-group { margin-bottom: 14px; }
 .form-group label {
     display: block; font-size: 13px; font-weight: 600;
@@ -268,6 +338,7 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
     background: white; font-size: 13px; color: #1e293b;
     font-family: 'JetBrains Mono', monospace;
     outline: none; transition: 0.15s;
+    box-sizing: border-box;
 }
 .form-group textarea { resize: vertical; min-height: 70px; }
 .form-group input:focus, .form-group textarea:focus, .form-group select:focus {

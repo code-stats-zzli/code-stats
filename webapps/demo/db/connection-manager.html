@@ -48,16 +48,16 @@
             </div>
         </aside>
 
-        <!-- ---------- 右侧：操作步骤 + 连接配置 ---------- -->
+        <!-- ---------- 右侧：操作步骤（默认折叠） + 连接配置 ---------- -->
         <main class="cm-right">
-            <!-- 操作步骤（可折叠） -->
-            <div class="guide-card" id="guideCard">
+            <!-- ★ 默认折叠：guide-card 初始带 collapsed，图标显示 ▶ -->
+            <div class="guide-card collapsed" id="guideCard">
                 <div class="guide-header" id="guideHeader">
                     <div class="guide-title">
                         <span class="num-badge">?</span>
                         <span>操作步骤（点击展开/收起）</span>
                     </div>
-                    <span class="guide-toggle" id="guideToggle">▼</span>
+                    <span class="guide-toggle" id="guideToggle">▶</span>
                 </div>
                 <div class="guide-body">
                     <div class="guide-step" data-step="1">
@@ -105,7 +105,7 @@
                 </div>
             </div>
 
-            <!-- 连接配置（原 cm-body 内容不变） -->
+            <!-- 连接配置 -->
             <div class="connection-panel">
                 <div class="connection-body">
                     <div class="form-group">

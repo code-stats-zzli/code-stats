@@ -36,8 +36,9 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
 }
 
 /* ==================== 左侧（资源关联 / 示例 双 Tab） ==================== */
+/* ★ 宽度由 460 → 360，更紧凑 */
 .cm-left {
-    width: 460px;
+    width: 360px;
     flex-shrink: 0;
     background: var(--bg-card);
     backdrop-filter: blur(16px);
@@ -58,7 +59,8 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
     flex-shrink: 0;
 }
 .left-tab-btn {
-    padding: 9px 22px;
+    flex: 1;
+    padding: 9px 16px;
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
@@ -66,6 +68,7 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
     font-size: 13px; font-weight: 500;
     cursor: pointer; transition: 0.2s;
     border-radius: 8px 8px 0 0;
+    white-space: nowrap;
 }
 .left-tab-btn:hover { color: var(--accent-primary); background: rgba(0,102,255,0.05); }
 .left-tab-btn.active {
@@ -93,7 +96,7 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
     flex-shrink: 0;
 }
 .driver-filter {
-    flex: 1; min-width: 120px;
+    flex: 1; min-width: 100px;
     padding: 6px 12px; border-radius: 20px;
     border: 1px solid rgba(0,102,255,0.3);
     font-size: 12px; background: white;
@@ -118,7 +121,7 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
     display: flex; align-items: center; gap: 6px;
 }
 .driver-item {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 8px;
     padding: 10px 12px; border-radius: 10px;
     cursor: pointer; transition: 0.15s; margin-bottom: 4px;
     background: white; border: 1px solid transparent;
@@ -147,10 +150,10 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
 .di-source.dir  { background: #fef3c7; color: #b45309; }
 .di-source.both { background: #d4f4dd; color: #1a7f37; }
 
-/* --- 驱动编辑面板（选中驱动后在下方展示） --- */
+/* --- 驱动编辑面板（选中驱动后在下方展开） --- */
 .driver-editor-panel {
     flex-shrink: 0;
-    max-height: 45vh;
+    max-height: 50vh;
     overflow-y: auto;
     border-top: 2px solid rgba(0,102,255,0.25);
     background: rgba(255,255,255,0.5);
@@ -175,7 +178,7 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
     font-size: 11px; color: var(--text-muted);
     font-family: 'JetBrains Mono', monospace;
     word-break: break-all;
-    max-width: 340px;
+    max-width: 260px;
 }
 .btn-close-editor {
     background: rgba(0,102,255,0.08);
@@ -252,7 +255,7 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
     overflow: hidden;
 }
 
-/* --- 引导卡片 --- */
+/* --- 引导卡片（默认折叠，仅显示标题栏） --- */
 .guide-card {
     background: linear-gradient(135deg, rgba(0,102,255,0.08), rgba(124,58,237,0.06));
     border: 1px solid rgba(0,102,255,0.25);
@@ -276,7 +279,8 @@ body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e
     font-size: 11px; font-weight: 700;
 }
 .guide-toggle { font-size: 12px; color: var(--text-muted); transition: transform 0.2s; }
-.guide-card.collapsed .guide-toggle { transform: rotate(-90deg); }
+/* ★ 折叠时不显示底部圆角阴影，视觉更平 */
+.guide-card.collapsed .guide-toggle { transform: rotate(0deg); }
 .guide-card.collapsed .guide-body { display: none; }
 .guide-body {
     padding: 4px 16px 14px 16px;

@@ -61,7 +61,7 @@
         return m ? m[1] : null;
     }
 
-    // ==================== ★ 左侧 Tab 切换 ====================
+    // ==================== 左侧 Tab 切换 ====================
     const leftTabsBar = document.querySelector('.left-tabs-bar');
     const leftPanes = {
         resource: $('leftPaneResource'),
@@ -82,7 +82,7 @@
         if (btn) switchLeftTab(btn.dataset.tab);
     });
 
-    // ==================== 引导卡片 ====================
+    // ==================== 引导卡片（默认折叠，HTML 已带 collapsed） ====================
     const guideCard = $('guideCard');
     const guideHeader = $('guideHeader');
     const guideToggle = $('guideToggle');
@@ -473,7 +473,6 @@
                     loadComboboxOptions(connDbType.value, true);
                     doParse();
                     highlightStep(4);
-                    // ★ 提示用户已填充（可选）
                     showMsg(statusMsg, '✅ 示例已填充到右侧，可直接测试连接', 'ok');
                     setTimeout(() => hideMsg(statusMsg), 2500);
                 });
@@ -483,7 +482,7 @@
         }
     }
 
-    // ==================== 连接配置表单（原逻辑保持不变） ====================
+    // ==================== 连接配置表单 ====================
     const connUrl            = $('connUrl');
     const connUsername       = $('connUsername');
     const connPassword       = $('connPassword');
@@ -876,8 +875,8 @@
 
     // ==================== 启动 ====================
     highlightStep(1);
-    loadDrivers();      // 左侧默认 tab 是「资源关联」，加载驱动列表
-    loadSamples();      // 预加载示例（切到示例 tab 时立即显示）
+    loadDrivers();
+    loadSamples();
 
     // URL 参数：?url=xxx&username=yyy 自动填充
     const urlParams = new URLSearchParams(window.location.search);

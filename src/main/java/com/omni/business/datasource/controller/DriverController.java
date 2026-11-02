@@ -2,6 +2,7 @@ package com.omni.business.datasource.controller;
 
 import com.omni.business.datasource.service.DriverJarService;
 import com.omni.common.datasource.driver.DriverJar;
+import com.omni.common.util.DriverResourceScanner;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Autowired;
@@ -15,6 +16,10 @@ import com.omni.framework.spring.mvc.RequestContextHolder;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.util.JsonUtil;
 
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Controller
@@ -26,7 +31,8 @@ public class DriverController {
     @Autowired
     private DriverJarService driverService;
 
-    /** ★ 支持按 dbType 过滤 */
+    // ==================== 查询 ====================
+
     @RequestMapping("/list")
     @ResponseBody
     public String list(@RequestParam(value = "dbType", required = false) String dbType) {
@@ -50,26 +56,28 @@ public class DriverController {
         }
     }
 
-    /** ★ 上传：新增必填 dbType、version；按唯一键校验重复 */
+    // ==================== 上传（只接 dbType + version + file） ====================
+
     @RequestMapping("/upload")
     @ResponseBody
     public String upload() {
         try {
             HttpServletRequest req = RequestContextHolder.getRequest();
             if (req == null) return error("无法获取请求对象");
-
             MultipartResolver multipart = req.getMultipartResolver();
             if (multipart == null) return error("不支持 multipart 或请求体解析失败");
 
             FileItem fileItem = multipart.getFileItem("file");
             if (fileItem == null) return error("缺少文件字段 file");
 
-            String name = multipart.getParameter("name");
             String dbType = multipart.getParameter("dbType");
             String version = multipart.getParameter("version");
 
-            if (name == null || name.trim().isEmpty()) return error("驱动名称 name 不能为空");
             if (dbType == null || dbType.trim().isEmpty()) return error("数据库类型 dbType 不能为空");
+            if (!DriverResourceScanner.isAllowedDbType(dbType)) {
+                return error("不支持的数据库类型: " + dbType
+                        + "（仅支持 " + String.join("/", DriverResourceScanner.ALLOWED_DB_TYPES) + "）");
+            }
             if (version == null || version.trim().isEmpty()) return error("驱动版本 version 不能为空");
 
             String fileName = fileItem.getFileName();
@@ -79,8 +87,8 @@ public class DriverController {
             if (data == null || data.length == 0) return error("文件内容为空");
 
             DriverJar driver = new DriverJar();
-            driver.setName(name.trim());
-            driver.setDbType(dbType.trim().toLowerCase());
+            driver.setDbType(DriverResourceScanner.normalizeDbType(dbType));
+            driver.setName(driver.getDbType());          // name 恒等于 dbType
             driver.setVersion(version.trim());
             driver.setFileName(fileName.trim());
             driver.setJarData(data);
@@ -88,10 +96,10 @@ public class DriverController {
             boolean ok = driverService.save(driver);
             if (!ok) return error("保存失败（数据库影响行数为 0）");
 
-            log.info("驱动上传成功: dbType={}, name={}, version={}, file={}, size={} bytes",
-                    dbType, name, version, fileName, data.length);
+            log.info("驱动上传成功: dbType={}, version={}, file={}, size={}B",
+                    driver.getDbType(), driver.getVersion(), fileName, data.length);
             return JsonUtil.toJson(Map.of("success", true));
-        } catch (IllegalStateException e) {
+        } catch (IllegalStateException | IllegalArgumentException e) {
             return error(e.getMessage());
         } catch (Exception e) {
             log.error("驱动上传失败", e);
@@ -99,35 +107,37 @@ public class DriverController {
         }
     }
 
+    // ==================== 更新 ====================
+
     @RequestMapping("/update")
     @ResponseBody
     public String update() {
         try {
             HttpServletRequest req = RequestContextHolder.getRequest();
             if (req == null) return error("无法获取请求对象");
-
             MultipartResolver multipart = req.getMultipartResolver();
             if (multipart == null) return error("不支持 multipart 或请求体解析失败");
 
             String id = multipart.getParameter("id");
-            String name = multipart.getParameter("name");
             String dbType = multipart.getParameter("dbType");
             String version = multipart.getParameter("version");
             if (id == null || id.trim().isEmpty()) return error("id 不能为空");
-            if (name == null || name.trim().isEmpty()) return error("驱动名称 name 不能为空");
+            if (dbType == null || dbType.trim().isEmpty()) return error("数据库类型 dbType 不能为空");
+            if (!DriverResourceScanner.isAllowedDbType(dbType)) {
+                return error("不支持的数据库类型: " + dbType);
+            }
+            if (version == null || version.trim().isEmpty()) return error("驱动版本 version 不能为空");
 
             FileItem fileItem = multipart.getFileItem("file");
-
             DriverJar driver = new DriverJar();
             driver.setId(id.trim());
-            driver.setName(name.trim());
-            driver.setDbType(dbType == null ? null : dbType.trim().toLowerCase());
-            driver.setVersion(version == null ? null : version.trim());
+            driver.setDbType(DriverResourceScanner.normalizeDbType(dbType));
+            driver.setName(driver.getDbType());
+            driver.setVersion(version.trim());
             if (fileItem != null) {
                 driver.setJarData(fileItem.getBytes());
                 driver.setFileName(fileItem.getFileName());
             }
-
             boolean ok = driverService.update(driver);
             if (!ok) return error("更新失败（数据库影响行数为 0）");
             return JsonUtil.toJson(Map.of("success", true));
@@ -136,6 +146,8 @@ public class DriverController {
             return error("更新驱动失败: " + rootCauseMessage(e));
         }
     }
+
+    // ==================== 下载 ====================
 
     @RequestMapping("/download")
     @ResponseBody
@@ -152,6 +164,55 @@ public class DriverController {
             log.error("下载驱动失败, id={}", id, e);
         }
     }
+
+    // ==================== 资源目录接口 ====================
+
+    /** 列出 resources/drivers 目录中可解析的 jar */
+    @RequestMapping("/resource/list")
+    @ResponseBody
+    public String resourceList() {
+        try {
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("success", true);
+            out.put("dir", DriverResourceScanner.getDriversDir().toString());
+            List<DriverResourceScanner.DriverFile> files = DriverResourceScanner.scan();
+            List<Map<String, Object>> items = new ArrayList<>(files.size());
+            for (DriverResourceScanner.DriverFile df : files) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("dbType", df.dbType);
+                m.put("version", df.version);
+                m.put("fileName", df.originalFileName);
+                m.put("path", df.jarPath.toString());
+                try {
+                    m.put("size", Files.size(df.jarPath));
+                } catch (Exception ignored) {}
+                items.add(m);
+            }
+            out.put("items", items);
+            return JsonUtil.toJson(out);
+        } catch (Exception e) {
+            return error("扫描资源目录失败: " + rootCauseMessage(e));
+        }
+    }
+
+    /** 把资源目录中的 jar 导入到 driver_jar 表 */
+    @RequestMapping("/resource/sync")
+    @ResponseBody
+    public String resourceSync(@RequestParam(value = "dbType", required = false) String dbType) {
+        try {
+            List<DriverJar> imported = driverService.importFromResourceDir(dbType);
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("success", true);
+            out.put("imported", imported.size());
+            out.put("items", imported);
+            return JsonUtil.toJson(out);
+        } catch (Exception e) {
+            log.error("资源目录导入失败", e);
+            return error("资源目录导入失败: " + rootCauseMessage(e));
+        }
+    }
+
+    // ==================== 工具 ====================
 
     private String error(String msg) {
         return JsonUtil.toJson(Map.of("success", false, "error", msg));

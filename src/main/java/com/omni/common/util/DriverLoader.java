@@ -13,50 +13,76 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 驱动加载器。
  *
- * 加载流程：
- *   1. 从 driver_jar 表匹配 jar（按 dbType + version）
- *   2. 用 DriverClassNameResolver 智能识别类名
- *      优先文件名 → 目录扫描 → 数据库类型默认
- *   3. classpath 兜底
+ * <p>加载顺序（命中即返回）：</p>
+ *   <ol>
+ *     <li><b>driver_jar 表</b>（数据库 blob，dbType+version 精确，退化到同 dbType 最新）</li>
+ *     <li><b>classpath</b> 内置驱动</li>
+ *     <li><b>resources/drivers 目录</b>（{dbType}_{version}_{fileName}.jar）</li>
+ *   </ol>
  */
 public class DriverLoader {
     private static final Logger log = LoggerFactory.getLogger(DriverLoader.class);
     private static final Map<String, Driver> driverCache = new ConcurrentHashMap<>();
 
     public static Driver getDriver(String dbType, String version) throws Exception {
-        String key = dbType + ":" + (version == null ? "" : version);
+        String type = DriverResourceScanner.normalizeDbType(dbType);
+        if (!DriverResourceScanner.isAllowedDbType(type)) {
+            throw new RuntimeException("不支持的数据库类型: " + dbType
+                    + "（仅支持 " + String.join("/", DriverResourceScanner.ALLOWED_DB_TYPES) + "）");
+        }
+        String key = type + ":" + (version == null ? "" : version);
         Driver cached = driverCache.get(key);
         if (cached != null) return cached;
 
-        // 1. 从 driver_jar 表查询
-        DriverJar matched = findMatchedDriver(dbType, version);
+        // ---------- ① driver_jar 表 ----------
+        DriverJar matched = findMatchedDriver(type, version);
         if (matched != null) {
             String className = DriverClassNameResolver.resolve(matched);
             if (className == null) {
                 throw new RuntimeException("无法从驱动包确定类名: " + matched.getFileName()
-                        + " (dbType=" + dbType + ")");
+                        + " (dbType=" + type + ", version=" + matched.getVersion() + ")");
             }
             return loadDriverFromJar(matched, className, key);
         }
 
-        // 2. classpath 兜底
-        log.warn("driver_jar 未找到匹配驱动，使用 classpath 兜底: dbType={}", dbType);
-        return loadDefaultDriver(dbType);
+        // ---------- ② classpath 内置驱动 ----------
+        try {
+            Driver d = loadDefaultDriver(type);
+            driverCache.put(key, d);
+            log.info("classpath 加载驱动成功: dbType={}, class={}", type, d.getClass().getName());
+            return d;
+        } catch (ClassNotFoundException e) {
+            log.info("classpath 未找到驱动: dbType={}, 继续尝试资源目录", type);
+        }
+
+        // ---------- ③ resources/drivers 目录（最后兜底） ----------
+        Driver dirDriver = DriverResourceScanner.loadDriver(type, version);
+        if (dirDriver != null) {
+            driverCache.put(key, dirDriver);
+            return dirDriver;
+        }
+
+        throw new RuntimeException("无法加载数据库驱动: dbType=" + type
+                + ", version=" + (version == null ? "null" : version)
+                + "（driver_jar 表无匹配，classpath 无该类，资源目录 "
+                + DriverResourceScanner.getDriversDir() + " 也无匹配 jar）");
     }
+
+    // ---------- ① driver_jar 表匹配 ----------
 
     private static DriverJar findMatchedDriver(String dbType, String version) {
         try {
             JdbcTemplate jt = new JdbcTemplate();
-            // 优先精确匹配 dbType + version
             if (version != null && !version.trim().isEmpty()) {
                 List<DriverJar> exact = jt.queryForList(
-                        "SELECT * FROM driver_jar WHERE LOWER(db_type)=LOWER(?) AND LOWER(version)=LOWER(?) LIMIT 1",
+                        "SELECT * FROM driver_jar " +
+                                "WHERE LOWER(db_type)=LOWER(?) AND LOWER(version)=LOWER(?) LIMIT 1",
                         DriverJar.class, dbType, version);
                 if (!exact.isEmpty()) return exact.get(0);
             }
-            // 回退：只按 dbType 匹配
             List<DriverJar> byType = jt.queryForList(
-                    "SELECT * FROM driver_jar WHERE LOWER(db_type)=LOWER(?) ORDER BY create_time DESC LIMIT 1",
+                    "SELECT * FROM driver_jar WHERE LOWER(db_type)=LOWER(?) " +
+                            "ORDER BY create_time DESC LIMIT 1",
                     DriverJar.class, dbType);
             if (!byType.isEmpty()) return byType.get(0);
         } catch (Exception e) {
@@ -65,19 +91,21 @@ public class DriverLoader {
         return null;
     }
 
-    private static Driver loadDriverFromJar(DriverJar driverJar, String driverClassName, String cacheKey) throws Exception {
+    private static Driver loadDriverFromJar(DriverJar driverJar, String driverClassName, String cacheKey)
+            throws Exception {
         ByteArrayClassLoader classLoader = new ByteArrayClassLoader(
                 driverJar.getJarData(), Thread.currentThread().getContextClassLoader());
         Class<?> clazz = classLoader.loadClass(driverClassName);
         Driver driver = (Driver) clazz.getDeclaredConstructor().newInstance();
         driverCache.put(cacheKey, driver);
-        log.info("成功加载驱动: {} ({}), 类名: {}",
+        log.info("driver_jar 加载驱动成功: {} ({}), 类名: {}",
                 driverJar.getName(), driverJar.getId(), driverClassName);
         return driver;
     }
 
+    // ---------- ② classpath 兜底 ----------
+
     private static Driver loadDefaultDriver(String dbType) throws Exception {
-        String driverClassName;
         switch (dbType.toLowerCase()) {
             case "mysql":
                 try {
@@ -88,20 +116,23 @@ public class DriverLoader {
                             .getDeclaredConstructor().newInstance();
                 }
             case "oracle":
-                driverClassName = "oracle.jdbc.OracleDriver";
-                return (Driver) Class.forName(driverClassName)
+                return (Driver) Class.forName("oracle.jdbc.OracleDriver")
                         .getDeclaredConstructor().newInstance();
             case "postgresql":
             case "pg":
-                driverClassName = "org.postgresql.Driver";
-                return (Driver) Class.forName(driverClassName)
+                return (Driver) Class.forName("org.postgresql.Driver")
                         .getDeclaredConstructor().newInstance();
             case "sqlserver":
-                driverClassName = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
-                return (Driver) Class.forName(driverClassName)
+                return (Driver) Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver")
                         .getDeclaredConstructor().newInstance();
             default:
                 throw new RuntimeException("不支持的数据库类型: " + dbType);
         }
+    }
+
+    /** 清空缓存（运维/升级驱动时调用） */
+    public static void clearCache() {
+        driverCache.clear();
+        log.info("DriverLoader 缓存已清空");
     }
 }

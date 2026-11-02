@@ -20,23 +20,27 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * 资源目录驱动扫描器（DriverLoader 最后兜底）。
+ * 资源目录驱动扫描器（DriverLoader 兜底 + 下拉数据来源）。
  *
  * <p>物理目录：{@code {user.dir}/resources/drivers}（可由 {@code driver.resource.dir} 覆盖）</p>
  *
  * <p>文件命名：{@code {dbType}_{version}_{原始文件名}.jar}</p>
- * <p>如：{@code mysql_8.0.33_mysql-connector-java-8.0.33.jar}</p>
+ *
+ * <p>★ 递归扫描：支持 {@code resources/drivers/} 下按 dbType 分目录（最多 5 层）</p>
  */
 public final class DriverResourceScanner {
     private static final Logger log = LoggerFactory.getLogger(DriverResourceScanner.class);
 
-    /** 兼容旧接口，委托给 DriverFileNameParser */
+    /** 兼容旧调用，委托给 DriverFileNameParser */
     public static final List<String> ALLOWED_DB_TYPES =
             Arrays.asList(DriverFileNameParser.ALLOWED_DB_TYPES);
 
     /** {dbType}_{version}_{fileName}.jar —— fileName 保留 .jar 后缀 */
     private static final Pattern JAR_NAME_PATTERN = Pattern.compile(
             "^(.+?)_(.+?)_(.+\\.jar)$", Pattern.CASE_INSENSITIVE);
+
+    /** 递归最大深度（防止误扫深层目录） */
+    private static final int MAX_SCAN_DEPTH = 5;
 
     private DriverResourceScanner() {}
 
@@ -72,7 +76,7 @@ public final class DriverResourceScanner {
     // ==================== 扫描与解析 ====================
 
     public static class DriverFile {
-        public final String dbType;      // mysql/oracle/sqlserver/postgresql
+        public final String dbType;            // mysql/oracle/sqlserver/postgresql
         public final String version;
         public final String originalFileName;
         public final Path jarPath;
@@ -91,10 +95,14 @@ public final class DriverResourceScanner {
         }
     }
 
+    /**
+     * 递归扫描驱动目录（限深 5 层），返回所有能按命名规则解析的 jar。
+     * 按文件名倒序排列（新上传在前）。
+     */
     public static List<DriverFile> scan() {
         Path dir = getDriversDir();
         if (!Files.isDirectory(dir)) return new ArrayList<>();
-        try (Stream<Path> stream = Files.list(dir)) {
+        try (Stream<Path> stream = Files.walk(dir, MAX_SCAN_DEPTH)) {
             return stream
                     .filter(Files::isRegularFile)
                     .filter(p -> p.getFileName().toString().toLowerCase().endsWith(".jar"))
@@ -186,6 +194,8 @@ public final class DriverResourceScanner {
             return null;
         }
     }
+
+    // ==================== 落盘命名 ====================
 
     public static Path writeJar(String dbType, String version,
                                 String originalFileName, byte[] data) throws Exception {

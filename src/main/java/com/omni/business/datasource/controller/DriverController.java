@@ -1,5 +1,6 @@
 package com.omni.business.datasource.controller;
 
+import com.omni.business.datasource.service.DriverComboService;
 import com.omni.business.datasource.service.DriverJarService;
 import com.omni.common.datasource.driver.DriverJar;
 import com.omni.common.util.DriverFileNameParser;
@@ -32,6 +33,9 @@ public class DriverController {
     @Autowired
     private DriverJarService driverService;
 
+    @Autowired
+    private DriverComboService driverComboService;
+
     // ==================== 支持的数据库类型（供前端渲染下拉，可选） ====================
 
     @RequestMapping("/types")
@@ -47,6 +51,30 @@ public class DriverController {
             list.add(m);
         }
         return JsonUtil.toJson(Map.of("success", true, "types", list));
+    }
+
+    // ==================== ★ 新增：连接管理下拉数据（版本 + 驱动类） ====================
+
+    /**
+     * GET /driver/api/combobox?dbType=mysql
+     *
+     * 返回：
+     * {
+     *   "success": true,
+     *   "dbType": "mysql",
+     *   "versions": ["8.0.33", "8.0.30", "8", "5.1.47", "5"],
+     *   "driverClasses": ["com.mysql.cj.jdbc.Driver", "com.mysql.jdbc.Driver"]
+     * }
+     */
+    @RequestMapping("/combobox")
+    @ResponseBody
+    public String combobox(@RequestParam(value = "dbType", required = false) String dbType) {
+        try {
+            return JsonUtil.toJson(driverComboService.getComboboxData(dbType));
+        } catch (Exception e) {
+            log.error("获取下拉数据失败, dbType={}", dbType, e);
+            return error("获取下拉数据失败: " + rootCauseMessage(e));
+        }
     }
 
     // ==================== 查询 ====================

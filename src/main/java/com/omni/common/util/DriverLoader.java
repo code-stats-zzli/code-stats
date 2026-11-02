@@ -15,9 +15,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>加载顺序（命中即返回）：</p>
  *   <ol>
- *     <li><b>driver_jar 表</b>（数据库 blob，dbType+version 精确，退化到同 dbType 最新）</li>
+ *     <li><b>driver_jar 表</b>（数据库 blob，dbType+version 精确；无 version 取该 dbType 最新）</li>
  *     <li><b>classpath</b> 内置驱动</li>
- *     <li><b>resources/drivers 目录</b>（{dbType}_{version}_{fileName}.jar）</li>
+ *     <li><b>resources/drivers 目录</b>（文件名 {dbType}_{version}_{fileName}.jar）</li>
  *   </ol>
  */
 public class DriverLoader {
@@ -25,10 +25,10 @@ public class DriverLoader {
     private static final Map<String, Driver> driverCache = new ConcurrentHashMap<>();
 
     public static Driver getDriver(String dbType, String version) throws Exception {
-        String type = DriverResourceScanner.normalizeDbType(dbType);
-        if (!DriverResourceScanner.isAllowedDbType(type)) {
+        String type = DriverFileNameParser.normalizeDbType(dbType);
+        if (!DriverFileNameParser.isAllowedDbType(type)) {
             throw new RuntimeException("不支持的数据库类型: " + dbType
-                    + "（仅支持 " + String.join("/", DriverResourceScanner.ALLOWED_DB_TYPES) + "）");
+                    + "（仅支持 " + String.join("/", DriverFileNameParser.ALLOWED_DB_TYPES) + "）");
         }
         String key = type + ":" + (version == null ? "" : version);
         Driver cached = driverCache.get(key);
@@ -55,7 +55,7 @@ public class DriverLoader {
             log.info("classpath 未找到驱动: dbType={}, 继续尝试资源目录", type);
         }
 
-        // ---------- ③ resources/drivers 目录（最后兜底） ----------
+        // ---------- ③ resources/drivers 目录 ----------
         Driver dirDriver = DriverResourceScanner.loadDriver(type, version);
         if (dirDriver != null) {
             driverCache.put(key, dirDriver);
@@ -67,8 +67,6 @@ public class DriverLoader {
                 + "（driver_jar 表无匹配，classpath 无该类，资源目录 "
                 + DriverResourceScanner.getDriversDir() + " 也无匹配 jar）");
     }
-
-    // ---------- ① driver_jar 表匹配 ----------
 
     private static DriverJar findMatchedDriver(String dbType, String version) {
         try {
@@ -103,8 +101,6 @@ public class DriverLoader {
         return driver;
     }
 
-    // ---------- ② classpath 兜底 ----------
-
     private static Driver loadDefaultDriver(String dbType) throws Exception {
         switch (dbType.toLowerCase()) {
             case "mysql":
@@ -130,7 +126,6 @@ public class DriverLoader {
         }
     }
 
-    /** 清空缓存（运维/升级驱动时调用） */
     public static void clearCache() {
         driverCache.clear();
         log.info("DriverLoader 缓存已清空");

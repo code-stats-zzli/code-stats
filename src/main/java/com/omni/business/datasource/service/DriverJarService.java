@@ -1,6 +1,7 @@
 package com.omni.business.datasource.service;
 
 import com.omni.common.datasource.driver.DriverJar;
+import com.omni.common.util.DriverFileNameParser;
 import com.omni.common.util.DriverResourceScanner;
 import com.omni.framework.jdbc.JdbcTemplate;
 import com.omni.framework.log.LoggerFactory;
@@ -16,7 +17,8 @@ import java.util.UUID;
 /**
  * 驱动 jar 服务。
  *
- * <p>唯一性约束：{@code db_type + version}（name 恒等于 db_type）</p>
+ * <p>唯一性约束：{@code db_type + version}</p>
+ * <p>name 恒等于 db_type（表结构兼容历史数据）</p>
  */
 @Service
 public class DriverJarService {
@@ -36,7 +38,7 @@ public class DriverJarService {
         return jdbcTemplate.queryForList(
                 "SELECT id, name, db_type, version, file_name, create_time FROM driver_jar " +
                         "WHERE LOWER(db_type) = LOWER(?) ORDER BY create_time DESC",
-                DriverJar.class, DriverResourceScanner.normalizeDbType(dbType));
+                DriverJar.class, DriverFileNameParser.normalizeDbType(dbType));
     }
 
     public DriverJar getById(String id) throws Exception {
@@ -44,11 +46,10 @@ public class DriverJarService {
                 "SELECT * FROM driver_jar WHERE id = ?", DriverJar.class, id);
     }
 
-    /** 唯一性判断：db_type + version */
     public String findExistingId(String dbType, String version) throws Exception {
-        String sql = "SELECT id FROM driver_jar " +
-                "WHERE LOWER(db_type)=LOWER(?) AND LOWER(version)=LOWER(?) LIMIT 1";
-        List<DriverJar> list = jdbcTemplate.queryForList(sql, DriverJar.class,
+        List<DriverJar> list = jdbcTemplate.queryForList(
+                "SELECT id FROM driver_jar WHERE LOWER(db_type)=LOWER(?) AND LOWER(version)=LOWER(?) LIMIT 1",
+                DriverJar.class,
                 dbType == null ? "" : dbType.trim(),
                 version == null ? "" : version.trim());
         return list.isEmpty() ? null : list.get(0).getId();
@@ -57,32 +58,41 @@ public class DriverJarService {
     // ==================== 保存（上传 → 入库 + 落盘） ====================
 
     public boolean save(DriverJar driver) throws Exception {
-        String dbType = DriverResourceScanner.normalizeDbType(driver.getDbType());
-        if (!DriverResourceScanner.isAllowedDbType(dbType)) {
+        // 1. 类型校验
+        String dbType = DriverFileNameParser.normalizeDbType(driver.getDbType());
+        if (!DriverFileNameParser.isAllowedDbType(dbType)) {
             throw new IllegalArgumentException("不支持的数据库类型: " + driver.getDbType()
-                    + "（仅支持 " + String.join("/", DriverResourceScanner.ALLOWED_DB_TYPES) + "）");
+                    + "（仅支持 " + String.join("/", DriverFileNameParser.ALLOWED_DB_TYPES) + "）");
         }
+        // 2. 版本必填
         if (driver.getVersion() == null || driver.getVersion().trim().isEmpty()) {
             throw new IllegalArgumentException("驱动版本 version 不能为空");
         }
+        // 3. jar 内容必须存在
         if (driver.getJarData() == null || driver.getJarData().length == 0) {
             throw new IllegalArgumentException("驱动 jar 文件不能为空");
         }
-        if (driver.getFileName() == null || driver.getFileName().trim().isEmpty()) {
+        // 4. 原始文件名必须是 .jar
+        String originalFileName = driver.getFileName();
+        if (originalFileName == null || originalFileName.trim().isEmpty()) {
             throw new IllegalArgumentException("驱动原始文件名不能为空");
         }
+        if (!originalFileName.trim().toLowerCase().endsWith(".jar")) {
+            throw new IllegalArgumentException("只允许上传 .jar 文件");
+        }
 
-        // 唯一性校验：db_type + version
+        // 5. 唯一性校验：db_type + version
         String existId = findExistingId(dbType, driver.getVersion());
         if (existId != null) {
             throw new IllegalStateException("驱动已存在（dbType=" + dbType
                     + " / version=" + driver.getVersion() + "），不可重复上传");
         }
 
-        // name = dbType（表结构兼容老数据）
+        // 6. 归一化并入库
         driver.setName(dbType);
         driver.setDbType(dbType);
         driver.setVersion(driver.getVersion().trim());
+        driver.setFileName(originalFileName.trim());
         driver.setId(UUID.randomUUID().toString().replace("-", ""));
 
         int rows;
@@ -109,7 +119,7 @@ public class DriverJarService {
             throw new Exception("保存驱动失败: " + detail, e);
         }
 
-        // 同步落盘到 resources/drivers
+        // 7. 同步落盘到 resources/drivers（失败仅警告）
         try {
             Path saved = DriverResourceScanner.writeJar(
                     driver.getDbType(), driver.getVersion(),
@@ -126,15 +136,21 @@ public class DriverJarService {
     // ==================== 更新 ====================
 
     public boolean update(DriverJar driver) throws Exception {
-        String dbType = DriverResourceScanner.normalizeDbType(driver.getDbType());
-        if (!DriverResourceScanner.isAllowedDbType(dbType)) {
+        String dbType = DriverFileNameParser.normalizeDbType(driver.getDbType());
+        if (!DriverFileNameParser.isAllowedDbType(dbType)) {
             throw new IllegalArgumentException("不支持的数据库类型: " + driver.getDbType());
         }
         String version = driver.getVersion() == null ? null : driver.getVersion().trim();
         if (version == null || version.isEmpty()) {
             throw new IllegalArgumentException("驱动版本 version 不能为空");
         }
-        // name 恒等于 dbType
+        // 更新 jar 时再次校验后缀
+        if (driver.getJarData() != null && driver.getJarData().length > 0) {
+            if (driver.getFileName() == null
+                    || !driver.getFileName().trim().toLowerCase().endsWith(".jar")) {
+                throw new IllegalArgumentException("只允许上传 .jar 文件");
+            }
+        }
         driver.setName(dbType);
         driver.setDbType(dbType);
         driver.setVersion(version);
@@ -153,7 +169,6 @@ public class DriverJarService {
                         driver.getId()) > 0;
             }
 
-            // 更新时也同步刷新资源目录里的文件
             if (result && driver.getJarData() != null && driver.getJarData().length > 0) {
                 try {
                     DriverResourceScanner.writeJar(
@@ -175,12 +190,12 @@ public class DriverJarService {
     // ==================== 删除 ====================
 
     public boolean delete(String id) throws Exception {
-        DriverJar d = getById(id);   // 先查出以定位磁盘文件
+        DriverJar d = getById(id);
         try {
             boolean ok = jdbcTemplate.update("DELETE FROM driver_jar WHERE id = ?", id) > 0;
             if (ok && d != null && d.getVersion() != null && d.getFileName() != null) {
                 try {
-                    String storageName = DriverResourceScanner.buildStorageName(
+                    String storageName = DriverFileNameParser.buildStorageName(
                             d.getDbType(), d.getVersion(), d.getFileName());
                     Path target = DriverResourceScanner.getDriversDir().resolve(storageName);
                     if (Files.deleteIfExists(target)) {
@@ -201,21 +216,14 @@ public class DriverJarService {
 
     // ==================== 资源目录导入 ====================
 
-    /**
-     * 把 resources/drivers 目录中的 jar 导入到 driver_jar 表。
-     * 文件名前缀即 dbType；已存在的（db_type + version）跳过。
-     *
-     * @param dbTypeFilter 可选，指定只导入某个 dbType
-     */
     public List<DriverJar> importFromResourceDir(String dbTypeFilter) throws Exception {
         String filter = (dbTypeFilter == null || dbTypeFilter.trim().isEmpty())
-                ? null : DriverResourceScanner.normalizeDbType(dbTypeFilter);
+                ? null : DriverFileNameParser.normalizeDbType(dbTypeFilter);
 
         List<DriverJar> imported = new ArrayList<>();
         List<DriverResourceScanner.DriverFile> files = DriverResourceScanner.scan();
         for (DriverResourceScanner.DriverFile df : files) {
             if (filter != null && !filter.equalsIgnoreCase(df.dbType)) continue;
-
             String existId = findExistingId(df.dbType, df.version);
             if (existId != null) {
                 log.info("驱动已存在，跳过: {} {}", df.dbType, df.version);

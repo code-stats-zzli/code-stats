@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Driver;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
@@ -21,19 +22,17 @@ import java.util.stream.Stream;
 /**
  * 资源目录驱动扫描器（DriverLoader 最后兜底）。
  *
- * <p>扫描 {@code {user.dir}/resources/drivers} 目录，文件名规则：
- * {@code {dbType}_{version}_{originalFileName}.jar}</p>
+ * <p>物理目录：{@code {user.dir}/resources/drivers}（可由 {@code driver.resource.dir} 覆盖）</p>
  *
- * <p>{@code dbType} 只有 4 个简写：mysql / oracle / sqlserver / postgresql</p>
- *
- * <p>默认目录可被 {@code driver.resource.dir} 配置覆盖（相对路径基于 user.dir）。</p>
+ * <p>文件命名：{@code {dbType}_{version}_{原始文件名}.jar}</p>
+ * <p>如：{@code mysql_8.0.33_mysql-connector-java-8.0.33.jar}</p>
  */
 public final class DriverResourceScanner {
     private static final Logger log = LoggerFactory.getLogger(DriverResourceScanner.class);
 
-    /** 允许的数据库类型简写 */
+    /** 兼容旧接口，委托给 DriverFileNameParser */
     public static final List<String> ALLOWED_DB_TYPES =
-            java.util.Arrays.asList("mysql", "oracle", "sqlserver", "postgresql");
+            Arrays.asList(DriverFileNameParser.ALLOWED_DB_TYPES);
 
     /** {dbType}_{version}_{fileName}.jar —— fileName 保留 .jar 后缀 */
     private static final Pattern JAR_NAME_PATTERN = Pattern.compile(
@@ -41,20 +40,18 @@ public final class DriverResourceScanner {
 
     private DriverResourceScanner() {}
 
-    // ==================== 类型工具 ====================
+    // ==================== 兼容旧调用的工具方法 ====================
 
-    /** 是否是受支持的数据库类型简写 */
     public static boolean isAllowedDbType(String dbType) {
-        if (dbType == null) return false;
-        return ALLOWED_DB_TYPES.contains(dbType.trim().toLowerCase());
+        return DriverFileNameParser.isAllowedDbType(dbType);
     }
 
-    /** 归一化：小写 + 去空格；对 pg → postgresql 做别名兼容 */
     public static String normalizeDbType(String dbType) {
-        if (dbType == null) return null;
-        String t = dbType.trim().toLowerCase();
-        if ("pg".equals(t)) return "postgresql";
-        return t;
+        return DriverFileNameParser.normalizeDbType(dbType);
+    }
+
+    public static String buildStorageName(String dbType, String version, String originalFileName) {
+        return DriverFileNameParser.buildStorageName(dbType, version, originalFileName);
     }
 
     // ==================== 目录定位 ====================
@@ -75,8 +72,7 @@ public final class DriverResourceScanner {
     // ==================== 扫描与解析 ====================
 
     public static class DriverFile {
-        /** 就是 dbType（mysql/oracle/sqlserver/postgresql） */
-        public final String dbType;
+        public final String dbType;      // mysql/oracle/sqlserver/postgresql
         public final String version;
         public final String originalFileName;
         public final Path jarPath;
@@ -95,7 +91,6 @@ public final class DriverResourceScanner {
         }
     }
 
-    /** 列出资源目录中所有能按 {dbType}_{version}_{fileName}.jar 解析的文件 */
     public static List<DriverFile> scan() {
         Path dir = getDriversDir();
         if (!Files.isDirectory(dir)) return new ArrayList<>();
@@ -121,8 +116,8 @@ public final class DriverResourceScanner {
             log.debug("跳过不符合命名规则的 jar: {}", fileName);
             return null;
         }
-        String dbType = normalizeDbType(m.group(1));
-        if (!isAllowedDbType(dbType)) {
+        String dbType = DriverFileNameParser.normalizeDbType(m.group(1));
+        if (!DriverFileNameParser.isAllowedDbType(dbType)) {
             log.debug("跳过未知 dbType 的 jar: {}, dbType={}", fileName, dbType);
             return null;
         }
@@ -133,13 +128,12 @@ public final class DriverResourceScanner {
 
     /**
      * 按 dbType + version 匹配。
-     *   - version 非空：必须精确匹配（不做宽松匹配，避免误用）
-     *   - version 为空：返回 dbType 匹配的任意一个（按文件名倒序取第一个）
+     *   - version 非空：精确匹配
+     *   - version 为空：返回 dbType 匹配的第一个（文件名倒序，新文件优先）
      */
     public static DriverFile find(String dbType, String version) {
-        String type = normalizeDbType(dbType);
-        if (!isAllowedDbType(type)) return null;
-
+        String type = DriverFileNameParser.normalizeDbType(dbType);
+        if (!DriverFileNameParser.isAllowedDbType(type)) return null;
         List<DriverFile> all = scan();
         if (all.isEmpty()) return null;
 
@@ -160,13 +154,11 @@ public final class DriverResourceScanner {
         return null;
     }
 
-    /** 从资源目录加载 Driver 实例。失败返回 null。 */
     public static Driver loadDriver(String dbType, String version) {
         DriverFile df = find(dbType, version);
         if (df == null) return null;
 
         try {
-            // 类名解析（复用 DriverClassNameResolver 的三级推导）
             String className = DriverClassNameResolver.fromFileName(df.originalFileName);
             if (className == null) {
                 byte[] jarBytes = Files.readAllBytes(df.jarPath);
@@ -195,36 +187,11 @@ public final class DriverResourceScanner {
         }
     }
 
-    // ==================== 落盘命名 ====================
-
-    /**
-     * 构造存储名：{dbType}_{version}_{fileName}
-     * dbType 只允许 mysql/oracle/sqlserver/postgresql
-     * version 中的下划线会替换为 '.'（防止破坏解析）
-     */
-    public static String buildStorageName(String dbType, String version, String originalFileName) {
-        String type = normalizeDbType(dbType);
-        if (!isAllowedDbType(type))
-            throw new IllegalArgumentException("不支持的数据库类型: " + dbType
-                    + "（仅支持 " + String.join("/", ALLOWED_DB_TYPES) + "）");
-        if (version == null || version.trim().isEmpty())
-            throw new IllegalArgumentException("驱动版本不能为空");
-        if (originalFileName == null || originalFileName.trim().isEmpty())
-            throw new IllegalArgumentException("原始文件名不能为空");
-
-        String cleanVersion = version.trim().replace('_', '.');
-        String cleanFile = originalFileName.trim();
-        if (!cleanFile.toLowerCase().endsWith(".jar")) cleanFile = cleanFile + ".jar";
-
-        return type + "_" + cleanVersion + "_" + cleanFile;
-    }
-
-    /** 把驱动 jar 写入资源目录。返回落盘后的绝对路径。 */
     public static Path writeJar(String dbType, String version,
                                 String originalFileName, byte[] data) throws Exception {
         Path dir = getDriversDir();
         Files.createDirectories(dir);
-        String storageName = buildStorageName(dbType, version, originalFileName);
+        String storageName = DriverFileNameParser.buildStorageName(dbType, version, originalFileName);
         Path target = dir.resolve(storageName);
         Files.write(target, data);
         log.info("驱动 jar 已落盘: {}", target);

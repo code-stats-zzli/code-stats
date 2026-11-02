@@ -26,6 +26,7 @@
             cursor: pointer; transition: 0.2s;
         }
         .btn-secondary:hover { background: rgba(0,102,255,0.2); transform: translateY(-1px); }
+        .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
         select {
             padding: 8px 14px; border-radius: 20px; border: 1px solid rgba(0,102,255,0.3);
             background: white; font-size: 13px; min-width: 180px;
@@ -63,7 +64,7 @@
         }
         .modal-content {
             background: white; border-radius: 24px;
-            width: 540px; max-width: 90%;
+            width: 560px; max-width: 92%;
             box-shadow: 0 20px 35px rgba(0,0,0,0.2);
         }
         .modal-header {
@@ -81,10 +82,14 @@
         .form-group input, .form-group select {
             width: 100%; padding: 10px;
             border: 1px solid #cbd5e1; border-radius: 12px; font-size: 14px;
+            background: white;
         }
         .form-group input:focus, .form-group select:focus {
             outline: none; border-color: #0066ff;
             box-shadow: 0 0 0 3px rgba(0,102,255,0.15);
+        }
+        .form-group input[readonly] {
+            background: #f1f5f9; color: #64748b; cursor: not-allowed;
         }
         .modal-footer {
             padding: 16px 24px; border-top: 1px solid #e2e8f0;
@@ -93,6 +98,26 @@
         .empty-row td { text-align: center; padding: 40px; color: #64748b; }
         .hint { font-size: 12px; color: #64748b; margin-top: 4px; }
         .error-text { color: #dc2626; font-size: 12px; margin-top: 4px; min-height: 16px; }
+        .detect-banner {
+            margin-bottom: 16px; padding: 10px 14px; border-radius: 12px;
+            font-size: 13px; line-height: 1.5;
+        }
+        .detect-banner.success { background: #d4f4dd; color: #1a7f37; border: 1px solid #86efac; }
+        .detect-banner.warn    { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
+        .detect-banner.info    { background: #e2e8f0; color: #57606a; border: 1px solid #cbd5e1; }
+        .file-picker {
+            border: 2px dashed rgba(0,102,255,0.4);
+            border-radius: 14px;
+            padding: 18px;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.2s;
+            background: #f8fafc;
+        }
+        .file-picker:hover { border-color: #0066ff; background: #eef6ff; }
+        .file-picker.has-file { border-style: solid; border-color: #22c55e; background: #f0fdf4; }
+        .file-picker-name { font-size: 13px; color: #1e293b; font-weight: 600; }
+        .file-picker-hint { font-size: 11px; color: #64748b; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -115,18 +140,19 @@
         <tr>
             <th>数据库类型</th>
             <th>版本</th>
-            <th>文件名</th>
+            <th>原始文件名</th>
+            <th>存储名</th>
             <th>上传时间</th>
             <th>操作</th>
         </tr>
         </thead>
         <tbody id="driverTableBody">
-        <tr class="empty-row"><td colspan="5">暂无驱动，请点击「新增驱动」上传 jar 文件</td></tr>
+        <tr class="empty-row"><td colspan="6">暂无驱动，请点击「新增驱动」上传 jar 文件</td></tr>
         </tbody>
     </table>
 </div>
 
-<!-- 上传/编辑共用弹窗 -->
+<!-- 上传/编辑弹窗 -->
 <div id="driverModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -135,25 +161,41 @@
         </div>
         <div class="modal-body">
             <input type="hidden" id="editId">
+
+            <!-- 文件选择区 -->
             <div class="form-group">
-                <label>数据库类型 *</label>
+                <label>Jar 文件 <span id="fileOptionalHint" style="color:#dc2626;">*</span></label>
+                <input type="file" id="jarFile" accept=".jar,application/java-archive" style="display:none;">
+                <div class="file-picker" id="filePicker">
+                    <div class="file-picker-name" id="filePickerName">点击选择 .jar 文件</div>
+                    <div class="file-picker-hint">仅允许 .jar 格式</div>
+                </div>
+            </div>
+
+            <!-- 识别结果提示 -->
+            <div id="detectBanner" class="detect-banner info">
+                选择文件后自动识别数据库类型与版本
+            </div>
+
+            <!-- 数据库类型 -->
+            <div class="form-group">
+                <label>数据库类型 <span style="color:#dc2626;">*</span></label>
                 <select id="dbType">
                     <option value="mysql">MySQL</option>
                     <option value="oracle">Oracle</option>
                     <option value="sqlserver">SQL Server</option>
                     <option value="postgresql">PostgreSQL</option>
                 </select>
-                <div class="hint">仅支持这 4 种类型；上传后 name 字段自动 = 类型</div>
+                <div class="hint">仅支持这 4 种类型；name 字段自动等于类型</div>
             </div>
+
+            <!-- 版本 -->
             <div class="form-group">
-                <label>驱动版本 * <span style="color:#94a3b8;font-weight:400;">（如 8.0.33）</span></label>
-                <input type="text" id="driverVersion" placeholder="8.0.33">
-                <div class="hint">唯一性：类型 + 版本 组合不可重复</div>
+                <label>驱动版本 <span style="color:#dc2626;">*</span></label>
+                <input type="text" id="driverVersion" placeholder="如 8.0.33；识别不到请手动填写">
+                <div class="hint">唯一性：类型 + 版本 组合不可重复；不能包含下划线 _</div>
             </div>
-            <div class="form-group" id="fileGroup">
-                <label>Jar 文件 <span id="fileOptionalHint"></span></label>
-                <input type="file" id="jarFile" accept=".jar">
-            </div>
+
             <div id="formError" class="error-text"></div>
         </div>
         <div class="modal-footer">
@@ -165,14 +207,14 @@
 
 <!-- 资源目录导入弹窗 -->
 <div id="resourceDirModal" class="modal">
-    <div class="modal-content" style="width: 760px; max-width: 92%;">
+    <div class="modal-content" style="width: 800px; max-width: 92%;">
         <div class="modal-header">
             <h3>📂 resources/drivers 目录扫描结果</h3>
             <span class="close" id="closeResourceDirBtn">&times;</span>
         </div>
         <div class="modal-body">
             <div id="resourceDirInfo" class="hint" style="margin-bottom:12px;"></div>
-            <div id="resourceDirList" style="max-height:400px; overflow-y:auto;">
+            <div id="resourceDirList" style="max-height:420px; overflow-y:auto;">
                 <div class="loading">加载中...</div>
             </div>
             <div id="resourceDirError" class="error-text"></div>

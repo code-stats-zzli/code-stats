@@ -2,6 +2,7 @@ package com.omni.business.datasource.controller;
 
 import com.omni.business.datasource.service.DriverJarService;
 import com.omni.common.datasource.driver.DriverJar;
+import com.omni.common.util.DriverFileNameParser;
 import com.omni.common.util.DriverResourceScanner;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
@@ -30,6 +31,23 @@ public class DriverController {
 
     @Autowired
     private DriverJarService driverService;
+
+    // ==================== 支持的数据库类型（供前端渲染下拉，可选） ====================
+
+    @RequestMapping("/types")
+    @ResponseBody
+    public String types() {
+        List<Map<String, String>> list = new ArrayList<>();
+        String[] codes = DriverFileNameParser.ALLOWED_DB_TYPES;
+        String[] labels = {"MySQL", "Oracle", "SQL Server", "PostgreSQL"};
+        for (int i = 0; i < codes.length; i++) {
+            Map<String, String> m = new LinkedHashMap<>();
+            m.put("code", codes[i]);
+            m.put("label", labels[i]);
+            list.add(m);
+        }
+        return JsonUtil.toJson(Map.of("success", true, "types", list));
+    }
 
     // ==================== 查询 ====================
 
@@ -70,25 +88,37 @@ public class DriverController {
             FileItem fileItem = multipart.getFileItem("file");
             if (fileItem == null) return error("缺少文件字段 file");
 
+            String fileName = fileItem.getFileName();
+            if (fileName == null || fileName.trim().isEmpty()) return error("文件名不能为空");
+            if (!fileName.toLowerCase().endsWith(".jar")) {
+                return error("只允许上传 .jar 文件");
+            }
+
             String dbType = multipart.getParameter("dbType");
             String version = multipart.getParameter("version");
 
-            if (dbType == null || dbType.trim().isEmpty()) return error("数据库类型 dbType 不能为空");
-            if (!DriverResourceScanner.isAllowedDbType(dbType)) {
-                return error("不支持的数据库类型: " + dbType
-                        + "（仅支持 " + String.join("/", DriverResourceScanner.ALLOWED_DB_TYPES) + "）");
+            // 严格校验：dbType 必须是 4 类之一
+            if (dbType == null || dbType.trim().isEmpty()) {
+                return error("数据库类型 dbType 不能为空");
             }
-            if (version == null || version.trim().isEmpty()) return error("驱动版本 version 不能为空");
-
-            String fileName = fileItem.getFileName();
-            if (fileName == null || fileName.trim().isEmpty()) return error("文件名不能为空");
+            if (!DriverFileNameParser.isAllowedDbType(dbType)) {
+                return error("不支持的数据库类型: " + dbType
+                        + "（仅支持 " + String.join("/", DriverFileNameParser.ALLOWED_DB_TYPES) + "）");
+            }
+            // 版本必填
+            if (version == null || version.trim().isEmpty()) {
+                return error("驱动版本 version 不能为空");
+            }
+            if (version.contains("_")) {
+                return error("驱动版本不能包含下划线 _（会破坏资源目录命名规则）");
+            }
 
             byte[] data = fileItem.getBytes();
             if (data == null || data.length == 0) return error("文件内容为空");
 
             DriverJar driver = new DriverJar();
-            driver.setDbType(DriverResourceScanner.normalizeDbType(dbType));
-            driver.setName(driver.getDbType());          // name 恒等于 dbType
+            driver.setDbType(DriverFileNameParser.normalizeDbType(dbType));
+            driver.setName(driver.getDbType());
             driver.setVersion(version.trim());
             driver.setFileName(fileName.trim());
             driver.setJarData(data);
@@ -123,15 +153,22 @@ public class DriverController {
             String version = multipart.getParameter("version");
             if (id == null || id.trim().isEmpty()) return error("id 不能为空");
             if (dbType == null || dbType.trim().isEmpty()) return error("数据库类型 dbType 不能为空");
-            if (!DriverResourceScanner.isAllowedDbType(dbType)) {
+            if (!DriverFileNameParser.isAllowedDbType(dbType)) {
                 return error("不支持的数据库类型: " + dbType);
             }
             if (version == null || version.trim().isEmpty()) return error("驱动版本 version 不能为空");
 
             FileItem fileItem = multipart.getFileItem("file");
+            if (fileItem != null) {
+                String newFileName = fileItem.getFileName();
+                if (newFileName == null || !newFileName.toLowerCase().endsWith(".jar")) {
+                    return error("只允许上传 .jar 文件");
+                }
+            }
+
             DriverJar driver = new DriverJar();
             driver.setId(id.trim());
-            driver.setDbType(DriverResourceScanner.normalizeDbType(dbType));
+            driver.setDbType(DriverFileNameParser.normalizeDbType(dbType));
             driver.setName(driver.getDbType());
             driver.setVersion(version.trim());
             if (fileItem != null) {
@@ -167,7 +204,6 @@ public class DriverController {
 
     // ==================== 资源目录接口 ====================
 
-    /** 列出 resources/drivers 目录中可解析的 jar */
     @RequestMapping("/resource/list")
     @ResponseBody
     public String resourceList() {
@@ -183,9 +219,7 @@ public class DriverController {
                 m.put("version", df.version);
                 m.put("fileName", df.originalFileName);
                 m.put("path", df.jarPath.toString());
-                try {
-                    m.put("size", Files.size(df.jarPath));
-                } catch (Exception ignored) {}
+                try { m.put("size", Files.size(df.jarPath)); } catch (Exception ignored) {}
                 items.add(m);
             }
             out.put("items", items);
@@ -195,7 +229,6 @@ public class DriverController {
         }
     }
 
-    /** 把资源目录中的 jar 导入到 driver_jar 表 */
     @RequestMapping("/resource/sync")
     @ResponseBody
     public String resourceSync(@RequestParam(value = "dbType", required = false) String dbType) {

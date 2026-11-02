@@ -4,170 +4,8 @@
     <meta charset="UTF-8">
     <title>连接管理 - CodeStats</title>
     <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="connection-manager.css">
     <script src="../global.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { height: 100%; overflow: hidden; font-family: 'Inter', 'Segoe UI', sans-serif; }
-        body { background: linear-gradient(145deg, #eef2f7 0%, #d9e2ef 100%); color: #1e293b; }
-
-        .cm-layout { display: flex; height: 100vh; gap: 16px; padding: 16px; }
-
-        .cm-sidebar {
-            width: 320px; flex-shrink: 0;
-            background: var(--bg-card); backdrop-filter: blur(16px);
-            border: 1px solid rgba(0,102,255,0.25); border-radius: 20px;
-            display: flex; flex-direction: column; overflow: hidden;
-        }
-        .cm-sidebar-header {
-            padding: 16px; border-bottom: 1px solid rgba(0,102,255,0.15);
-            font-weight: 600; color: var(--accent-primary); font-size: 15px;
-        }
-        .sample-list { flex: 1; overflow-y: auto; padding: 12px; }
-        .sample-item {
-            background: white; border: 1px solid rgba(0,102,255,0.2);
-            border-radius: 14px; padding: 12px; margin-bottom: 10px;
-            cursor: pointer; transition: 0.15s;
-        }
-        .sample-item:hover { border-color: var(--accent-primary); transform: translateX(3px); }
-        .sample-item .sample-title { font-weight: 600; color: var(--accent-primary); margin-bottom: 4px; }
-        .sample-item .sample-url {
-            font-family: 'JetBrains Mono', monospace; font-size: 11px;
-            color: #64748b; word-break: break-all; line-height: 1.4;
-        }
-
-        .cm-main {
-            flex: 1; display: flex; flex-direction: column;
-            background: var(--bg-card); backdrop-filter: blur(16px);
-            border: 1px solid rgba(0,102,255,0.25); border-radius: 20px;
-            overflow: hidden; min-width: 0;
-        }
-        .cm-main-header {
-            padding: 16px 20px; border-bottom: 1px solid rgba(0,102,255,0.15);
-            display: flex; justify-content: space-between; align-items: center;
-        }
-        .cm-main-header h2 { color: var(--accent-primary); font-size: 17px; }
-        .status-badge {
-            font-size: 12px; padding: 3px 12px; border-radius: 12px; font-weight: 600;
-        }
-        .status-badge.disconnected { background: #e2e8f0; color: #57606a; }
-        .status-badge.connected    { background: #d4f4dd; color: #1a7f37; }
-
-        .cm-body { flex: 1; overflow-y: auto; padding: 20px; }
-
-        .form-group { margin-bottom: 14px; }
-        .form-group label {
-            display: block; font-size: 13px; font-weight: 600;
-            color: var(--accent-primary); margin-bottom: 6px;
-        }
-        .form-group input, .form-group select, .form-group textarea {
-            width: 100%; padding: 9px 12px;
-            border: 1px solid rgba(0,102,255,0.3); border-radius: 12px;
-            background: white; font-size: 13px; color: #1e293b;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .form-group textarea { resize: vertical; min-height: 70px; }
-        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
-            outline: none; border-color: var(--accent-primary);
-            box-shadow: 0 0 0 3px rgba(0,102,255,0.15);
-        }
-        .form-row { display: flex; gap: 12px; flex-wrap: wrap; }
-        .form-row .form-group { flex: 1; min-width: 140px; }
-
-        /* ==================== 自定义下拉（输入框 + 面板） ==================== */
-        .combo-wrap { position: relative; }
-        .combo-wrap input { padding-right: 32px; }
-        .combo-btn {
-            position: absolute; right: 4px; top: 50%;
-            transform: translateY(-50%);
-            width: 24px; height: 24px;
-            background: rgba(0,102,255,0.1);
-            border: none; border-radius: 6px;
-            cursor: pointer; color: var(--accent-primary);
-            font-size: 12px; line-height: 1;
-            transition: 0.15s;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .combo-btn:hover { background: rgba(0,102,255,0.25); }
-        .combo-panel {
-            display: none;
-            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-            max-height: 260px; overflow-y: auto;
-            background: white;
-            border: 1px solid rgba(0,102,255,0.3);
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-            z-index: 100;
-        }
-        .combo-panel.show { display: block; }
-        .combo-option {
-            padding: 8px 14px;
-            font-size: 13px;
-            font-family: 'JetBrains Mono', monospace;
-            cursor: pointer;
-            transition: 0.1s;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .combo-option:hover { background: rgba(0,102,255,0.1); color: var(--accent-primary); }
-        .combo-option.selected { background: rgba(0,102,255,0.15); color: var(--accent-primary); font-weight: 600; }
-        .combo-option.hint { color: #94a3b8; font-style: italic; cursor: default; }
-        .combo-option.hint:hover { background: transparent; color: #94a3b8; }
-        .combo-option .sub-hint {
-            font-size: 11px; color: #94a3b8; margin-left: 8px;
-        }
-        .combo-option.selected .sub-hint { color: rgba(0,102,255,0.7); }
-
-        .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
-        .btn-row button, .btn-row a { padding: 9px 22px; border-radius: 24px; font-size: 13px; }
-        .btn-row button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        .parse-result {
-            background: rgba(0,102,255,0.06); border: 1px dashed rgba(0,102,255,0.35);
-            border-radius: 14px; padding: 12px 16px; margin: 12px 0;
-            font-size: 13px; font-family: 'JetBrains Mono', monospace;
-            line-height: 1.6; color: #1e293b;
-        }
-        .parse-result .ok   { color: #1a7f37; }
-        .parse-result .bad  { color: #c62828; }
-        .parse-result .kv   { display: flex; gap: 8px; padding: 2px 0; }
-        .parse-result .kv b { color: var(--accent-primary); min-width: 100px; }
-
-        .msg { padding: 10px 14px; border-radius: 12px; font-size: 13px; margin: 10px 0; }
-        .msg.ok  { background: #d4f4dd; color: #1a7f37; }
-        .msg.bad { background: #fee2e2; color: #c62828; }
-
-        .sql-result-table {
-            width: 100%; border-collapse: collapse; font-size: 12px;
-            background: white; border-radius: 12px; overflow: hidden;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .sql-result-table th {
-            background: rgba(0,102,255,0.12); color: var(--accent-primary);
-            padding: 8px 10px; text-align: left; font-weight: 600;
-            white-space: nowrap; position: sticky; top: 0;
-        }
-        .sql-result-table td {
-            padding: 6px 10px; border-bottom: 1px solid #e2e8f0;
-            max-width: 320px; overflow: hidden; text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .sql-result-table tr:hover td { background: rgba(0,102,255,0.05); }
-        .sql-meta { font-size: 12px; color: #64748b; margin-bottom: 8px; font-family: monospace; }
-
-        h3.section-title {
-            color: var(--accent-primary); font-size: 14px;
-            margin: 24px 0 12px 0; padding-bottom: 6px;
-            border-bottom: 1px dashed rgba(0,102,255,0.2);
-            display: flex; align-items: center; gap: 8px;
-        }
-
-        .loading { text-align: center; padding: 30px; color: #64748b; }
-
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(0,102,255,0.4); border-radius: 4px; }
-    </style>
 </head>
 <body>
 <div class="cm-layout">
@@ -183,84 +21,167 @@
             <h2>🔗 连接管理</h2>
             <span class="status-badge disconnected" id="connStatus">未连接</span>
         </div>
-        <div class="cm-body">
-            <div class="form-group">
-                <label>连接串 (JDBC URL) <span style="color:#dc2626;">*</span></label>
-                <input type="text" id="connUrl"
-                       placeholder="例如: jdbc:mysql://localhost:3306/test?useSSL=false&serverTimezone=UTC">
+
+        <!-- 操作步骤引导（可折叠） -->
+        <div class="guide-card" id="guideCard">
+            <div class="guide-header" id="guideHeader">
+                <div class="guide-title">
+                    <span class="num-badge">?</span>
+                    <span>操作步骤（点击展开/收起）</span>
+                </div>
+                <span class="guide-toggle" id="guideToggle">▼</span>
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>用户名</label>
-                    <input type="text" id="connUsername" placeholder="root">
-                </div>
-                <div class="form-group">
-                    <label>密码</label>
-                    <input type="password" id="connPassword">
-                </div>
-            </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>数据库类型</label>
-                    <select id="connDbType">
-                        <option value="">自动识别</option>
-                        <option value="mysql">MySQL</option>
-                        <option value="oracle">Oracle</option>
-                        <option value="sqlserver">SQL Server</option>
-                        <option value="postgresql">PostgreSQL</option>
-                    </select>
-                </div>
-                <!-- ★ 版本：自定义下拉 -->
-                <div class="form-group">
-                    <label>驱动版本（选择后自动关联驱动类）</label>
-                    <div class="combo-wrap">
-                        <input type="text" id="connVersion" placeholder="选择数据库类型后自动加载" autocomplete="off">
-                        <button type="button" class="combo-btn" id="connVersionBtn" title="展开版本列表">▾</button>
-                        <div class="combo-panel" id="connVersionPanel"></div>
+            <div class="guide-body">
+                <div class="guide-step" data-step="1">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <strong>上传 / 选择驱动</strong>
+                        <span>在「资源关联」中上传 .jar，或选择已有驱动文件</span>
                     </div>
                 </div>
-                <!-- ★ 驱动类：自定义下拉 -->
-                <div class="form-group">
-                    <label>驱动类（随版本自动切换，可手动修改）</label>
-                    <div class="combo-wrap">
-                        <input type="text" id="connDriverClass" placeholder="选择版本后自动匹配" autocomplete="off">
-                        <button type="button" class="combo-btn" id="connDriverClassBtn" title="展开驱动类列表">▾</button>
-                        <div class="combo-panel" id="connDriverClassPanel"></div>
+                <div class="guide-step" data-step="2">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <strong>配置版本与驱动类</strong>
+                        <span>右侧面板可修改驱动的版本号与驱动类映射</span>
+                    </div>
+                </div>
+                <div class="guide-step" data-step="3">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <strong>切换到「连接配置」</strong>
+                        <span>选择数据库类型后，版本和驱动类会自动加载</span>
+                    </div>
+                </div>
+                <div class="guide-step" data-step="4">
+                    <div class="step-num">4</div>
+                    <div class="step-content">
+                        <strong>测试连接</strong>
+                        <span>填写连接串后点 <code>🔌 测试连接</code></span>
+                    </div>
+                </div>
+                <div class="guide-step" data-step="5">
+                    <div class="step-num">5</div>
+                    <div class="step-content">
+                        <strong>执行 SQL</strong>
+                        <span>连接成功后可以执行 SELECT / SHOW / DESC 等查询</span>
+                    </div>
+                </div>
+                <div class="guide-step" data-step="6">
+                    <div class="step-num">6</div>
+                    <div class="step-content">
+                        <strong>保存为数据源</strong>
+                        <span>填写名称并保存，用于后续复用</span>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <div class="btn-row">
-                <button id="parseBtn" class="btn-secondary">🔍 解析连接串</button>
-                <button id="testBtn" class="btn-primary">🔌 测试连接</button>
-                <button id="closeBtn" class="btn-secondary" disabled>✖ 关闭连接</button>
+        <!-- Tab 切换 -->
+        <div class="tabs-bar" id="tabsBar">
+            <button class="tab-btn active" data-tab="resource">📁 资源关联</button>
+            <button class="tab-btn" data-tab="connection">🔗 连接配置</button>
+        </div>
+
+        <!-- Tab：资源关联（默认） -->
+        <div class="tab-pane active" id="tabResource">
+            <div class="resource-layout">
+                <div class="resource-left">
+                    <div class="resource-toolbar">
+                        <button id="uploadDriverBtn" class="btn-primary btn-sm">📤 上传驱动</button>
+                        <button id="refreshDriversBtn" class="btn-secondary btn-sm">🔄 刷新</button>
+                        <input type="text" id="driverFilter" class="driver-filter"
+                               placeholder="按类型或版本过滤...">
+                    </div>
+                    <div id="driverList" class="driver-list">
+                        <div class="loading">加载中...</div>
+                    </div>
+                </div>
+                <div class="resource-right" id="driverEditor">
+                    <div class="empty-hint">👈 从左侧选择一个驱动进行编辑</div>
+                </div>
             </div>
+        </div>
 
-            <div id="parseResult" class="parse-result" style="display:none;"></div>
-            <div id="statusMsg" style="display:none;"></div>
-
-            <div id="sqlSection" style="display:none;">
-                <h3 class="section-title">📝 执行 SQL 查询</h3>
+        <!-- Tab：连接配置 -->
+        <div class="tab-pane" id="tabConnection">
+            <div class="cm-body">
                 <div class="form-group">
-                    <textarea id="sqlInput" rows="4"
-                              placeholder="输入查询语句，如：SELECT * FROM user LIMIT 10"></textarea>
+                    <label>连接串 (JDBC URL) <span style="color:#dc2626;">*</span></label>
+                    <input type="text" id="connUrl"
+                           placeholder="例如: jdbc:mysql://localhost:3306/test?useSSL=false&serverTimezone=UTC">
                 </div>
-                <div class="btn-row">
-                    <button id="execSqlBtn" class="btn-primary">▶️ 执行 SQL</button>
-                    <button id="clearSqlBtn" class="btn-secondary">🗑️ 清空</button>
-                </div>
-                <div id="sqlResult" style="margin-top:16px;"></div>
-            </div>
-
-            <div id="saveSection" style="display:none;">
-                <h3 class="section-title">💾 保存为正式数据源</h3>
                 <div class="form-row">
-                    <div class="form-group" style="flex:2;">
-                        <label>数据源名称</label>
-                        <input type="text" id="dsName" placeholder="留空自动生成：dbType_host_database">
+                    <div class="form-group">
+                        <label>用户名</label>
+                        <input type="text" id="connUsername" placeholder="root">
                     </div>
-                    <div class="form-group" style="flex:1; display:flex; align-items:flex-end;">
-                        <button id="saveDsBtn" class="btn-primary" style="width:100%;">💾 保存</button>
+                    <div class="form-group">
+                        <label>密码</label>
+                        <input type="password" id="connPassword">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>数据库类型</label>
+                        <select id="connDbType">
+                            <option value="">自动识别</option>
+                            <option value="mysql">MySQL</option>
+                            <option value="oracle">Oracle</option>
+                            <option value="sqlserver">SQL Server</option>
+                            <option value="postgresql">PostgreSQL</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>驱动版本（选择后自动关联驱动类）</label>
+                        <div class="combo-wrap">
+                            <input type="text" id="connVersion" placeholder="选择数据库类型后自动加载" autocomplete="off">
+                            <button type="button" class="combo-btn" id="connVersionBtn" title="展开版本列表">▾</button>
+                            <div class="combo-panel" id="connVersionPanel"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>驱动类（随版本自动切换，可手动修改）</label>
+                        <div class="combo-wrap">
+                            <input type="text" id="connDriverClass" placeholder="选择版本后自动匹配" autocomplete="off">
+                            <button type="button" class="combo-btn" id="connDriverClassBtn" title="展开驱动类列表">▾</button>
+                            <div class="combo-panel" id="connDriverClassPanel"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="btn-row">
+                    <button id="parseBtn" class="btn-secondary">🔍 解析连接串</button>
+                    <button id="testBtn" class="btn-primary">🔌 测试连接</button>
+                    <button id="closeBtn" class="btn-secondary" disabled>✖ 关闭连接</button>
+                </div>
+
+                <div id="parseResult" class="parse-result" style="display:none;"></div>
+                <div id="statusMsg" style="display:none;"></div>
+
+                <div id="sqlSection" style="display:none;">
+                    <h3 class="section-title">📝 执行 SQL 查询</h3>
+                    <div class="form-group">
+                        <textarea id="sqlInput" rows="4"
+                                  placeholder="输入查询语句，如：SELECT * FROM user LIMIT 10"></textarea>
+                    </div>
+                    <div class="btn-row">
+                        <button id="execSqlBtn" class="btn-primary">▶️ 执行 SQL</button>
+                        <button id="clearSqlBtn" class="btn-secondary">🗑️ 清空</button>
+                    </div>
+                    <div id="sqlResult" style="margin-top:16px;"></div>
+                </div>
+
+                <div id="saveSection" style="display:none;">
+                    <h3 class="section-title">💾 保存为正式数据源</h3>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:2;">
+                            <label>数据源名称</label>
+                            <input type="text" id="dsName" placeholder="留空自动生成：dbType_host_database">
+                        </div>
+                        <div class="form-group" style="flex:1; display:flex; align-items:flex-end;">
+                            <button id="saveDsBtn" class="btn-primary" style="width:100%;">💾 保存</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -268,558 +189,47 @@
     </main>
 </div>
 
-<script>
-    (function () {
-        'use strict';
+<!-- 驱动上传弹窗 -->
+<div id="driverUploadModal" class="modal" style="display:none;">
+    <div class="modal-content" style="width: 560px; max-width: 92%;">
+        <div class="modal-header">
+            <h3>🔌 上传驱动 Jar</h3>
+            <span class="close" id="closeDriverUploadModal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Jar 文件 <span style="color:#dc2626;">*</span></label>
+                <input type="file" id="driverJarFile" accept=".jar,application/java-archive" style="display:none;">
+                <div class="file-picker" id="driverFilePicker">
+                    <div class="file-picker-name" id="driverFilePickerName">点击选择 .jar 文件</div>
+                    <div class="file-picker-hint">仅允许 .jar 格式</div>
+                </div>
+            </div>
+            <div id="driverDetectBanner" class="detect-banner info">
+                选择文件后自动识别数据库类型与版本
+            </div>
+            <div class="form-group">
+                <label>数据库类型 <span style="color:#dc2626;">*</span></label>
+                <select id="driverUploadDbType">
+                    <option value="mysql">MySQL</option>
+                    <option value="oracle">Oracle</option>
+                    <option value="sqlserver">SQL Server</option>
+                    <option value="postgresql">PostgreSQL</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>驱动版本 <span style="color:#dc2626;">*</span></label>
+                <input type="text" id="driverUploadVersion" placeholder="如 8.0.33；识别不到请手动填写">
+            </div>
+            <div id="driverUploadError" class="error-text"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="driverUploadConfirmBtn" class="btn-primary">保存</button>
+            <button id="driverUploadCancelBtn" class="btn-secondary">取消</button>
+        </div>
+    </div>
+</div>
 
-        const API = window.apiUrl('/connection/api');
-        const DRIVER_API = window.apiUrl('/driver/api');
-        let currentTempId = null;
-        let currentParsed = null;
-
-        const $ = id => document.getElementById(id);
-        const connUrl            = $('connUrl');
-        const connUsername       = $('connUsername');
-        const connPassword       = $('connPassword');
-        const connDbType         = $('connDbType');
-        const connDriverClass    = $('connDriverClass');
-        const connVersion        = $('connVersion');
-        const connVersionBtn     = $('connVersionBtn');
-        const connVersionPanel   = $('connVersionPanel');
-        const connDriverClassBtn = $('connDriverClassBtn');
-        const connDriverClassPanel = $('connDriverClassPanel');
-        const connStatus         = $('connStatus');
-        const parseBtn           = $('parseBtn');
-        const testBtn            = $('testBtn');
-        const closeBtn           = $('closeBtn');
-        const parseResult        = $('parseResult');
-        const statusMsg          = $('statusMsg');
-        const sqlSection         = $('sqlSection');
-        const sqlInput           = $('sqlInput');
-        const execSqlBtn         = $('execSqlBtn');
-        const clearSqlBtn        = $('clearSqlBtn');
-        const sqlResult          = $('sqlResult');
-        const saveSection        = $('saveSection');
-        const dsName             = $('dsName');
-        const saveDsBtn          = $('saveDsBtn');
-        const sampleList         = $('sampleList');
-
-        // ==================== 工具 ====================
-        function esc(s) {
-            if (s == null) return '';
-            return String(s).replace(/[&<>"]/g, m => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
-            }[m]));
-        }
-        function showMsg(el, msg, type) {
-            el.style.display = 'block';
-            el.className = 'msg ' + (type || 'ok');
-            el.textContent = msg;
-        }
-        function hideMsg(el) { el.style.display = 'none'; }
-
-        function setConnected(connected) {
-            if (connected) {
-                connStatus.textContent = '✅ 已连接';
-                connStatus.className = 'status-badge connected';
-                closeBtn.disabled = false;
-            } else {
-                connStatus.textContent = '未连接';
-                connStatus.className = 'status-badge disconnected';
-                closeBtn.disabled = true;
-                sqlSection.style.display = 'none';
-                saveSection.style.display = 'none';
-                sqlResult.innerHTML = '';
-                currentTempId = null;
-            }
-        }
-
-        // ==================== ★ 版本 / 驱动类 联动状态 ====================
-        let currentVersions = [];            // 当前数据库类型的所有版本（含预置 + 目录）
-        let currentDriverClasses = [];       // 当前数据库类型的所有驱动类
-        let currentVersionDriverMap = {};    // ★ 版本 → 驱动类 的映射
-
-        // ==================== ★ 自定义下拉：通用实现 ====================
-
-        function openComboPanel(inputEl, btnEl, panelEl, options, showSubHint) {
-            closeAllComboPanels(panelEl);
-
-            if (!options || options.length === 0) {
-                panelEl.innerHTML = '<div class="combo-option hint">（无可用选项，请手动输入）</div>';
-                panelEl.classList.add('show');
-                return;
-            }
-
-            const currentValue = (inputEl.value || '').trim();
-            let html = '';
-            for (const opt of options) {
-                const selected = (opt === currentValue) ? ' selected' : '';
-                let subHint = '';
-                if (showSubHint) {
-                    // 版本下拉里，右侧显示该版本对应的驱动类
-                    const cls = currentVersionDriverMap[opt];
-                    if (cls) {
-                        subHint = `<span class="sub-hint">→ ${esc(cls)}</span>`;
-                    }
-                }
-                html += `<div class="combo-option${selected}" data-value="${esc(opt)}">${esc(opt)}${subHint}</div>`;
-            }
-            panelEl.innerHTML = html;
-
-            panelEl.querySelectorAll('.combo-option').forEach(el => {
-                el.addEventListener('mousedown', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const val = el.getAttribute('data-value');
-                    if (val != null) {
-                        inputEl.value = val;
-                        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-                    }
-                    panelEl.classList.remove('show');
-                });
-            });
-
-            panelEl.classList.add('show');
-        }
-
-        function closeAllComboPanels(except) {
-            [connVersionPanel, connDriverClassPanel].forEach(p => {
-                if (p && p !== except) p.classList.remove('show');
-            });
-        }
-
-        document.addEventListener('click', (e) => {
-            if (e.target.closest('.combo-wrap')) return;
-            closeAllComboPanels();
-        });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeAllComboPanels();
-        });
-
-        // 版本下拉
-        connVersion.addEventListener('click', () => {
-            openComboPanel(connVersion, connVersionBtn, connVersionPanel, currentVersions, true);
-        });
-        connVersionBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openComboPanel(connVersion, connVersionBtn, connVersionPanel, currentVersions, true);
-        });
-
-        // 驱动类下拉
-        connDriverClass.addEventListener('click', () => {
-            openComboPanel(connDriverClass, connDriverClassBtn, connDriverClassPanel, currentDriverClasses, false);
-        });
-        connDriverClassBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openComboPanel(connDriverClass, connDriverClassBtn, connDriverClassPanel, currentDriverClasses, false);
-        });
-
-        // 输入过滤
-        function filterPanel(inputEl, panelEl, options) {
-            if (!panelEl.classList.contains('show')) return;
-            const kw = (inputEl.value || '').trim().toLowerCase();
-            const filtered = kw
-                ? options.filter(o => o.toLowerCase().includes(kw))
-                : options;
-            if (filtered.length === 0) {
-                panelEl.innerHTML = '<div class="combo-option hint">（无匹配项）</div>';
-                return;
-            }
-            let html = '';
-            for (const opt of filtered) {
-                const cls = currentVersionDriverMap[opt];
-                const subHint = (cls && panelEl === connVersionPanel)
-                    ? `<span class="sub-hint">→ ${esc(cls)}</span>` : '';
-                html += `<div class="combo-option" data-value="${esc(opt)}">${esc(opt)}${subHint}</div>`;
-            }
-            panelEl.innerHTML = html;
-            panelEl.querySelectorAll('.combo-option').forEach(el => {
-                el.addEventListener('mousedown', (e) => {
-                    e.preventDefault(); e.stopPropagation();
-                    const val = el.getAttribute('data-value');
-                    if (val != null) {
-                        inputEl.value = val;
-                        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-                    }
-                    panelEl.classList.remove('show');
-                });
-            });
-        }
-
-        connVersion.addEventListener('input', () => {
-            filterPanel(connVersion, connVersionPanel, currentVersions);
-            // ★ 版本变化 → 自动关联驱动类
-            syncDriverClassFromVersion();
-        });
-
-        connDriverClass.addEventListener('input', () => {
-            filterPanel(connDriverClass, connDriverClassPanel, currentDriverClasses);
-        });
-
-        // ==================== ★ 版本 → 驱动类 联动 ====================
-
-        /**
-         * 根据当前版本输入框的值，自动匹配驱动类：
-         *   ① 精确匹配 versionDriverMap
-         *   ② 匹配不到，按主版本匹配（如手输 8.0.33 → 用 8 的驱动类）
-         *   ③ 都匹配不到，不动（保留用户已填的驱动类）
-         */
-        function syncDriverClassFromVersion() {
-            const v = connVersion.value.trim();
-            if (!v) return;
-
-            // ① 精确匹配
-            if (currentVersionDriverMap[v]) {
-                connDriverClass.value = currentVersionDriverMap[v];
-                return;
-            }
-
-            // ② 按主版本匹配（手动输入 8.0.33，但映射里只有 8.0/8 时的兜底）
-            const major = parseInt(v, 10);
-            if (!isNaN(major)) {
-                for (const ver of Object.keys(currentVersionDriverMap)) {
-                    const mj = parseInt(ver, 10);
-                    if (mj === major) {
-                        connDriverClass.value = currentVersionDriverMap[ver];
-                        return;
-                    }
-                }
-            }
-
-            // ③ 兜底：按当前 dbType 推断
-            connDriverClass.value = inferDriverClassFallback(connDbType.value, v);
-        }
-
-        /** 前端兜底推断（与后端 inferDriverClass 保持一致） */
-        function inferDriverClassFallback(dbType, version) {
-            if (!dbType) return connDriverClass.value || '';
-            const t = dbType.toLowerCase();
-            if (t === 'mysql') {
-                const major = parseInt(version, 10);
-                return (!isNaN(major) && major >= 8)
-                    ? 'com.mysql.cj.jdbc.Driver'
-                    : 'com.mysql.jdbc.Driver';
-            }
-            if (t === 'oracle') return 'oracle.jdbc.OracleDriver';
-            if (t === 'postgresql' || t === 'pg') return 'org.postgresql.Driver';
-            if (t === 'sqlserver') return 'com.microsoft.sqlserver.jdbc.SQLServerDriver';
-            return connDriverClass.value || '';
-        }
-
-        // ==================== ★ 加载下拉数据 ====================
-
-        async function loadComboboxOptions(dbType, forceReset) {
-            currentVersions = [];
-            currentDriverClasses = [];
-            currentVersionDriverMap = {};
-
-            if (!dbType) {
-                if (forceReset) {
-                    connVersion.value = '';
-                    connDriverClass.value = '';
-                }
-                return;
-            }
-
-            try {
-                const resp = await fetch(DRIVER_API + '/combobox?dbType=' + encodeURIComponent(dbType));
-                const data = await resp.json();
-                if (!data.success) {
-                    console.warn('combobox 加载失败:', data.error);
-                    return;
-                }
-                currentVersions = data.versions || [];
-                currentDriverClasses = data.driverClasses || [];
-                currentVersionDriverMap = data.versionDriverMap || {};
-
-                // 默认选第一个版本，并按版本自动切驱动类
-                if (currentVersions.length > 0 && (forceReset || !connVersion.value)) {
-                    connVersion.value = currentVersions[0];
-                    const cls = currentVersionDriverMap[currentVersions[0]];
-                    if (cls) connDriverClass.value = cls;
-                } else if (connVersion.value) {
-                    // 保留用户原有版本，但重新匹配驱动类
-                    syncDriverClassFromVersion();
-                }
-            } catch (e) {
-                console.warn('加载 combobox 失败:', e);
-            }
-        }
-
-        connDbType.addEventListener('change', () => {
-            loadComboboxOptions(connDbType.value, true);
-        });
-
-        // 初始加载
-        loadComboboxOptions(connDbType.value, false);
-
-        // ==================== 示例连接串 ====================
-        async function loadSamples() {
-            try {
-                const resp = await fetch(API + '/samples');
-                const data = await resp.json();
-                if (!data.success) throw new Error(data.error || '加载失败');
-                const list = data.samples || [];
-                if (!list.length) {
-                    sampleList.innerHTML = '<div class="loading">暂无示例</div>';
-                    return;
-                }
-                sampleList.innerHTML = list.map(s => `
-                    <div class="sample-item" data-idx="${esc(s.dbType)}">
-                        <div class="sample-title">${esc(s.label || s.dbType)}</div>
-                        <div class="sample-url">${esc(s.url)}</div>
-                    </div>
-                `).join('');
-                sampleList.querySelectorAll('.sample-item').forEach(el => {
-                    el.addEventListener('click', () => {
-                        const s = list.find(x => x.dbType === el.dataset.idx);
-                        if (!s) return;
-                        connUrl.value = s.url || '';
-                        connUsername.value = s.username || '';
-                        connPassword.value = '';
-                        connDbType.value = s.dbType || '';
-                        loadComboboxOptions(connDbType.value, true);
-                        doParse();
-                    });
-                });
-            } catch (e) {
-                sampleList.innerHTML = `<div class="loading" style="color:#c62828;">加载失败：${esc(e.message)}</div>`;
-            }
-        }
-
-        // ==================== 解析连接串 ====================
-        async function doParse() {
-            const url = connUrl.value.trim();
-            if (!url) {
-                showMsg(statusMsg, '请先输入连接串', 'bad');
-                return;
-            }
-            hideMsg(statusMsg);
-            try {
-                const resp = await fetch(API + '/parse', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url })
-                });
-                const data = await resp.json();
-                const parsed = data.data || {};
-                currentParsed = parsed;
-                parseResult.style.display = 'block';
-                if (!data.success) {
-                    parseResult.innerHTML = `<div class="bad">❌ 解析失败：${esc(data.error || parsed.message || '')}</div>`;
-                    return;
-                }
-                parseResult.innerHTML = `
-                    <div class="ok">✅ 解析成功</div>
-                    <div class="kv"><b>数据库类型</b><span>${esc(parsed.dbType || '-')}</span></div>
-                    <div class="kv"><b>主机</b><span>${esc(parsed.host || '-')}</span></div>
-                    <div class="kv"><b>端口</b><span>${esc(parsed.port || '-')}</span></div>
-                    <div class="kv"><b>数据库名</b><span>${esc(parsed.databaseName || '-')}</span></div>
-                `;
-                if (parsed.dbType && !connDbType.value) {
-                    connDbType.value = parsed.dbType;
-                    loadComboboxOptions(connDbType.value, true);
-                }
-            } catch (e) {
-                showMsg(statusMsg, '解析异常：' + e.message, 'bad');
-            }
-        }
-
-        // ==================== 测试连接 ====================
-        async function doTest() {
-            const url = connUrl.value.trim();
-            if (!url) {
-                showMsg(statusMsg, '请先输入连接串', 'bad');
-                return;
-            }
-            testBtn.disabled = true;
-            testBtn.textContent = '⏳ 连接中...';
-            hideMsg(statusMsg);
-            try {
-                const payload = {
-                    url,
-                    username: connUsername.value.trim(),
-                    password: connPassword.value,
-                    dbType: connDbType.value || null,
-                    driverClass: connDriverClass.value.trim() || null,
-                    version: connVersion.value.trim() || null
-                };
-                const resp = await fetch(API + '/test', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await resp.json();
-                if (!data.success) {
-                    showMsg(statusMsg, '❌ ' + (data.error || '连接失败'), 'bad');
-                    setConnected(false);
-                    return;
-                }
-                currentTempId = data.tempId;
-                setConnected(true);
-                sqlSection.style.display = 'block';
-                saveSection.style.display = 'block';
-                showMsg(statusMsg,
-                    `✅ 连接成功！类型：${data.dbType}，临时 ID：${data.tempId}`,
-                    'ok');
-            } catch (e) {
-                showMsg(statusMsg, '连接异常：' + e.message, 'bad');
-                setConnected(false);
-            } finally {
-                testBtn.disabled = false;
-                testBtn.textContent = '🔌 测试连接';
-            }
-        }
-
-        // ==================== 执行 SQL ====================
-        async function doExecSql() {
-            if (!currentTempId) {
-                showMsg(statusMsg, '请先建立连接', 'bad');
-                return;
-            }
-            const sql = sqlInput.value.trim();
-            if (!sql) {
-                showMsg(statusMsg, '请输入 SQL 语句', 'bad');
-                return;
-            }
-            execSqlBtn.disabled = true;
-            execSqlBtn.textContent = '⏳ 执行中...';
-            sqlResult.innerHTML = '<div class="loading">执行中...</div>';
-            try {
-                const resp = await fetch(API + '/execute', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tempId: currentTempId, sql })
-                });
-                const data = await resp.json();
-                if (!data.success) {
-                    sqlResult.innerHTML = `<div class="msg bad">❌ ${esc(data.error || '执行失败')}</div>`;
-                    return;
-                }
-                const cols = data.columns || [];
-                const rows = data.rows || [];
-                if (!cols.length) {
-                    sqlResult.innerHTML =
-                        `<div class="msg ok">✅ 执行成功，返回 ${rows.length} 行</div>`;
-                    return;
-                }
-                let html = `<div class="sql-meta">
-                    共 ${data.total || rows.length} 行 · 耗时 ${data.durationMs || 0} ms
-                </div>`;
-                html += '<div style="max-height:420px;overflow:auto;border-radius:12px;">';
-                html += '<table class="sql-result-table"><thead><tr>';
-                html += cols.map(c => `<th>${esc(c)}</th>`).join('');
-                html += '</tr></thead><tbody>';
-                for (const row of rows) {
-                    html += '<tr>';
-                    for (const c of cols) {
-                        const v = row[c];
-                        const display = v == null ? '' : String(v);
-                        html += `<td title="${esc(display)}">${esc(display)}</td>`;
-                    }
-                    html += '</tr>';
-                }
-                html += '</tbody></table></div>';
-                sqlResult.innerHTML = html;
-            } catch (e) {
-                sqlResult.innerHTML = `<div class="msg bad">❌ 请求异常：${esc(e.message)}</div>`;
-            } finally {
-                execSqlBtn.disabled = false;
-                execSqlBtn.textContent = '▶️ 执行 SQL';
-            }
-        }
-
-        // ==================== 关闭连接 ====================
-        async function doClose() {
-            if (!currentTempId) return;
-            if (!confirm('确定关闭当前临时连接吗？')) return;
-            try {
-                await fetch(API + '/close', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tempId: currentTempId })
-                });
-            } catch (e) { /* ignore */ }
-            setConnected(false);
-            showMsg(statusMsg, '已关闭连接', 'ok');
-        }
-
-        // ==================== 保存为正式数据源 ====================
-        async function doSaveDs() {
-            if (!currentTempId) {
-                showMsg(statusMsg, '请先建立连接', 'bad');
-                return;
-            }
-            saveDsBtn.disabled = true;
-            saveDsBtn.textContent = '⏳ 保存中...';
-            try {
-                const resp = await fetch(API + '/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        tempId: currentTempId,
-                        name: dsName.value.trim() || null
-                    })
-                });
-                const data = await resp.json();
-                if (!data.success) {
-                    showMsg(statusMsg, '❌ 保存失败：' + (data.error || '未知错误'), 'bad');
-                    return;
-                }
-                showMsg(statusMsg,
-                    `✅ 已保存为正式数据源（ID: ${data.id}）。可前往「数据源配置」中查看。`,
-                    'ok');
-            } catch (e) {
-                showMsg(statusMsg, '保存异常：' + e.message, 'bad');
-            } finally {
-                saveDsBtn.disabled = false;
-                saveDsBtn.textContent = '💾 保存';
-            }
-        }
-
-        // ==================== 事件绑定 ====================
-        parseBtn.addEventListener('click', doParse);
-        testBtn.addEventListener('click', doTest);
-        closeBtn.addEventListener('click', doClose);
-        execSqlBtn.addEventListener('click', doExecSql);
-        saveDsBtn.addEventListener('click', doSaveDs);
-        clearSqlBtn.addEventListener('click', () => {
-            sqlInput.value = '';
-            sqlResult.innerHTML = '';
-        });
-
-        let parseTimer = null;
-        connUrl.addEventListener('input', () => {
-            if (parseTimer) clearTimeout(parseTimer);
-            parseTimer = setTimeout(() => {
-                if (connUrl.value.trim()) doParse();
-            }, 400);
-        });
-
-        window.addEventListener('beforeunload', () => {
-            if (currentTempId) {
-                try {
-                    navigator.sendBeacon(
-                        API + '/close',
-                        JSON.stringify({ tempId: currentTempId })
-                    );
-                } catch (e) { /* ignore */ }
-            }
-        });
-
-        // ==================== 启动 ====================
-        loadSamples();
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const presetUrl = urlParams.get('url');
-        if (presetUrl) {
-            connUrl.value = decodeURIComponent(presetUrl);
-            const presetUser = urlParams.get('username');
-            if (presetUser) connUsername.value = decodeURIComponent(presetUser);
-            setTimeout(() => doParse(), 200);
-        }
-    })();
-</script>
+<script src="connection-manager.js"></script>
 </body>
 </html>

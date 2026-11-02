@@ -1,6 +1,7 @@
 package com.omni.business.datasource.controller;
 
 import com.omni.business.datasource.service.DriverComboService;
+import com.omni.business.datasource.service.DriverEntryService;
 import com.omni.business.datasource.service.DriverJarService;
 import com.omni.common.datasource.driver.DriverJar;
 import com.omni.common.util.DriverFileNameParser;
@@ -9,6 +10,7 @@ import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
+import com.omni.framework.spring.annotation.RequestBody;
 import com.omni.framework.spring.annotation.RequestMapping;
 import com.omni.framework.spring.annotation.RequestParam;
 import com.omni.framework.spring.annotation.ResponseBody;
@@ -19,10 +21,7 @@ import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.util.JsonUtil;
 
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Controller
 @RequestMapping("/driver/api")
@@ -30,13 +29,11 @@ public class DriverController {
 
     private static final Logger log = LoggerFactory.getLogger(DriverController.class);
 
-    @Autowired
-    private DriverJarService driverService;
+    @Autowired private DriverJarService driverService;
+    @Autowired private DriverComboService driverComboService;
+    @Autowired private DriverEntryService driverEntryService;
 
-    @Autowired
-    private DriverComboService driverComboService;
-
-    // ==================== 支持的数据库类型（供前端渲染下拉，可选） ====================
+    // ==================== 元数据 ====================
 
     @RequestMapping("/types")
     @ResponseBody
@@ -53,31 +50,74 @@ public class DriverController {
         return JsonUtil.toJson(Map.of("success", true, "types", list));
     }
 
-    // ==================== ★ 新增：连接管理下拉数据（版本 + 驱动类） ====================
-
-    /**
-     * GET /driver/api/combobox?dbType=mysql
-     *
-     * 返回：
-     * {
-     *   "success": true,
-     *   "dbType": "mysql",
-     *   "versions": ["8.0.33", "8.0.30", "8", "5.1.47", "5"],
-     *   "driverClasses": ["com.mysql.cj.jdbc.Driver", "com.mysql.jdbc.Driver"]
-     * }
-     */
     @RequestMapping("/combobox")
     @ResponseBody
     public String combobox(@RequestParam(value = "dbType", required = false) String dbType) {
         try {
             return JsonUtil.toJson(driverComboService.getComboboxData(dbType));
         } catch (Exception e) {
-            log.error("获取下拉数据失败, dbType={}", dbType, e);
             return error("获取下拉数据失败: " + rootCauseMessage(e));
         }
     }
 
-    // ==================== 查询 ====================
+    // ==================== ★ 新增：资源关联 - 驱动条目 ====================
+
+    /** 列出合并后的驱动条目（driver_jar 表 + 目录） */
+    @RequestMapping("/entry/list")
+    @ResponseBody
+    public String entryList() {
+        try {
+            List<Map<String, Object>> items = driverEntryService.listEntries();
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("success", true);
+            out.put("items", items);
+            return JsonUtil.toJson(out);
+        } catch (Exception e) {
+            log.error("获取驱动条目失败", e);
+            return error("获取驱动条目失败: " + rootCauseMessage(e));
+        }
+    }
+
+    /** 更新某条驱动的版本和驱动类 */
+    @RequestMapping("/entry/update")
+    @ResponseBody
+    public String entryUpdate(@RequestBody Map<String, Object> req) {
+        if (req == null) return error("请求体为空");
+        try {
+            String key = str(req.get("key"));
+            String dbType = str(req.get("dbType"));
+            String oldVersion = str(req.get("oldVersion"));
+            String newVersion = str(req.get("newVersion"));
+            String driverClass = str(req.get("driverClass"));
+            Map<String, Object> out = driverEntryService.updateEntry(
+                    key, dbType, oldVersion, newVersion, driverClass);
+            return JsonUtil.toJson(out);
+        } catch (IllegalArgumentException e) {
+            return error(e.getMessage());
+        } catch (Exception e) {
+            log.error("更新驱动条目失败", e);
+            return error("更新驱动条目失败: " + rootCauseMessage(e));
+        }
+    }
+
+    /** 删除某条驱动 */
+    @RequestMapping("/entry/delete")
+    @ResponseBody
+    public String entryDelete(@RequestBody Map<String, Object> req) {
+        if (req == null) return error("请求体为空");
+        try {
+            String key = str(req.get("key"));
+            String dbType = str(req.get("dbType"));
+            String version = str(req.get("version"));
+            driverEntryService.deleteEntry(key, dbType, version);
+            return JsonUtil.toJson(Map.of("success", true));
+        } catch (Exception e) {
+            log.error("删除驱动条目失败", e);
+            return error("删除驱动条目失败: " + rootCauseMessage(e));
+        }
+    }
+
+    // ==================== 原有接口 ====================
 
     @RequestMapping("/list")
     @ResponseBody
@@ -85,7 +125,6 @@ public class DriverController {
         try {
             return JsonUtil.toJson(driverService.listByDbType(dbType));
         } catch (Exception e) {
-            log.error("查询驱动列表失败", e);
             return error("查询驱动列表失败: " + rootCauseMessage(e));
         }
     }
@@ -97,12 +136,9 @@ public class DriverController {
             boolean ok = driverService.delete(id);
             return JsonUtil.toJson(Map.of("success", ok));
         } catch (Exception e) {
-            log.error("删除驱动失败, id={}", id, e);
             return error("删除驱动失败: " + rootCauseMessage(e));
         }
     }
-
-    // ==================== 上传（只接 dbType + version + file） ====================
 
     @RequestMapping("/upload")
     @ResponseBody
@@ -118,28 +154,14 @@ public class DriverController {
 
             String fileName = fileItem.getFileName();
             if (fileName == null || fileName.trim().isEmpty()) return error("文件名不能为空");
-            if (!fileName.toLowerCase().endsWith(".jar")) {
-                return error("只允许上传 .jar 文件");
-            }
+            if (!fileName.toLowerCase().endsWith(".jar")) return error("只允许上传 .jar 文件");
 
             String dbType = multipart.getParameter("dbType");
             String version = multipart.getParameter("version");
-
-            // 严格校验：dbType 必须是 4 类之一
-            if (dbType == null || dbType.trim().isEmpty()) {
-                return error("数据库类型 dbType 不能为空");
-            }
-            if (!DriverFileNameParser.isAllowedDbType(dbType)) {
-                return error("不支持的数据库类型: " + dbType
-                        + "（仅支持 " + String.join("/", DriverFileNameParser.ALLOWED_DB_TYPES) + "）");
-            }
-            // 版本必填
-            if (version == null || version.trim().isEmpty()) {
-                return error("驱动版本 version 不能为空");
-            }
-            if (version.contains("_")) {
-                return error("驱动版本不能包含下划线 _（会破坏资源目录命名规则）");
-            }
+            if (dbType == null || dbType.trim().isEmpty()) return error("dbType 不能为空");
+            if (!DriverFileNameParser.isAllowedDbType(dbType)) return error("不支持的数据库类型: " + dbType);
+            if (version == null || version.trim().isEmpty()) return error("version 不能为空");
+            if (version.contains("_")) return error("版本不能包含下划线 _");
 
             byte[] data = fileItem.getBytes();
             if (data == null || data.length == 0) return error("文件内容为空");
@@ -152,10 +174,7 @@ public class DriverController {
             driver.setJarData(data);
 
             boolean ok = driverService.save(driver);
-            if (!ok) return error("保存失败（数据库影响行数为 0）");
-
-            log.info("驱动上传成功: dbType={}, version={}, file={}, size={}B",
-                    driver.getDbType(), driver.getVersion(), fileName, data.length);
+            if (!ok) return error("保存失败（影响行数为 0）");
             return JsonUtil.toJson(Map.of("success", true));
         } catch (IllegalStateException | IllegalArgumentException e) {
             return error(e.getMessage());
@@ -165,8 +184,6 @@ public class DriverController {
         }
     }
 
-    // ==================== 更新 ====================
-
     @RequestMapping("/update")
     @ResponseBody
     public String update() {
@@ -174,24 +191,19 @@ public class DriverController {
             HttpServletRequest req = RequestContextHolder.getRequest();
             if (req == null) return error("无法获取请求对象");
             MultipartResolver multipart = req.getMultipartResolver();
-            if (multipart == null) return error("不支持 multipart 或请求体解析失败");
+            if (multipart == null) return error("不支持 multipart 请求");
 
             String id = multipart.getParameter("id");
             String dbType = multipart.getParameter("dbType");
             String version = multipart.getParameter("version");
             if (id == null || id.trim().isEmpty()) return error("id 不能为空");
-            if (dbType == null || dbType.trim().isEmpty()) return error("数据库类型 dbType 不能为空");
-            if (!DriverFileNameParser.isAllowedDbType(dbType)) {
-                return error("不支持的数据库类型: " + dbType);
-            }
-            if (version == null || version.trim().isEmpty()) return error("驱动版本 version 不能为空");
+            if (dbType == null || !DriverFileNameParser.isAllowedDbType(dbType)) return error("dbType 无效");
+            if (version == null || version.trim().isEmpty()) return error("version 不能为空");
 
             FileItem fileItem = multipart.getFileItem("file");
             if (fileItem != null) {
-                String newFileName = fileItem.getFileName();
-                if (newFileName == null || !newFileName.toLowerCase().endsWith(".jar")) {
-                    return error("只允许上传 .jar 文件");
-                }
+                String fn = fileItem.getFileName();
+                if (fn == null || !fn.toLowerCase().endsWith(".jar")) return error("只允许 .jar");
             }
 
             DriverJar driver = new DriverJar();
@@ -204,15 +216,13 @@ public class DriverController {
                 driver.setFileName(fileItem.getFileName());
             }
             boolean ok = driverService.update(driver);
-            if (!ok) return error("更新失败（数据库影响行数为 0）");
+            if (!ok) return error("更新失败（影响行数为 0）");
             return JsonUtil.toJson(Map.of("success", true));
         } catch (Exception e) {
             log.error("更新驱动失败", e);
             return error("更新驱动失败: " + rootCauseMessage(e));
         }
     }
-
-    // ==================== 下载 ====================
 
     @RequestMapping("/download")
     @ResponseBody
@@ -229,8 +239,6 @@ public class DriverController {
             log.error("下载驱动失败, id={}", id, e);
         }
     }
-
-    // ==================== 资源目录接口 ====================
 
     @RequestMapping("/resource/list")
     @ResponseBody
@@ -268,12 +276,13 @@ public class DriverController {
             out.put("items", imported);
             return JsonUtil.toJson(out);
         } catch (Exception e) {
-            log.error("资源目录导入失败", e);
             return error("资源目录导入失败: " + rootCauseMessage(e));
         }
     }
 
     // ==================== 工具 ====================
+
+    private static String str(Object o) { return o == null ? null : String.valueOf(o); }
 
     private String error(String msg) {
         return JsonUtil.toJson(Map.of("success", false, "error", msg));

@@ -1,6 +1,8 @@
 package com.omni.business.assistance.directory.controller;
 
 import com.omni.business.assistance.directory.service.DirectoryService;
+import com.omni.framework.log.LoggerFactory;
+import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestMapping;
@@ -26,6 +28,8 @@ import java.util.Map;
 @Controller
 @RequestMapping("/files/api")
 public class FilesController {
+
+    private static final Logger log = LoggerFactory.getLogger(FilesController.class);
 
     @Autowired
     private DirectoryService directoryService;
@@ -239,8 +243,11 @@ public class FilesController {
         String type = params.get("type");
         String path = params.getOrDefault("path", "");
         if (type == null || type.isEmpty()) return errorResponse("缺少 type 参数");
-        try { return JsonUtil.toJson(directoryService.listResources(type, path)); }
-        catch (Exception e) { return errorResponse(e.getMessage()); }
+        try {
+            return JsonUtil.toJson(directoryService.listResources(type, path));
+        } catch (Exception e) {
+            return errorResponse(e.getMessage());
+        }
     }
 
     /** 新增子目录 */
@@ -259,21 +266,37 @@ public class FilesController {
             resp.put("success", true);
             resp.put("data", result);
             return JsonUtil.toJson(resp);
-        } catch (Exception e) { return errorResponse(e.getMessage()); }
+        } catch (Exception e) {
+            return errorResponse(e.getMessage());
+        }
     }
 
-    /** 上传资源（multipart，支持 path 指定子目录） */
+    /**
+     * 上传资源（multipart）。
+     *
+     * <p>普通类型（images/pages/sql/attachments/others）：
+     *   只需 file + type + path，后端按 {basename}_{uuid}.ext 命名。</p>
+     *
+     * <p>驱动类型（drivers）：
+     *   额外需要 dbType（mysql/oracle/sqlserver/postgresql）+ version，
+     *   后端按 {dbType}_{version}_{原始文件名}.jar 命名，
+     *   严格限制只允许 .jar；同 dbType + version 不可重复。</p>
+     */
     @RequestMapping("/resources/upload")
     @ResponseBody
     public String uploadResource() {
         HttpServletRequest req = RequestContextHolder.getRequest();
         if (req == null) return errorResponse("无法获取请求对象");
+
         MultipartResolver multipart = req.getMultipartResolver();
         if (multipart == null) return errorResponse("不支持 multipart 请求");
 
         FileItem fileItem = multipart.getFileItem("file");
         String type = multipart.getParameter("type");
         String path = multipart.getParameter("path");
+        // ★ 驱动专用参数（普通类型忽略）
+        String dbType = multipart.getParameter("dbType");
+        String version = multipart.getParameter("version");
         if (path == null) path = "";
 
         if (fileItem == null) return errorResponse("缺少 file 字段");
@@ -282,13 +305,37 @@ public class FilesController {
         try {
             String originalName = fileItem.getFileName();
             if (originalName == null || originalName.isEmpty()) return errorResponse("文件名为空");
+
+            // ★ 驱动类型：Controller 层做前置校验，Service 层还会再校验一次
+            if (DirectoryService.RES_TYPE_DRIVERS.equals(type)) {
+                if (!originalName.toLowerCase().endsWith(".jar")) {
+                    return errorResponse("驱动只允许上传 .jar 文件");
+                }
+                if (dbType == null || dbType.trim().isEmpty()) {
+                    return errorResponse("驱动上传必须提供 dbType（mysql/oracle/sqlserver/postgresql）");
+                }
+                if (version == null || version.trim().isEmpty()) {
+                    return errorResponse("驱动上传必须提供 version");
+                }
+            }
+
             byte[] content = fileItem.getBytes();
-            Map<String, Object> result = directoryService.uploadResource(type, path, originalName, content);
+            Map<String, Object> result = directoryService.uploadResource(
+                    type, path, originalName, content, dbType, version);
+
             Map<String, Object> resp = new HashMap<>();
             resp.put("success", true);
             resp.put("data", result);
             return JsonUtil.toJson(resp);
+        } catch (IllegalArgumentException | SecurityException e) {
+            // 参数 / 路径校验类错误，直接展示给用户
+            return errorResponse(e.getMessage());
+        } catch (IOException e) {
+            // 文件写入类错误（如驱动重复）
+            log.warn("上传资源失败(IO): type={}, path={}, msg={}", type, path, e.getMessage());
+            return errorResponse("上传失败: " + e.getMessage());
         } catch (Exception e) {
+            log.error("上传资源失败: type={}, path={}", type, path, e);
             return errorResponse("上传失败: " + e.getMessage());
         }
     }
@@ -305,7 +352,9 @@ public class FilesController {
             if (type == null || path == null) return errorResponse("缺少 type 或 path");
             directoryService.deleteResource(type, path);
             return successResponse();
-        } catch (Exception e) { return errorResponse(e.getMessage()); }
+        } catch (Exception e) {
+            return errorResponse(e.getMessage());
+        }
     }
 
     /** 下载资源 */
@@ -330,8 +379,10 @@ public class FilesController {
                 return;
             }
             String fileName = filePath.getFileName().toString();
-            String displayName = directoryService.parseDisplayName(fileName);
-            String encoded = URLEncoder.encode(displayName, StandardCharsets.UTF_8.name()).replaceAll("\\+", "%20");
+            // ★ 驱动类型的展示名要反解（去掉 {dbType}_{version}_ 前缀）
+            String displayName = directoryService.parseDisplayName(type, fileName);
+            String encoded = URLEncoder.encode(displayName, StandardCharsets.UTF_8.name())
+                    .replaceAll("\\+", "%20");
             response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
             response.setContentType("application/octet-stream");
             byte[] data = Files.readAllBytes(filePath);
@@ -391,8 +442,12 @@ public class FilesController {
             resp.put("type", type);
             resp.put("path", path);
             return JsonUtil.toJson(resp);
-        } catch (Exception e) { return errorResponse(e.getMessage()); }
+        } catch (Exception e) {
+            return errorResponse(e.getMessage());
+        }
     }
+
+    // ==================== 辅助 ====================
 
     private String detectContentType(String fileName) {
         String lower = fileName.toLowerCase();
@@ -411,8 +466,6 @@ public class FilesController {
         if (lower.endsWith(".txt") || lower.endsWith(".sql")) return "text/plain; charset=utf-8";
         return "application/octet-stream";
     }
-
-    // ==================== 辅助 ====================
 
     private Map<String, String> parseQueryParams() {
         HttpServletRequest request = RequestContextHolder.getRequest();

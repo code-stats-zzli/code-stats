@@ -10,6 +10,7 @@
 </head>
 <body>
 <div class="resources-container">
+    <!-- ==================== 左侧：资源类型 ==================== -->
     <aside class="resources-sidebar">
         <div class="sidebar-header">
             <h3>🎨 资源管理</h3>
@@ -19,6 +20,8 @@
             <div class="loading">加载中...</div>
         </div>
     </aside>
+
+    <!-- ==================== 右侧：资源内容 ==================== -->
     <main class="resources-content">
         <div class="resource-header">
             <div class="resource-title-wrap">
@@ -37,6 +40,60 @@
         </div>
     </main>
 </div>
+
+<!-- ==================== 驱动上传弹窗 ==================== -->
+<div id="driverUploadModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>🔌 上传驱动 Jar</h3>
+            <span class="close" id="closeDriverUploadModal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <!-- 文件选择区 -->
+            <div class="form-group">
+                <label>Jar 文件 <span style="color:#dc2626;">*</span></label>
+                <input type="file" id="driverJarFile"
+                       accept=".jar,application/java-archive" style="display:none;">
+                <div class="file-picker" id="driverFilePicker">
+                    <div class="file-picker-name" id="driverFilePickerName">点击选择 .jar 文件</div>
+                    <div class="file-picker-hint">仅允许 .jar 格式</div>
+                </div>
+            </div>
+
+            <!-- 自动识别提示 -->
+            <div id="driverDetectBanner" class="detect-banner info">
+                选择文件后自动识别数据库类型与版本
+            </div>
+
+            <!-- 数据库类型 -->
+            <div class="form-group">
+                <label>数据库类型 <span style="color:#dc2626;">*</span></label>
+                <select id="driverUploadDbType">
+                    <option value="mysql">MySQL</option>
+                    <option value="oracle">Oracle</option>
+                    <option value="sqlserver">SQL Server</option>
+                    <option value="postgresql">PostgreSQL</option>
+                </select>
+                <div class="hint">仅支持这 4 种；保存时按 {类型}_{版本}_{文件名}.jar 落盘</div>
+            </div>
+
+            <!-- 版本 -->
+            <div class="form-group">
+                <label>驱动版本 <span style="color:#dc2626;">*</span></label>
+                <input type="text" id="driverUploadVersion"
+                       placeholder="如 8.0.33；识别不到请手动填写">
+                <div class="hint">同「类型 + 版本」组合不可重复</div>
+            </div>
+
+            <div id="driverUploadError" class="error-text"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="driverUploadConfirmBtn" class="btn-primary">保存</button>
+            <button id="driverUploadCancelBtn" class="btn-secondary">取消</button>
+        </div>
+    </div>
+</div>
+
 <script src="files.js"></script>
 </body>
 </html>

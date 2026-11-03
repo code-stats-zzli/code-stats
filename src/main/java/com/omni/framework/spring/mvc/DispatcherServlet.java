@@ -4,6 +4,7 @@ package com.omni.framework.spring.mvc;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.beans.factory.ConfigurableListableBeanFactory;
+import com.omni.framework.spring.config.ConfigLoader;
 import com.omni.framework.spring.context.AbstractApplicationContext;
 import com.omni.framework.spring.context.SpringContextHolder;
 import com.omni.framework.spring.mvc.argument.ArgumentResolverComposite;
@@ -123,6 +124,13 @@ public class DispatcherServlet extends HttpServlet {
                 return;
             }
 
+            // ★ 核心新增：如果 uri 是根路径或空目录访问，自动重定向到主页面
+            if (tryRedirectToHomePage(req, res)) {
+                log.info(" 重定向到主页面: {} → {} 耗时: {}ms",
+                        method, uri, System.currentTimeMillis() - startTime);
+                return;
+            }
+
             res.setStatus(404, "Not Found");
             res.write("<h1>404 - Not Found</h1>");
             res.send();
@@ -163,6 +171,97 @@ public class DispatcherServlet extends HttpServlet {
             }
             RequestContextHolder.clear();
             ResponseContextHolder.clear();
+        }
+    }
+
+    /**
+     * ★ 新增：尝试重定向到主页面。
+     *
+     * <p>触发条件（全部满足）：</p>
+     * <ol>
+     *   <li>配置 {@code server.home.redirect.enabled} 为 true（默认 true）</li>
+     *   <li>配置 {@code server.home.redirect.url} 非空</li>
+     *   <li>URI 是根路径 {@code "/"}、空串，或以 {@code "/"} 结尾（即"目录访问"，而非"访问具体文件"）</li>
+     *   <li>URI 不匹配 {@code server.home.redirect.exclude-prefixes} 中排除的前缀</li>
+     * </ol>
+     *
+     * <p>URL 拼接规则：</p>
+     * <ul>
+     *   <li>{@code http(s)://...}：完整 URL，原样使用</li>
+     *   <li>以 contextPath 开头（如 {@code /omni/demo/index.html}）：原样使用</li>
+     *   <li>其他相对路径（如 {@code /demo/index.html}）：自动前缀 contextPath</li>
+     * </ul>
+     *
+     * @return true 表示已重定向并提交响应；false 表示未触发（调用方应继续走 404 分支）
+     */
+    private boolean tryRedirectToHomePage(HttpServletRequest req, HttpServletResponse res) {
+        // ---------- ① 判断 URI 是否为"目录访问" ----------
+        String uri = req.getUri();
+        if (uri == null) {
+            uri = "/";
+        }
+        boolean isDirectoryAccess =
+                uri.isEmpty()
+                        || "/".equals(uri)
+                        || uri.endsWith("/");
+        if (!isDirectoryAccess) {
+            return false;
+        }
+
+        // ---------- ② 排除前缀（避免 API 根路径被误重定向） ----------
+        String excludePrefixes = ConfigLoader.getProperty(
+                "server.home.redirect.exclude-prefixes", "");
+        if (excludePrefixes != null && !excludePrefixes.trim().isEmpty()) {
+            for (String prefix : excludePrefixes.split(",")) {
+                String p = prefix.trim();
+                if (!p.isEmpty() && uri.startsWith(p)) {
+                    log.debug("目录访问命中排除前缀，跳过重定向: uri={}, prefix={}", uri, p);
+                    return false;
+                }
+            }
+        }
+
+        // ---------- ③ 读取开关和 URL ----------
+        boolean enabled = !"false".equalsIgnoreCase(
+                ConfigLoader.getProperty("server.home.redirect.enabled", "true"));
+        if (!enabled) {
+            return false;
+        }
+
+        String redirectUrl = ConfigLoader.getProperty(
+                "server.home.redirect.url", "/demo/index.html");
+        if (redirectUrl == null || redirectUrl.trim().isEmpty()) {
+            return false;
+        }
+        redirectUrl = redirectUrl.trim();
+
+        // ---------- ④ 拼接最终 URL ----------
+        String contextPath = req.getContextPath();
+        if (contextPath == null) {
+            contextPath = "";
+        }
+
+        String finalUrl;
+        if (redirectUrl.startsWith("http://") || redirectUrl.startsWith("https://")) {
+            // 完整 URL：原样使用
+            finalUrl = redirectUrl;
+        } else if (!contextPath.isEmpty() && redirectUrl.startsWith(contextPath + "/")) {
+            // 已带 contextPath：原样使用
+            finalUrl = redirectUrl;
+        } else {
+            // 相对路径：补 contextPath
+            finalUrl = contextPath + (redirectUrl.startsWith("/") ? redirectUrl : "/" + redirectUrl);
+        }
+
+        // ---------- ⑤ 执行重定向 ----------
+        try {
+            log.info("🔄 目录访问自动重定向: {} → {}", uri, finalUrl);
+            res.sendRedirect(finalUrl);
+            return true;
+        } catch (Exception e) {
+            log.warn("重定向到主页面失败（将回退为 404）: uri={}, target={}, err={}",
+                    uri, finalUrl, e.getMessage());
+            return false;
         }
     }
 

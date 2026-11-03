@@ -6,8 +6,9 @@ public class ImportFile {
     private String language;
     private long size;
     private int lineCount;
-    private String error;   // 非空表示该文件非法
-    private String origin;  // 来源描述
+    private String error;
+    private String origin;
+    private boolean binary;
 
     public String getPath() { return path; }
     public void setPath(String path) { this.path = path; }
@@ -23,4 +24,6 @@ public class ImportFile {
     public void setError(String error) { this.error = error; }
     public String getOrigin() { return origin; }
     public void setOrigin(String origin) { this.origin = origin; }
+    public boolean isBinary() { return binary; }
+    public void setBinary(boolean binary) { this.binary = binary; }
 }

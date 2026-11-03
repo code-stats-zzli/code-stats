@@ -33,7 +33,6 @@
             const resp = await fetch(API + '/supported', { cache: 'no-store' });
             const data = await resp.json();
             if (!data.success) throw new Error(data.error || '加载失败');
-
             const targetSet = new Set();
             const sourceSet = new Set();
             const converters = data.converters || [];
@@ -42,7 +41,6 @@
                 (c.targets || []).forEach(function (t) { targetSet.add(t); });
                 (c.sources || []).forEach(function (s) { sourceSet.add(s); });
             }
-
             sourceTypeSel.innerHTML = '<option value="">自动识别（推荐）</option>';
             Array.from(sourceSet).sort().forEach(function (f) {
                 const opt = document.createElement('option');
@@ -50,7 +48,6 @@
                 opt.textContent = f.toUpperCase();
                 sourceTypeSel.appendChild(opt);
             });
-
             targetTypeSel.innerHTML = '';
             Array.from(targetSet).sort().forEach(function (f) {
                 const opt = document.createElement('option');
@@ -59,7 +56,6 @@
                 targetTypeSel.appendChild(opt);
             });
             if (targetTypeSel.options.length) targetTypeSel.selectedIndex = 0;
-            console.log('[converter] 支持转换器:', converters);
         } catch (e) {
             console.error('加载支持列表失败', e);
             sourceTypeSel.innerHTML = '<option value="">自动识别</option>';
@@ -79,14 +75,11 @@
     async function doConvert() {
         const target = targetTypeSel.value;
         if (!target) { alert('请选择目标格式'); return; }
-
         const source = sourceTypeSel.value;
-
         convertBtn.disabled = true;
         convertBtn.textContent = '⏳ 转换中...';
         currentDownloadUrl = null;
         downloadBtn.style.display = 'none';
-
         try {
             if (textMode) {
                 if (!sourceText.value.trim()) { alert('请输入文本内容'); return; }
@@ -106,17 +99,14 @@
             } else {
                 const file = fileInput.files[0];
                 if (!file) { alert('请选择文件'); return; }
-
                 const fd = new FormData();
                 fd.append('file', file);
                 fd.append('target', target);
                 if (source) fd.append('sourceType', source);
                 if (asyncMode.checked) fd.append('async', 'true');
-
                 const resp = await fetch(API + '/upload', { method: 'POST', body: fd });
                 const data = await resp.json();
                 if (!data.success) throw new Error(data.error || '转换失败');
-
                 if (data.async && data.taskId) {
                     showAsyncPending(data.taskId);
                     startPolling(data.taskId);
@@ -212,6 +202,25 @@
         resultPanel.style.display = 'none';
     });
     window.addEventListener('beforeunload', stopPolling);
-
     loadSupported();
+})();
+
+/* ==================== 左侧 Tab 切换 ==================== */
+(function () {
+    'use strict';
+    const tabs = document.querySelectorAll('.conv-tab');
+    const panels = document.querySelectorAll('.conv-panel');
+    if (!tabs.length) return;
+    function switchTab(tabId) {
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
+        panels.forEach(p => p.classList.toggle('active', p.id === 'panel-' + tabId));
+    }
+    tabs.forEach(t => {
+        t.addEventListener('click', () => {
+            const id = t.dataset.tab;
+            if (id) switchTab(id);
+        });
+    });
+    const hash = window.location.hash.replace('#', '');
+    if (hash && document.getElementById('panel-' + hash)) switchTab(hash);
 })();

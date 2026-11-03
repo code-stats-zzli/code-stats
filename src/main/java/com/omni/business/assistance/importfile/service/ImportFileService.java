@@ -25,40 +25,34 @@ public class ImportFileService {
     @Autowired
     private ImportFormatRegistry registry;
 
-    /** 解析：forcedFormat 为空/auto 则自动探测 */
     public ParseResult parse(String text, String forcedFormat) throws Exception {
-        if (text == null || text.trim().isEmpty()) {
+        if (text == null || text.trim().isEmpty())
             throw new IllegalArgumentException("内容不能为空");
-        }
         ImportFormatParser parser;
         if (forcedFormat != null && !forcedFormat.isEmpty() && !"auto".equalsIgnoreCase(forcedFormat)) {
             parser = registry.find(forcedFormat);
             if (parser == null) throw new IllegalArgumentException("不支持的格式: " + forcedFormat);
         } else {
             parser = registry.detect(text);
-            if (parser == null) {
-                throw new IllegalArgumentException("无法识别格式，请检查内容是否符合规范（支持 file-block / omni-pack / merge-file）");
-            }
+            if (parser == null)
+                throw new IllegalArgumentException(
+                        "无法识别格式，请检查内容是否符合规范（支持 file-block / omni-pack / merge-file）");
         }
         return parser.parse(text);
     }
 
-    /** 执行导入 */
     public ImportResult importFiles(String text, String forcedFormat, String targetRoot,
                                     String conflict, List<String> selectedPaths) throws Exception {
-        long maxFileSize = parseLong(ConfigLoader.getProperty("import.file.max-file-size", "1048576"), 1048576L);
-        int maxFiles     = parseInt (ConfigLoader.getProperty("import.file.max-files",    "1000"),     1000);
+        long maxFileSize = parseLong(ConfigLoader.getProperty("import.file.max-file-size", "10485760"), 10485760L);
+        int  maxFiles    = parseInt (ConfigLoader.getProperty("import.file.max-files",    "1000"),    1000);
 
         ParseResult pr = parse(text, forcedFormat);
 
-        // 元数据里的 conflict / targetRoot 是默认值（页面可覆盖）
-        if ((conflict == null || conflict.isEmpty()) && pr.getPack() != null) {
+        if ((conflict == null || conflict.isEmpty()) && pr.getPack() != null)
             conflict = pr.getPack().getConflict();
-        }
         if ((targetRoot == null || targetRoot.trim().isEmpty()) && pr.getPack() != null
-                && pr.getPack().getTargetRoot() != null && !pr.getPack().getTargetRoot().isEmpty()) {
+                && pr.getPack().getTargetRoot() != null && !pr.getPack().getTargetRoot().isEmpty())
             targetRoot = pr.getPack().getTargetRoot();
-        }
         if (conflict == null || conflict.isEmpty()) conflict = "OVERWRITE";
 
         Path root = resolveTargetRoot(targetRoot);
@@ -76,33 +70,35 @@ public class ImportFileService {
         ImportResult result = new ImportResult();
         result.setTargetRoot(root.toString());
         result.setTotal(toWrite.size());
-        if (toWrite.size() > maxFiles) {
+        if (toWrite.size() > maxFiles)
             throw new IllegalArgumentException("文件数量超过限制 " + maxFiles);
-        }
 
         for (ImportFile f : toWrite) {
             ImportResult.Item item = new ImportResult.Item();
             item.setPath(f.getPath());
             item.setSize(f.getSize());
             try {
-                if (f.getSize() > maxFileSize) {
+                if (f.getSize() > maxFileSize)
                     throw new IllegalArgumentException("文件大小超过限制 " + maxFileSize);
-                }
+
                 Path target = FileUtils.resolveSafePath(root, f.getPath());
                 Path parent = target.getParent();
-                if (parent != null && !Files.exists(parent)) {
-                    Files.createDirectories(parent);
-                }
+                if (parent != null && !Files.exists(parent)) Files.createDirectories(parent);
+
+                byte[] data = f.isBinary()
+                        ? Base64.getMimeDecoder().decode(f.getContent())
+                        : f.getContent().getBytes(StandardCharsets.UTF_8);
+
                 if (Files.exists(target)) {
                     switch (conflict.toUpperCase()) {
                         case "OVERWRITE":
-                            Files.write(target, f.getContent().getBytes(StandardCharsets.UTF_8));
+                            Files.write(target, data);
                             item.setStatus("SUCCESS");
                             item.setMessage("已覆盖");
                             break;
                         case "RENAME": {
                             Path renamed = uniquePath(target);
-                            Files.write(renamed, f.getContent().getBytes(StandardCharsets.UTF_8));
+                            Files.write(renamed, data);
                             item.setStatus("SUCCESS");
                             item.setMessage("重命名为 " + renamed.getFileName());
                             break;
@@ -113,7 +109,7 @@ public class ImportFileService {
                             break;
                     }
                 } else {
-                    Files.write(target, f.getContent().getBytes(StandardCharsets.UTF_8));
+                    Files.write(target, data);
                     item.setStatus("SUCCESS");
                     item.setMessage("写入成功");
                 }
@@ -132,13 +128,11 @@ public class ImportFileService {
     }
 
     private Path resolveTargetRoot(String targetRoot) throws Exception {
-        if (targetRoot == null || targetRoot.trim().isEmpty()) {
+        if (targetRoot == null || targetRoot.trim().isEmpty())
             throw new IllegalArgumentException("目标根目录不能为空");
-        }
         Path root = Paths.get(targetRoot.trim()).toAbsolutePath().normalize();
-        if (!Files.isDirectory(root)) {
+        if (!Files.isDirectory(root))
             throw new IllegalArgumentException("目标根目录不存在: " + root);
-        }
         String cfg = ConfigLoader.getProperty("import.file.allowed-roots", "");
         List<String> allowed = new ArrayList<>();
         for (String s : cfg.split(",")) if (!s.trim().isEmpty()) allowed.add(s.trim());

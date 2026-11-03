@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>格式转换 - CodeStats</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="converter.css">
+    <script src="../global.js"></script>
+</head>
+<body>
+<div class="converter-container">
+    <div class="converter-header">
+        <h2>🔄 格式转换工具</h2>
+        <p>支持 JSON / XML / CSV / YAML / Properties / XLSX / PNG / JPG / BMP / GIF / PDF / TXT / HTML / MD 互转</p>
+    </div>
+
+    <div class="converter-panel">
+        <div class="form-row">
+            <label>源格式：</label>
+            <select id="sourceType"><option value="">自动识别（推荐）</option></select>
+        </div>
+        <div class="form-row">
+            <label>目标格式：</label>
+            <select id="targetType"></select>
+        </div>
+        <div class="form-row file-row">
+            <label>选择文件：</label>
+            <input type="file" id="fileInput">
+        </div>
+        <div class="form-row" id="textRow" style="display:none;">
+            <label>文本输入：</label>
+            <textarea id="sourceText" rows="6" placeholder="粘贴 JSON / XML / CSV / YAML 内容..."></textarea>
+        </div>
+        <div class="action-row">
+            <button id="convertBtn" class="btn-primary">🚀 开始转换</button>
+            <button id="toggleTextBtn" class="btn-secondary">切换文本模式</button>
+            <button id="clearBtn" class="btn-secondary">🗑 清空</button>
+            <label class="async-opt">
+                <input type="checkbox" id="asyncMode"> 异步模式（大文件）
+            </label>
+        </div>
+    </div>
+
+    <div class="result-panel" id="resultPanel" style="display:none;">
+        <div class="result-header">
+            <span>✅ 转换结果</span>
+            <button id="closeResultBtn" class="btn-secondary">✖</button>
+        </div>
+        <div id="resultInfo" class="result-info"></div>
+        <div id="resultPreview" class="result-preview"></div>
+        <div class="action-row">
+            <button id="downloadBtn" class="btn-primary" style="display:none;">📥 下载文件</button>
+        </div>
+    </div>
+</div>
+<script src="converter.js"></script>
+</body>
+</html>

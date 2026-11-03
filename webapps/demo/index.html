@@ -62,6 +62,9 @@
         <button class="topbar-tab" data-tab="diagram">
             <span class="tab-icon">🎨</span> 画图
         </button>
+        <button class="topbar-tab" data-tab="converter">
+            <span class="tab-icon">🔄</span> 格式转换
+        </button>
     </nav>
     <div class="topbar-status" id="topbarStatus">
         <span class="status-dot"></span>
@@ -106,6 +109,9 @@
     <div class="tab-panel" id="panel-diagram">
         <iframe src="diagram/index.html" class="panel-iframe" title="SVG 画图"></iframe>
     </div>
+    <div class="tab-panel" id="panel-converter">
+        <iframe src="converter/index.html" class="panel-iframe" title="格式转换"></iframe>
+    </div>
 </main>
 
 <div class="toast-container" id="toastContainer"></div>
@@ -114,23 +120,31 @@
     (function() {
         const tabContainer = document.getElementById('topbarTabs');
         const tabButtons = tabContainer.querySelectorAll('.topbar-tab');
-        tabButtons.forEach(btn => {
+        tabButtons.forEach(function(btn) {
             btn.addEventListener('click', function() {
-                requestAnimationFrame(() => this.scrollIntoView({
-                    behavior: 'smooth', inline: 'center', block: 'nearest'
-                }));
+                requestAnimationFrame(function() {
+                    btn.scrollIntoView({
+                        behavior: 'smooth', inline: 'center', block: 'nearest'
+                    });
+                });
             });
         });
-        const observer = new MutationObserver(() => {
+        const observer = new MutationObserver(function() {
             const activeBtn = tabContainer.querySelector('.topbar-tab.active');
-            if (activeBtn) activeBtn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-        });
-        tabButtons.forEach(btn => observer.observe(btn, { attributes: true, attributeFilter: ['class'] }));
-        window.addEventListener('load', () => {
-            const activeBtn = tabContainer.querySelector('.topbar-tab.active');
-            if (activeBtn) setTimeout(() => activeBtn.scrollIntoView({
+            if (activeBtn) activeBtn.scrollIntoView({
                 behavior: 'smooth', inline: 'center', block: 'nearest'
-            }), 100);
+            });
+        });
+        tabButtons.forEach(function(btn) {
+            observer.observe(btn, { attributes: true, attributeFilter: ['class'] });
+        });
+        window.addEventListener('load', function() {
+            const activeBtn = tabContainer.querySelector('.topbar-tab.active');
+            if (activeBtn) setTimeout(function() {
+                activeBtn.scrollIntoView({
+                    behavior: 'smooth', inline: 'center', block: 'nearest'
+                });
+            }, 100);
         });
     })();
 </script>

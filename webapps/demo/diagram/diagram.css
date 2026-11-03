@@ -1,0 +1,140 @@
+/* SVG 画图工具样式 —— 浅色科技风 */
+* { box-sizing: border-box; }
+.dg-app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: #f5f7fb;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+.dg-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 16px;
+    background: #ffffff;
+    border-bottom: 1px solid rgba(0, 102, 255, 0.15);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+.dg-brand {
+    font-weight: 700;
+    color: #0066ff;
+    font-size: 15px;
+    white-space: nowrap;
+}
+.dg-tools, .dg-actions {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+.dg-tools { flex: 1; }
+.dg-tool, .dg-actions button {
+    padding: 6px 12px;
+    background: rgba(0, 102, 255, 0.06);
+    border: 1px solid rgba(0, 102, 255, 0.2);
+    border-radius: 8px;
+    font-size: 12px;
+    color: #0066ff;
+    cursor: pointer;
+    transition: 0.15s;
+    white-space: nowrap;
+    font-family: inherit;
+}
+.dg-tool:hover, .dg-actions button:hover {
+    background: rgba(0, 102, 255, 0.15);
+}
+.dg-tool.active {
+    background: #0066ff;
+    color: #fff;
+    border-color: #0066ff;
+}
+.dg-sep {
+    width: 1px;
+    background: rgba(0, 102, 255, 0.2);
+    margin: 0 4px;
+}
+.dg-body {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+}
+.dg-canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: #ffffff;
+    background-image:
+        linear-gradient(rgba(0, 102, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 102, 255, 0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+#dg-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    user-select: none;
+    touch-action: none;
+}
+.dg-inspector {
+    width: 240px;
+    flex-shrink: 0;
+    background: #ffffff;
+    border-left: 1px solid rgba(0, 102, 255, 0.15);
+    padding: 16px;
+    overflow-y: auto;
+    font-size: 13px;
+}
+.dg-inspector h3 {
+    color: #0066ff;
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+.dg-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.dg-field span {
+    width: 50px;
+    color: #64748b;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+.dg-field input {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid rgba(0, 102, 255, 0.25);
+    border-radius: 6px;
+    font-size: 12px;
+    background: #fff;
+    color: #1e293b;
+    outline: none;
+    font-family: inherit;
+}
+.dg-field input:focus {
+    border-color: #0066ff;
+    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.12);
+}
+.dg-field input[type="color"] {
+    padding: 0;
+    height: 26px;
+    cursor: pointer;
+}
+.dg-empty-tip {
+    color: #94a3b8;
+    text-align: center;
+    padding: 40px 10px;
+    font-size: 12px;
+}
+.dg-inspector .dg-debug {
+    margin-top: 24px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(0, 102, 255, 0.1);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.6;
+}

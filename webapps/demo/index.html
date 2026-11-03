@@ -32,7 +32,6 @@
         <button class="topbar-tab" data-tab="database">
             <span class="tab-icon">⚡</span> 数据库
         </button>
-        <!-- ★ 目录管理 → 资源管理 -->
         <button class="topbar-tab" data-tab="files">
             <span class="tab-icon">🎨</span> 资源管理
         </button>
@@ -42,7 +41,6 @@
         <button class="topbar-tab" data-tab="agent">
             <span class="tab-icon">🧠</span> Agent
         </button>
-        <!-- ★ 已移除：「开源工具」独立 tab，已迁移到 Agent 模块内 -->
         <button class="topbar-tab" data-tab="apiexplorer">
             <span class="tab-icon">🔌</span> API 调试
         </button>
@@ -61,6 +59,9 @@
         <button class="topbar-tab" data-tab="builder">
             <span class="tab-icon">🧱</span> 页面搭建
         </button>
+        <button class="topbar-tab" data-tab="diagram">
+            <span class="tab-icon">🎨</span> 画图
+        </button>
     </nav>
     <div class="topbar-status" id="topbarStatus">
         <span class="status-dot"></span>
@@ -76,17 +77,14 @@
         <iframe id="iframeDatabase" src="db/dbclient.html" title="数据库浏览器" class="panel-iframe"></iframe>
     </div>
     <div class="tab-panel" id="panel-files">
-        <!-- ★ title 改为资源管理 -->
         <iframe id="iframeFiles" src="files/files.html" title="资源管理" class="panel-iframe"></iframe>
     </div>
     <div class="tab-panel" id="panel-codestats">
         <iframe id="iframeCodeStats" src="code/codeStats.html" title="代码分析" class="panel-iframe"></iframe>
     </div>
     <div class="tab-panel" id="panel-agent">
-        <!-- ★ Agent 内部现在包含「开源工具」子视图，无需独立 iframe -->
         <iframe id="iframeAgent" src="agent/agent.html" title="AI Agent" class="panel-iframe"></iframe>
     </div>
-    <!-- ★ 已删除：panel-opensource（开源工具已迁移至 Agent 模块内） -->
     <div class="tab-panel" id="panel-apiexplorer">
         <iframe src="apiexplorer/index.html" class="panel-iframe" title="API调试"></iframe>
     </div>
@@ -104,6 +102,9 @@
     </div>
     <div class="tab-panel" id="panel-builder">
         <iframe src="builder/index.html" class="panel-iframe" title="可视化搭建"></iframe>
+    </div>
+    <div class="tab-panel" id="panel-diagram">
+        <iframe src="diagram/index.html" class="panel-iframe" title="SVG 画图"></iframe>
     </div>
 </main>
 

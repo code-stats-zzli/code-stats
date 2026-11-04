@@ -2,6 +2,7 @@ package com.omni.business.assistance.systemmonitor.component.impl;
 
 import com.omni.business.assistance.systemmonitor.component.AbstractSystemComponent;
 import com.omni.business.assistance.systemmonitor.model.MonitorItemInfo;
+import com.omni.business.assistance.systemmonitor.support.SystemMonitorLog;
 
 import java.lang.management.ManagementFactory;
 
@@ -40,7 +41,7 @@ public class MemoryComponent extends AbstractSystemComponent {
                 if (usage > 0.85) info.status("WARN");
             }
         } catch (Throwable t) {
-            log.warn("物理内存信息获取失败: {}", t.getMessage());
+            SystemMonitorLog.warn(log, "物理内存信息获取失败: {}", t.getMessage());
         }
         return info;
     }

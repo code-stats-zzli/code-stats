@@ -2,6 +2,7 @@ package com.omni.business.assistance.systemmonitor.component.impl;
 
 import com.omni.business.assistance.systemmonitor.component.AbstractSystemComponent;
 import com.omni.business.assistance.systemmonitor.model.MonitorItemInfo;
+import com.omni.business.assistance.systemmonitor.support.SystemMonitorLog;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -35,7 +36,7 @@ public class GpuComponent extends AbstractSystemComponent {
                 lines = exec("sh", "-c", "lspci 2>/dev/null | grep -i vga || system_profiler SPDisplaysDataType 2>/dev/null");
             }
         } catch (Exception e) {
-            log.warn("显卡信息获取失败: {}", e.getMessage());
+            SystemMonitorLog.warn(log, "显卡信息获取失败: {}", e.getMessage());
             return info;
         }
 

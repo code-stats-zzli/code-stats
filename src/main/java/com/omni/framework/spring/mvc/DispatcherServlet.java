@@ -1,4 +1,3 @@
-// 文件: src/main/java/com/omni/framework/spring/mvc/DispatcherServlet.java
 package com.omni.framework.spring.mvc;
 
 import com.omni.framework.log.LoggerFactory;
@@ -21,6 +20,7 @@ import com.omni.framework.spring.mvc.support.HandlerMethod;
 import com.omni.framework.tomcat.servlet.HttpServlet;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
+import com.omni.framework.tomcat.util.AccessLogFilter;
 import com.omni.framework.web.TraceContextHolder;
 
 import java.io.File;
@@ -85,7 +85,13 @@ public class DispatcherServlet extends HttpServlet {
         String uri = req.getUri();
         String query = req.getQueryString();
 
-        logRequest(req, method, uri, query);
+        // ★ 访问日志：对已知高频轮询接口默认静默
+        //   错误日志（500 / 异常）不经过此判断，始终打印
+        boolean accessLog = AccessLogFilter.shouldLog(uri);
+
+        if (accessLog) {
+            logRequest(req, method, uri, query);
+        }
 
         long threadId = Thread.currentThread().getId();
         TraceContextHolder.putContext(threadId, uri);
@@ -101,11 +107,13 @@ public class DispatcherServlet extends HttpServlet {
                 HandlerMethod handlerMethod = chain.getHandlerMethod();
                 Map<String, String> pathVars = chain.getPathVariables();
 
-                log.info("匹配处理器: {}.{}",
-                        handlerMethod.getController().getClass().getSimpleName(),
-                        handlerMethod.getMethod().getName());
-                if (!pathVars.isEmpty()) {
-                    log.info(" 路径参数: {}", pathVars);
+                if (accessLog) {
+                    log.info("匹配处理器: {}.{}",
+                            handlerMethod.getController().getClass().getSimpleName(),
+                            handlerMethod.getMethod().getName());
+                    if (!pathVars.isEmpty()) {
+                        log.info(" 路径参数: {}", pathVars);
+                    }
                 }
 
                 handlerMethodInvoker.invoke(handlerMethod, req, res, pathVars);
@@ -114,26 +122,34 @@ public class DispatcherServlet extends HttpServlet {
                     res.send();
                 }
 
-                log.info(" 请求处理完成: {} {} 耗时: {}ms",
-                        method, uri, System.currentTimeMillis() - startTime);
+                if (accessLog) {
+                    log.info(" 请求处理完成: {} {} 耗时: {}ms",
+                            method, uri, System.currentTimeMillis() - startTime);
+                }
                 return;
             }
 
             if (serveStaticFile(uri, res)) {
-                log.info(" 静态文件响应: {} 耗时: {}ms", uri, System.currentTimeMillis() - startTime);
+                if (accessLog) {
+                    log.info(" 静态文件响应: {} 耗时: {}ms",
+                            uri, System.currentTimeMillis() - startTime);
+                }
                 return;
             }
 
             // ★ 核心新增：如果 uri 是根路径或空目录访问，自动重定向到主页面
             if (tryRedirectToHomePage(req, res)) {
-                log.info(" 重定向到主页面: {} → {} 耗时: {}ms",
-                        method, uri, System.currentTimeMillis() - startTime);
+                if (accessLog) {
+                    log.info(" 重定向到主页面: {} → {} 耗时: {}ms",
+                            method, uri, System.currentTimeMillis() - startTime);
+                }
                 return;
             }
 
             res.setStatus(404, "Not Found");
             res.write("<h1>404 - Not Found</h1>");
             res.send();
+            // 404 属于「非预期」访问，保留 warn 便于排查，不受 accessLog 控制
             log.warn("⚠️ 404 Not Found: {} {} 耗时: {}ms",
                     method, uri, System.currentTimeMillis() - startTime);
 
@@ -144,12 +160,14 @@ public class DispatcherServlet extends HttpServlet {
                 if (msg != null && (msg.contains("软件中止")
                         || msg.contains("Connection reset")
                         || msg.contains("Broken pipe"))) {
+                    // 客户端断开连接属于正常现象，降级为 debug 避免刷屏
                     log.debug("客户端已断开连接，请求详情: {} {}?{}",
                             method, uri, query != null ? query : "");
                     return;
                 }
             }
 
+            // 错误日志始终打印
             log.error(" 处理请求失败: {} {} 耗时: {}ms",
                     method, uri, System.currentTimeMillis() - startTime, e);
 
@@ -243,13 +261,10 @@ public class DispatcherServlet extends HttpServlet {
 
         String finalUrl;
         if (redirectUrl.startsWith("http://") || redirectUrl.startsWith("https://")) {
-            // 完整 URL：原样使用
             finalUrl = redirectUrl;
         } else if (!contextPath.isEmpty() && redirectUrl.startsWith(contextPath + "/")) {
-            // 已带 contextPath：原样使用
             finalUrl = redirectUrl;
         } else {
-            // 相对路径：补 contextPath
             finalUrl = contextPath + (redirectUrl.startsWith("/") ? redirectUrl : "/" + redirectUrl);
         }
 

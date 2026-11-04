@@ -2,6 +2,7 @@ package com.omni.business.assistance.systemmonitor.component.impl;
 
 import com.omni.business.assistance.systemmonitor.component.AbstractSystemComponent;
 import com.omni.business.assistance.systemmonitor.model.MonitorItemInfo;
+import com.omni.business.assistance.systemmonitor.support.SystemMonitorLog;
 
 import java.nio.file.FileStore;
 import java.nio.file.FileSystems;
@@ -37,7 +38,7 @@ public class FileSystemComponent extends AbstractSystemComponent {
                 stores.add(m);
             }
         } catch (Exception e) {
-            log.warn("文件系统采集失败", e);
+            SystemMonitorLog.warn(log, "文件系统采集失败", e);
         }
         info.putCore("fileSeparator", java.io.File.separator);
         info.putCore("pathSeparator", java.io.File.pathSeparator);

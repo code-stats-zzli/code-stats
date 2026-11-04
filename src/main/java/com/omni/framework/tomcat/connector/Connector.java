@@ -5,6 +5,7 @@ import com.omni.framework.tomcat.container.Service;
 import com.omni.framework.tomcat.core.Lifecycle;
 import com.omni.framework.tomcat.core.LifecycleListener;
 import com.omni.framework.tomcat.core.LifecycleState;
+import com.omni.framework.tomcat.util.AccessLogFilter;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 
@@ -31,7 +32,7 @@ public class Connector implements Lifecycle {
 
     @Override
     public void init() {
-        // ★ 工作线程池全部守护线程（JVM 退出时不阻塞）
+        // 工作线程池全部守护线程（JVM 退出时不阻塞）
         threadPool = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "tomcat-connector-worker");
             t.setDaemon(true);
@@ -42,7 +43,6 @@ public class Connector implements Lifecycle {
     @Override
     public void start() {
         running = true;
-        // ★ 监听线程也守护（避免残留线程导致 JVM 等它退出）
         listenerThread = new Thread(() -> {
             try {
                 serverSocket = new ServerSocket(port);
@@ -69,13 +69,21 @@ public class Connector implements Lifecycle {
 
     private void process(Socket socket) {
         long startTime = System.currentTimeMillis();
-        log.debug("TCP 连接建立: remote={}, local={}",
-                socket.getRemoteSocketAddress(), socket.getLocalSocketAddress());
         try (java.io.InputStream in = socket.getInputStream();
              java.io.OutputStream out = socket.getOutputStream()) {
             Request request = new Request(in);
             request.setSocket(socket);
             request.parse();
+
+            String uri = request.getUri();
+            // ★ 访问日志：对已知高频轮询接口默认静默
+            //   错误日志（异常 / 500）不经过此判断，始终打印
+            boolean accessLog = AccessLogFilter.shouldLog(uri);
+
+            if (accessLog) {
+                log.debug("TCP 连接建立: remote={}, local={}",
+                        socket.getRemoteSocketAddress(), socket.getLocalSocketAddress());
+            }
 
             Response response = new Response(out);
             Engine engine = service.getEngine();
@@ -86,11 +94,15 @@ public class Connector implements Lifecycle {
                 response.write("<h1>No Engine</h1>");
                 response.send();
             }
-            log.debug("TCP 连接处理完成: remote={}, method={}, uri={}, 耗时={}ms",
-                    socket.getRemoteSocketAddress(),
-                    request.getMethod(), request.getUri(),
-                    System.currentTimeMillis() - startTime);
+
+            if (accessLog) {
+                log.debug("TCP 连接处理完成: remote={}, method={}, uri={}, 耗时={}ms",
+                        socket.getRemoteSocketAddress(),
+                        request.getMethod(), uri,
+                        System.currentTimeMillis() - startTime);
+            }
         } catch (Exception e) {
+            // 错误日志始终打印，不受 accessLog 控制
             log.error("Request processing failed, remote={}", socket.getRemoteSocketAddress(), e);
         } finally {
             try { socket.close(); } catch (IOException e) { log.warn("Close socket error", e); }

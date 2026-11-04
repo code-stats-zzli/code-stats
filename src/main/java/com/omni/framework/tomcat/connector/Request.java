@@ -6,6 +6,7 @@ import com.omni.framework.spring.mvc.MultipartResolver;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.session.HttpSession;
 import com.omni.framework.tomcat.session.SessionManager;
+import com.omni.framework.tomcat.util.AccessLogFilter;
 
 import java.io.*;
 import java.net.URLDecoder;
@@ -26,7 +27,7 @@ public class Request implements HttpServletRequest {
     private String pathInfo = null;
     private String queryString;
     private String body;
-    /** ★ 新增：multipart 请求的原始 body 字节，避免 input 被预读后丢失 */
+    /** multipart 请求的原始 body 字节，避免 input 被预读后丢失 */
     private byte[] rawBody;
 
     private Map<String, String> parameters = new HashMap<>();
@@ -52,7 +53,6 @@ public class Request implements HttpServletRequest {
     private boolean isMultipart = false;
 
     public Request(InputStream input) {
-        // 容量 8KB，避免默认 buffer 太小
         this.input = (input instanceof BufferedInputStream)
                 ? (BufferedInputStream) input
                 : new BufferedInputStream(input, 8192);
@@ -76,8 +76,8 @@ public class Request implements HttpServletRequest {
     }
 
     /**
-     * ★ 核心修复：逐字节读取请求头，直到 \r\n\r\n，
-     *   绝不使用 BufferedReader 预读（否则会吞掉 multipart body）。
+     * 核心修复：逐字节读取请求头，直到 \r\n\r\n，
+     * 绝不使用 BufferedReader 预读（否则会吞掉 multipart body）。
      */
     public void parse() throws Exception {
         // ==================== 1) 读请求头（直到 \r\n\r\n） ====================
@@ -160,7 +160,7 @@ public class Request implements HttpServletRequest {
 
         // ==================== 4) 读取 body（按 content-length 精确读，不多不少） ====================
         if (isMultipart) {
-            // ★ multipart：原始字节保存，交给 MultipartResolver 解析
+            // multipart：原始字节保存，交给 MultipartResolver 解析
             rawBody = (contentLength > 0) ? input.readNBytes(contentLength) : new byte[0];
             body = null;
         } else {
@@ -179,11 +179,15 @@ public class Request implements HttpServletRequest {
 
         parseCookies();
 
-        log.debug("请求解析完成: method={}, uri={}, contextPath={}, queryString={}, " +
-                        "headersCount={}, contentType={}, contentLength={}, isMultipart={}, bodyLength={}",
-                method, uri, contextPath, queryString,
-                headers.size(), contentType, contentLength, isMultipart,
-                body != null ? body.length() : (rawBody != null ? rawBody.length : 0));
+        // ★ 访问日志：对已知高频轮询接口默认静默
+        //   错误日志（异常 / 500）不经过此判断，始终打印
+        if (AccessLogFilter.shouldLog(uri)) {
+            log.debug("请求解析完成: method={}, uri={}, contextPath={}, queryString={}, " +
+                            "headersCount={}, contentType={}, contentLength={}, isMultipart={}, bodyLength={}",
+                    method, uri, contextPath, queryString,
+                    headers.size(), contentType, contentLength, isMultipart,
+                    body != null ? body.length() : (rawBody != null ? rawBody.length : 0));
+        }
     }
 
     private void parseQueryString(String query, Map<String, String> target) {
@@ -236,8 +240,8 @@ public class Request implements HttpServletRequest {
     @Override public InputStream getInputStream() { return input; }
 
     /**
-     * ★ 关键修复：用 rawBody 构造 MultipartResolver，
-     *   不依赖 input 流（避免被 BufferedReader 提前消费）
+     * 关键修复：用 rawBody 构造 MultipartResolver，
+     * 不依赖 input 流（避免被 BufferedReader 提前消费）
      */
     @Override
     public MultipartResolver getMultipartResolver() {

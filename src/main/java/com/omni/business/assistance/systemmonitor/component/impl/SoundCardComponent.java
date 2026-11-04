@@ -2,6 +2,7 @@ package com.omni.business.assistance.systemmonitor.component.impl;
 
 import com.omni.business.assistance.systemmonitor.component.AbstractSystemComponent;
 import com.omni.business.assistance.systemmonitor.model.MonitorItemInfo;
+import com.omni.business.assistance.systemmonitor.support.SystemMonitorLog;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -32,7 +33,7 @@ public class SoundCardComponent extends AbstractSystemComponent {
                         "aplay -l 2>/dev/null || system_profiler SPAudioDataType 2>/dev/null");
             }
         } catch (Exception e) {
-            log.warn("声卡信息获取失败: {}", e.getMessage());
+            SystemMonitorLog.warn(log, "声卡信息获取失败: {}", e.getMessage());
         }
 
         List<String> names = new ArrayList<>();

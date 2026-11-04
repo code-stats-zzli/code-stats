@@ -3,6 +3,7 @@ package com.omni.business.assistance.systemmonitor.engine;
 import com.omni.business.assistance.systemmonitor.component.SystemComponent;
 import com.omni.business.assistance.systemmonitor.component.impl.*;
 import com.omni.business.assistance.systemmonitor.model.MonitorItemInfo;
+import com.omni.business.assistance.systemmonitor.support.SystemMonitorLog;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Service;
@@ -16,6 +17,9 @@ import java.util.stream.Collectors;
  *  - 持有所有注册的 SystemComponent
  *  - 对外提供统一的信息获取入口
  *  - 支持运行时动态注册/注销组件
+ *
+ * <p>日志说明：所有本类日志均通过 {@link SystemMonitorLog} 门面输出，
+ * 默认关闭（systemmonitor.log.enabled=false），避免前端 2 秒轮询刷屏。</p>
  */
 @Service
 public class SystemMonitorEngine {
@@ -44,6 +48,7 @@ public class SystemMonitorEngine {
         defaultComponents.add(new ThreadComponent());
         registerAll(defaultComponents);
     }
+
     /**
      * 注册组件
      */
@@ -51,7 +56,8 @@ public class SystemMonitorEngine {
         if (component == null || component.getId() == null) return;
         components.put(component.getId(), component);
         refreshIntervals.put(component.getId(), component.getRefreshInterval());
-        log.info("注册系统监控组件: {} [{}]", component.getId(), component.getName());
+        SystemMonitorLog.info(log, "注册系统监控组件: {} [{}]",
+                component.getId(), component.getName());
     }
 
     /**
@@ -68,7 +74,7 @@ public class SystemMonitorEngine {
         components.remove(id);
         refreshIntervals.remove(id);
         cache.remove(id);
-        log.info("注销系统监控组件: {}", id);
+        SystemMonitorLog.info(log, "注销系统监控组件: {}", id);
     }
 
     // ==================== 获取信息 ====================
@@ -105,7 +111,8 @@ public class SystemMonitorEngine {
             cache.put(id, info);
             return info;
         } catch (Exception e) {
-            log.error("获取组件 [{}] 信息失败", id, e);
+            // 默认关闭时这里不打印；开启后 level>=error 才打印
+            SystemMonitorLog.error(log, "获取组件 [" + id + "] 信息失败", e);
             MonitorItemInfo err = new MonitorItemInfo(id, c.getName(), c.getCategory());
             err.status("ERROR");
             err.desc("采集失败: " + e.getMessage());

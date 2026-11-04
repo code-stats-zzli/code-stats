@@ -2,6 +2,7 @@ package com.omni.business.assistance.systemmonitor.component.impl;
 
 import com.omni.business.assistance.systemmonitor.component.AbstractSystemComponent;
 import com.omni.business.assistance.systemmonitor.model.MonitorItemInfo;
+import com.omni.business.assistance.systemmonitor.support.SystemMonitorLog;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
@@ -47,7 +48,8 @@ public class CpuComponent extends AbstractSystemComponent {
                 }
             }
         } catch (Throwable t) {
-            log.warn("CPU 运行时信息获取失败: {}", t.getMessage());
+            // 默认关闭时静默；开启后 level>=warn 才打印
+            SystemMonitorLog.warn(log, "CPU 运行时信息获取失败: {}", t.getMessage());
         }
         return info;
     }

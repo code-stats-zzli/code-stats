@@ -29,6 +29,9 @@
         <button class="topbar-tab active" data-tab="intro">
             <span class="tab-icon">🚀</span> 项目介绍
         </button>
+        <button class="topbar-tab" data-tab="sys">
+            <span class="tab-icon">🖥️</span> 系统管理
+        </button>
         <button class="topbar-tab" data-tab="database">
             <span class="tab-icon">⚡</span> 数据库
         </button>
@@ -65,9 +68,6 @@
         <button class="topbar-tab" data-tab="converter">
             <span class="tab-icon">🔄</span> 格式转换
         </button>
-        <button class="topbar-tab" data-tab="sys">
-            <span class="tab-icon">🖥️</span> 系统管理
-        </button>
     </nav>
     <div class="topbar-status" id="topbarStatus">
         <span class="status-dot"></span>
@@ -78,6 +78,9 @@
 <main class="main-content" id="mainContent">
     <div class="tab-panel active" id="panel-intro">
         <iframe src="docs/project.html" class="panel-iframe" title="项目介绍"></iframe>
+    </div>
+    <div class="tab-panel" id="panel-sys">
+        <iframe src="sys/sys.html" class="panel-iframe" title="系统管理"></iframe>
     </div>
     <div class="tab-panel" id="panel-database">
         <iframe id="iframeDatabase" src="db/dbclient.html" title="数据库浏览器" class="panel-iframe"></iframe>
@@ -114,9 +117,6 @@
     </div>
     <div class="tab-panel" id="panel-converter">
         <iframe src="converter/index.html" class="panel-iframe" title="格式转换"></iframe>
-    </div>
-    <div class="tab-panel" id="panel-sys">
-        <iframe src="sys/sys.html" class="panel-iframe" title="系统管理"></iframe>
     </div>
 </main>
 

@@ -178,56 +178,37 @@
         return 0;
     }
 
-    // ==================== ★ 点击驱动：联动右侧连接配置 ====================
+    // ==================== 点击驱动：联动右侧连接配置 ====================
     function selectDriver(key) {
         selectedDriverKey = key;
         renderDriverList();
         renderDriverEditor();
-        // ★ 新增：把驱动信息同步到右侧连接配置表单
         const d = allDrivers.find(x => x.key === key);
         if (d) applyDriverToConnection(d);
     }
 
-    /**
-     * 将选中的驱动信息（类型 / 版本 / 驱动类）填充到右侧连接表单，
-     * 并加载对应类型的版本下拉与驱动类下拉数据。
-     */
     async function applyDriverToConnection(d) {
         if (!d) return;
-
-        // 1) 同步设置数据库类型（立即响应）
         if (d.dbType) connDbType.value = d.dbType;
-
-        // 2) 异步加载该类型的版本列表 + 版本→驱动类映射（先重置旧数据）
         try {
             await loadComboboxOptions(d.dbType, true);
         } catch (e) {
             console.warn('[selectDriver] 加载版本下拉失败:', e);
         }
-
-        // 3) 设置驱动版本（优先用驱动条目自身记录的版本）
         if (d.version) connVersion.value = d.version;
-
-        // 4) 设置驱动类（优先级：驱动条目字段 > 版本映射表 > 按类型推断）
         let cls = d.driverClass;
         if (!cls) {
             cls = currentVersionDriverMap[d.version]
                 || inferDriverClassFallback(d.dbType, d.version);
         }
         if (cls) connDriverClass.value = cls;
-
-        // 5) 高亮引导步骤
         highlightStep(2);
-
-        // 6) 视觉反馈：短暂闪烁，提示用户已联动
         [connVersion, connDriverClass].forEach(el => {
             if (!el) return;
             el.style.transition = 'background-color 0.4s';
             el.style.backgroundColor = '#fef3c7';
             setTimeout(() => { el.style.backgroundColor = ''; }, 600);
         });
-
-        // 7) 右上角轻提示
         showMsg(statusMsg, `已应用驱动：${DB_TYPE_LABELS[d.dbType] || d.dbType} ${d.version}`, 'ok');
         setTimeout(() => hideMsg(statusMsg), 2000);
     }
@@ -331,7 +312,6 @@
                 selectedDriverKey = data.key || d.key;
                 renderDriverList();
                 renderDriverEditor();
-                // ★ 编辑保存后如果正在被用于右侧连接配置，也刷新一下
                 if (selectedDriverKey) {
                     const updated = allDrivers.find(x => x.key === selectedDriverKey);
                     if (updated) applyDriverToConnection(updated);
@@ -701,243 +681,293 @@
         if (t === 'oracle') return 'oracle.jdbc.OracleDriver';
         if (t === 'postgresql' || t === 'pg') return 'org.postgresql.Driver';
         if (t === 'sqlserver') return 'com.microsoft.sqlserver.jdbc.SQLServerDriver';
-        return connDriverClass.value || '';
+        return '';
     }
 
-    async function loadComboboxOptions(dbType, forceReset) {
+    async function loadComboboxOptions(dbType, silent) {
+        const type = (dbType || '').trim();
         currentVersions = [];
         currentDriverClasses = [];
         currentVersionDriverMap = {};
-        if (!dbType) {
-            if (forceReset) {
-                connVersion.value = '';
-                connDriverClass.value = '';
-            }
+
+        if (!type) {
+            connVersion.value = '';
+            connDriverClass.value = '';
             return;
         }
+
         try {
-            const resp = await fetch(DRIVER_API + '/combobox?dbType=' + encodeURIComponent(dbType));
+            const resp = await fetch(DRIVER_API + '/combobox?dbType=' + encodeURIComponent(type));
             const data = await resp.json();
-            if (!data.success) return;
+            if (!data.success) {
+                throw new Error(data.error || '加载驱动下拉失败');
+            }
+
             currentVersions = data.versions || [];
             currentDriverClasses = data.driverClasses || [];
             currentVersionDriverMap = data.versionDriverMap || {};
-            if (currentVersions.length > 0 && (forceReset || !connVersion.value)) {
+
+            if (!connVersion.value && currentVersions.length > 0) {
                 connVersion.value = currentVersions[0];
-                const cls = currentVersionDriverMap[currentVersions[0]];
-                if (cls) connDriverClass.value = cls;
-            } else if (connVersion.value) {
-                syncDriverClassFromVersion();
+            }
+            if (!connDriverClass.value && currentVersions.length > 0) {
+                connDriverClass.value = currentVersionDriverMap[connVersion.value]
+                    || inferDriverClassFallback(type, connVersion.value);
             }
         } catch (e) {
-            console.warn('加载 combobox 失败:', e);
+            if (!silent) {
+                showMsg(statusMsg, '加载驱动下拉失败：' + e.message, 'bad');
+            }
         }
     }
 
-    connDbType.addEventListener('change', () => {
-        loadComboboxOptions(connDbType.value, true);
-        highlightStep(2);
-    });
-    loadComboboxOptions(connDbType.value, false);
-
-    // ---- 解析 / 测试 / 执行 / 关闭 / 保存 ----
     async function doParse() {
         const url = connUrl.value.trim();
-        if (!url) { showMsg(statusMsg, '请先输入连接串', 'bad'); return; }
-        hideMsg(statusMsg);
+        if (!url) {
+            showMsg(statusMsg, '请填写连接串', 'bad');
+            return;
+        }
+
         try {
             const resp = await fetch(API + '/parse', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url })
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: url })
             });
             const data = await resp.json();
-            const parsed = data.data || {};
-            currentParsed = parsed;
+
             parseResult.style.display = 'block';
-            if (!data.success) {
-                parseResult.innerHTML = `<div class="bad">❌ 解析失败：${esc(data.error || parsed.message || '')}</div>`;
-                return;
-            }
-            parseResult.innerHTML = `
-                <div class="ok">✅ 解析成功</div>
-                <div class="kv"><b>数据库类型</b><span>${esc(parsed.dbType || '-')}</span></div>
-                <div class="kv"><b>主机</b><span>${esc(parsed.host || '-')}</span></div>
-                <div class="kv"><b>端口</b><span>${esc(parsed.port || '-')}</span></div>
-                <div class="kv"><b>数据库名</b><span>${esc(parsed.databaseName || '-')}</span></div>
-            `;
-            if (parsed.dbType && !connDbType.value) {
-                connDbType.value = parsed.dbType;
-                loadComboboxOptions(connDbType.value, true);
+
+            if (data.success && data.data) {
+                currentParsed = data.data;
+                const d = data.data;
+
+                parseResult.innerHTML = `
+                    <div class="ok">✅ 解析成功</div>
+                    <div class="kv"><b>类型</b><span>${esc(d.dbType || '-')}</span></div>
+                    <div class="kv"><b>主机</b><span>${esc(d.host || '-')}</span></div>
+                    <div class="kv"><b>端口</b><span>${esc(d.port != null ? d.port : '-')}</span></div>
+                    <div class="kv"><b>数据库</b><span>${esc(d.databaseName || '-')}</span></div>
+                `;
+
+                if (d.dbType && !connDbType.value) {
+                    connDbType.value = d.dbType;
+                }
+                if (d.dbType) {
+                    loadComboboxOptions(d.dbType, true);
+                }
+            } else {
+                currentParsed = null;
+                const msg = data.error
+                    || (data.data && data.data.message)
+                    || '解析失败';
+                parseResult.innerHTML = `<div class="bad">❌ ${esc(msg)}</div>`;
             }
         } catch (e) {
-            showMsg(statusMsg, '解析异常：' + e.message, 'bad');
+            showMsg(statusMsg, '解析失败：' + e.message, 'bad');
         }
     }
 
-    async function doTest() {
+    async function testConnection() {
         const url = connUrl.value.trim();
-        if (!url) { showMsg(statusMsg, '请先输入连接串', 'bad'); return; }
+        if (!url) {
+            showMsg(statusMsg, '请填写连接串', 'bad');
+            return;
+        }
+
         testBtn.disabled = true;
         testBtn.textContent = '⏳ 连接中...';
-        hideMsg(statusMsg);
+
         try {
-            const payload = {
-                url,
-                username: connUsername.value.trim(),
-                password: connPassword.value,
-                dbType: connDbType.value || null,
-                driverClass: connDriverClass.value.trim() || null,
-                version: connVersion.value.trim() || null
-            };
             const resp = await fetch(API + '/test', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url: url,
+                    username: connUsername.value.trim(),
+                    password: connPassword.value,
+                    dbType: connDbType.value,
+                    driverClass: connDriverClass.value.trim(),
+                    version: connVersion.value.trim()
+                })
             });
             const data = await resp.json();
-            if (!data.success) {
-                showMsg(statusMsg, '❌ ' + (data.error || '连接失败'), 'bad');
+
+            if (data.success) {
+                currentTempId = data.tempId;
+                setConnected(true);
+                sqlSection.style.display = 'block';
+                saveSection.style.display = 'block';
+                showMsg(statusMsg, data.message || '连接成功', 'ok');
+                highlightStep(5);
+            } else {
                 setConnected(false);
-                return;
+                showMsg(statusMsg, data.error || '连接失败', 'bad');
             }
-            currentTempId = data.tempId;
-            setConnected(true);
-            sqlSection.style.display = 'block';
-            saveSection.style.display = 'block';
-            showMsg(statusMsg, `✅ 连接成功！类型：${data.dbType}，临时 ID：${data.tempId}`, 'ok');
         } catch (e) {
-            showMsg(statusMsg, '连接异常：' + e.message, 'bad');
             setConnected(false);
+            showMsg(statusMsg, '连接失败：' + e.message, 'bad');
         } finally {
             testBtn.disabled = false;
             testBtn.textContent = '🔌 测试连接';
         }
     }
 
-    async function doExecSql() {
-        if (!currentTempId) { showMsg(statusMsg, '请先建立连接', 'bad'); return; }
+    async function closeConnection() {
+        if (!currentTempId) return;
+
+        const id = currentTempId;
+        try {
+            await fetch(API + '/close', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tempId: id })
+            });
+        } catch (e) {
+            console.warn('关闭临时连接失败', e);
+        }
+
+        setConnected(false);
+        showMsg(statusMsg, '连接已关闭', 'ok');
+        setTimeout(function () {
+            hideMsg(statusMsg);
+        }, 1500);
+    }
+
+    function renderSqlResult(data) {
+        const cols = data.columns || [];
+        const rows = data.rows || [];
+
+        if (!cols.length) {
+            sqlResult.innerHTML = '<div class="empty-tip">查询完成，无结果列</div>';
+            return;
+        }
+
+        let html = `<div class="sql-meta">共 ${data.total != null ? data.total : rows.length} 行 · 耗时 ${data.durationMs || 0} ms</div>`;
+        html += '<div style="max-height:360px;overflow:auto;border-radius:12px;">';
+        html += '<table class="sql-result-table"><thead><tr>';
+        cols.forEach(function (c) {
+            html += `<th>${esc(c)}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        rows.forEach(function (row) {
+            html += '<tr>';
+            cols.forEach(function (c) {
+                let v = row[c];
+                if (v == null) v = '';
+                const text = String(v);
+                html += `<td title="${esc(text)}">${esc(text)}</td>`;
+            });
+            html += '</tr>';
+        });
+
+        html += '</tbody></table></div>';
+        sqlResult.innerHTML = html;
+    }
+
+    async function executeSql() {
         const sql = sqlInput.value.trim();
-        if (!sql) { showMsg(statusMsg, '请输入 SQL 语句', 'bad'); return; }
+        if (!currentTempId) {
+            showMsg(statusMsg, '请先测试连接', 'bad');
+            return;
+        }
+        if (!sql) {
+            showMsg(statusMsg, 'SQL 不能为空', 'bad');
+            return;
+        }
+
         execSqlBtn.disabled = true;
         execSqlBtn.textContent = '⏳ 执行中...';
         sqlResult.innerHTML = '<div class="loading">执行中...</div>';
+
         try {
             const resp = await fetch(API + '/execute', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tempId: currentTempId, sql })
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tempId: currentTempId,
+                    sql: sql
+                })
             });
             const data = await resp.json();
+
             if (!data.success) {
-                sqlResult.innerHTML = `<div class="msg bad">❌ ${esc(data.error || '执行失败')}</div>`;
+                sqlResult.innerHTML = `<div class="bad">❌ ${esc(data.error || '执行失败')}</div>`;
                 return;
             }
-            const cols = data.columns || [];
-            const rows = data.rows || [];
-            if (!cols.length) {
-                sqlResult.innerHTML = `<div class="msg ok">✅ 执行成功，返回 ${rows.length} 行</div>`;
-                return;
-            }
-            let html = `<div class="sql-meta">共 ${data.total || rows.length} 行 · 耗时 ${data.durationMs || 0} ms</div>`;
-            html += '<div style="max-height:420px;overflow:auto;border-radius:12px;">';
-            html += '<table class="sql-result-table"><thead><tr>';
-            html += cols.map(c => `<th>${esc(c)}</th>`).join('');
-            html += '</tr></thead><tbody>';
-            for (const row of rows) {
-                html += '<tr>';
-                for (const c of cols) {
-                    const v = row[c];
-                    const display = v == null ? '' : String(v);
-                    html += `<td title="${esc(display)}">${esc(display)}</td>`;
-                }
-                html += '</tr>';
-            }
-            html += '</tbody></table></div>';
-            sqlResult.innerHTML = html;
+            renderSqlResult(data);
         } catch (e) {
-            sqlResult.innerHTML = `<div class="msg bad">❌ 请求异常：${esc(e.message)}</div>`;
+            sqlResult.innerHTML = `<div class="bad">❌ ${esc(e.message)}</div>`;
         } finally {
             execSqlBtn.disabled = false;
             execSqlBtn.textContent = '▶️ 执行 SQL';
         }
     }
 
-    async function doClose() {
-        if (!currentTempId) return;
-        if (!confirm('确定关闭当前临时连接吗？')) return;
-        try {
-            await fetch(API + '/close', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tempId: currentTempId })
-            });
-        } catch (e) { /* ignore */ }
-        setConnected(false);
-        showMsg(statusMsg, '已关闭连接', 'ok');
-    }
+    async function saveDataSource() {
+        if (!currentTempId) {
+            showMsg(statusMsg, '请先测试连接', 'bad');
+            return;
+        }
 
-    async function doSaveDs() {
-        if (!currentTempId) { showMsg(statusMsg, '请先建立连接', 'bad'); return; }
+        const name = dsName.value.trim();
         saveDsBtn.disabled = true;
         saveDsBtn.textContent = '⏳ 保存中...';
+
         try {
             const resp = await fetch(API + '/save', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tempId: currentTempId, name: dsName.value.trim() || null })
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tempId: currentTempId,
+                    name: name
+                })
             });
             const data = await resp.json();
-            if (!data.success) {
-                showMsg(statusMsg, '❌ 保存失败：' + (data.error || '未知错误'), 'bad');
-                return;
+
+            if (data.success) {
+                showMsg(statusMsg, '已保存为数据源' + (data.id ? '，ID=' + data.id : ''), 'ok');
+                highlightStep(6);
+            } else {
+                showMsg(statusMsg, data.error || '保存失败', 'bad');
             }
-            showMsg(statusMsg, `✅ 已保存为正式数据源（ID: ${data.id}）`, 'ok');
-            highlightStep(6);
         } catch (e) {
-            showMsg(statusMsg, '保存异常：' + e.message, 'bad');
+            showMsg(statusMsg, '保存失败：' + e.message, 'bad');
         } finally {
             saveDsBtn.disabled = false;
             saveDsBtn.textContent = '💾 保存';
         }
     }
 
+    // ==================== 事件绑定 ====================
+
     parseBtn.addEventListener('click', doParse);
-    testBtn.addEventListener('click', doTest);
-    closeBtn.addEventListener('click', doClose);
-    execSqlBtn.addEventListener('click', doExecSql);
-    saveDsBtn.addEventListener('click', doSaveDs);
-    clearSqlBtn.addEventListener('click', () => {
+    testBtn.addEventListener('click', testConnection);
+    closeBtn.addEventListener('click', closeConnection);
+    execSqlBtn.addEventListener('click', executeSql);
+
+    clearSqlBtn.addEventListener('click', function () {
         sqlInput.value = '';
         sqlResult.innerHTML = '';
     });
 
-    let parseTimer = null;
-    connUrl.addEventListener('input', () => {
-        if (parseTimer) clearTimeout(parseTimer);
-        parseTimer = setTimeout(() => {
-            if (connUrl.value.trim()) doParse();
-        }, 400);
+    saveDsBtn.addEventListener('click', saveDataSource);
+
+    connDbType.addEventListener('change', async function () {
+        connVersion.value = '';
+        connDriverClass.value = '';
+        await loadComboboxOptions(connDbType.value, false);
     });
 
-    window.addEventListener('beforeunload', () => {
-        if (currentTempId) {
-            try {
-                navigator.sendBeacon(
-                    API + '/close',
-                    JSON.stringify({ tempId: currentTempId })
-                );
-            } catch (e) {}
-        }
-    });
+    // ==================== 初始化 ====================
 
-    // ==================== 启动 ====================
-    highlightStep(1);
-    loadDrivers();
+    setConnected(false);
     loadSamples();
 
-    // URL 参数：?url=xxx&username=yyy 自动填充
-    const urlParams = new URLSearchParams(window.location.search);
-    const presetUrl = urlParams.get('url');
-    if (presetUrl) {
-        connUrl.value = decodeURIComponent(presetUrl);
-        const presetUser = urlParams.get('username');
-        if (presetUser) connUsername.value = decodeURIComponent(presetUser);
-        setTimeout(() => doParse(), 200);
+    // 如果默认有数据库类型，加载下拉
+    if (connDbType.value) {
+        loadComboboxOptions(connDbType.value, true);
     }
+
 })();

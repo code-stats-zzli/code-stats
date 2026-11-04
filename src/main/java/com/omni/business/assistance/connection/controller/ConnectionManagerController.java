@@ -4,6 +4,7 @@ import com.omni.business.assistance.connection.service.ConnectionStringParser;
 import com.omni.business.assistance.connection.service.TempConnectionManager;
 import com.omni.business.datasource.service.DataSourceConfigService;
 import com.omni.common.datasource.model.DataSourceConfig;
+import com.omni.common.util.DriverLoadException;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Autowired;
@@ -82,6 +83,12 @@ public class ConnectionManagerController {
         return JsonUtil.toJson(r);
     }
 
+    /**
+     * 测试连接。
+     *
+     * <p>驱动加载失败时返回结构化 error（{@code errorType=driver_load}），
+     * 前端根据 {@code details} 渲染诊断弹窗：来源、JAR 位置、期望类、候选类、修复建议。</p>
+     */
     @RequestMapping("/test")
     @ResponseBody
     public String test(@RequestBody Map<String, Object> req) {
@@ -103,6 +110,10 @@ public class ConnectionManagerController {
             r.put("url", tc.url);
             r.put("message", "连接成功，可执行 SQL 或保存为正式数据源");
             return JsonUtil.toJson(r);
+        } catch (DriverLoadException e) {
+            log.error("测试连接失败(驱动加载): url={}, stage={}, expected={}",
+                    maskUrl(url), e.getStage(), e.getExpectedClass(), e);
+            return driverError(e);
         } catch (Exception e) {
             log.error("测试连接失败: url={}", maskUrl(url), e);
             return error("连接失败: " + rootCauseMessage(e));
@@ -199,6 +210,16 @@ public class ConnectionManagerController {
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("success", false);
         r.put("error", msg);
+        return JsonUtil.toJson(r);
+    }
+
+    /** ★ 结构化驱动错误：前端根据 details 渲染诊断弹窗 */
+    private String driverError(DriverLoadException e) {
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("success", false);
+        r.put("errorType", "driver_load");
+        r.put("error", "驱动加载失败：" + e.getShortMessage());
+        r.put("details", e.toDetails());
         return JsonUtil.toJson(r);
     }
 

@@ -147,14 +147,41 @@ public class MultipartResolver implements AutoCloseable {
         }
     }
 
+    /**
+     * ★ 修复点：读取文件二进制内容。
+     *
+     * <p>标准 multipart 中，part 内容后紧跟 {@code \r\n--boundary}。
+     * {@code findBoundaryInBuffer()} 返回的是 {@code --boundary} 起始位置，
+     * 所以写入的 {@code offset} 字节里<b>包含了末尾的 {@code \r\n}</b>，
+     * 这是分隔符，不属于文件内容。</p>
+     *
+     * <p>原实现直接写入 {@code offset} 字节，导致每个上传的二进制文件
+     * （JAR/ZIP/图片等）末尾都多 2 字节 {@code \r\n}，
+     * 文件 SHA256 与原文件不同，表现为"文件损坏"。</p>
+     *
+     * <p>本修复在找到 boundary 后，回退 2 字节（兼容 {@code \r\n} 和
+     * 部分实现的 {@code \n}），与 {@link #readTextContent} 的截断逻辑保持一致。</p>
+     */
     private Path readFileContent(BoundaryFinder finder) throws IOException {
         Path tmp = Files.createTempFile("upload_", ".tmp");
         try (BufferedOutputStream out = new BufferedOutputStream(Files.newOutputStream(tmp))) {
             while (true) {
                 int offset = finder.findBoundaryInBuffer();
                 if (offset >= 0) {
-                    if (offset > 0) out.write(finder.buffer, finder.getPosition(), offset);
-                    finder.setPosition(finder.getPosition() + offset);
+                    int posStart = finder.getPosition();
+                    // ★ 排除 boundary 前的 \r\n（multipart 分隔符不属于文件内容）
+                    int writeLen = offset;
+                    if (writeLen >= 2
+                            && finder.buffer[posStart + writeLen - 2] == '\r'
+                            && finder.buffer[posStart + writeLen - 1] == '\n') {
+                        writeLen -= 2;
+                    } else if (writeLen >= 1 && finder.buffer[posStart + writeLen - 1] == '\n') {
+                        writeLen -= 1;
+                    }
+                    if (writeLen > 0) {
+                        out.write(finder.buffer, posStart, writeLen);
+                    }
+                    finder.setPosition(posStart + offset);
                     break;
                 }
                 int available = finder.limit - finder.pos;
@@ -288,7 +315,6 @@ public class MultipartResolver implements AutoCloseable {
         try {
             byte[] raw = s.getBytes(StandardCharsets.ISO_8859_1);
             String utf8 = new String(raw, StandardCharsets.UTF_8);
-            // 检查是否无损（合法 UTF-8）
             if (Arrays.equals(utf8.getBytes(StandardCharsets.UTF_8), raw)) {
                 return utf8;
             }

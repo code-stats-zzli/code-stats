@@ -14,10 +14,6 @@ public class Configuration {
     private final Map<String, LoggerConfig> loggerConfigs = new HashMap<>();
     private LoggerConfig rootConfig;
 
-    /**
-     * 从类路径中的 XML 文件加载配置
-     * @param resourcePath 类路径下的资源路径，如 "log-config.xml"
-     */
     public void loadFromClasspath(String resourcePath) throws Exception {
         try (InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream(resourcePath)) {
             if (is == null) {
@@ -27,9 +23,6 @@ public class Configuration {
         }
     }
 
-    /**
-     * 从输入流加载配置
-     */
     public void loadFromStream(InputStream is) throws Exception {
         Document doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(is);
         NodeList props = doc.getElementsByTagName("property");
@@ -48,7 +41,6 @@ public class Configuration {
             String className = elem.getAttribute("class");
             Appender appender = createAppender(className, elem, properties);
             appender.setName(name);
-            // 解析 layout
             NodeList layoutNodes = elem.getElementsByTagName("layout");
             if (layoutNodes.getLength() > 0) {
                 Element layoutElem = (Element) layoutNodes.item(0);
@@ -56,16 +48,14 @@ public class Configuration {
                 if ("com.omni.framework.log.layout.PatternLayout".equals(layoutClass)) {
                     String pattern = getParamValue(layoutElem, "pattern", properties);
                     if (pattern == null) pattern = "%d [%t] %-5level %logger - %msg%n";
-                    PatternLayout layout = new PatternLayout(replaceProperties(pattern, properties));
-                    appender.setLayout(layout);
+                    appender.setLayout(new PatternLayout(replaceProperties(pattern, properties)));
                 }
             }
-            // 解析 filter
             NodeList filterNodes = elem.getElementsByTagName("filter");
             for (int j = 0; j < filterNodes.getLength(); j++) {
                 Element filterElem = (Element) filterNodes.item(j);
                 String filterClass = filterElem.getAttribute("class");
-                if (("com.omni.framework.log.filter.LevelRangeFilter").equals(filterClass)) {
+                if ("com.omni.framework.log.filter.LevelRangeFilter".equals(filterClass)) {
                     LevelRangeFilter filter = new LevelRangeFilter();
                     String min = getParamValue(filterElem, "minLevel", properties);
                     String max = getParamValue(filterElem, "maxLevel", properties);
@@ -77,7 +67,6 @@ public class Configuration {
             appenders.put(name, appender);
         }
 
-        // 解析 logger 和 root
         NodeList loggerNodes = doc.getElementsByTagName("logger");
         for (int i = 0; i < loggerNodes.getLength(); i++) {
             Element elem = (Element) loggerNodes.item(i);
@@ -112,21 +101,16 @@ public class Configuration {
     }
 
     private Appender createAppender(String className, Element elem, Map<String, String> props) throws Exception {
-        if ("com.framework.log.appender.ConsoleAppender".equals(className)
-                || "com.omni.framework.log.appender.ConsoleAppender".equals(className)) {
+        if ("com.omni.framework.log.appender.ConsoleAppender".equals(className)) {
             return new ConsoleAppender();
-        } else if ("com.framework.log.appender.FileAppender".equals(className)
-                || "com.omni.framework.log.appender.FileAppender".equals(className)) {
-            String file = getParamValue(elem, "file", props);
-            return new FileAppender(file);
-        } else if ("com.framework.log.appender.RollingFileAppender".equals(className)
-                || "com.omni.framework.log.appender.RollingFileAppender".equals(className)) {
+        } else if ("com.omni.framework.log.appender.FileAppender".equals(className)) {
+            return new FileAppender(getParamValue(elem, "file", props));
+        } else if ("com.omni.framework.log.appender.RollingFileAppender".equals(className)) {
             String file = getParamValue(elem, "file", props);
             long maxSize = parseSize(getParamValue(elem, "maxFileSize", props));
             int maxBackup = Integer.parseInt(getParamValue(elem, "maxBackupIndex", props));
             return new RollingFileAppender(file, maxSize, maxBackup);
-        } else if ("com.framework.log.appender.AsyncAppender".equals(className)
-                || "com.omni.framework.log.appender.AsyncAppender".equals(className)) {
+        } else if ("com.omni.framework.log.appender.AsyncAppender".equals(className)) {
             int queueSize = Integer.parseInt(getParamValue(elem, "queueSize", props));
             NodeList refs = elem.getElementsByTagName("appender-ref");
             if (refs.getLength() == 0) throw new IllegalArgumentException("AsyncAppender missing delegate appender");
@@ -154,9 +138,8 @@ public class Configuration {
         for (Map.Entry<String, String> e : props.entrySet()) {
             val = val.replace("${" + e.getKey() + "}", e.getValue());
         }
-        // ★ 额外支持系统属性占位符，让配置路径也能跨机器
         val = val.replace("${user.home}", System.getProperty("user.home", "."))
-                .replace("${user.dir}",  System.getProperty("user.dir",  "."))
+                .replace("${user.dir}", System.getProperty("user.dir", "."))
                 .replace("${java.io.tmpdir}", System.getProperty("java.io.tmpdir", "."));
         return val;
     }
@@ -170,17 +153,30 @@ public class Configuration {
         return Long.parseLong(s);
     }
 
+    /**
+     * ★ FIX: 支持父包逐级继承。
+     *   修复前：只查 loggerConfigs.get(name)，命中不到直接 fallback root，
+     *           导致 <logger name="com.omni" level="DEBUG"> 形同虚设。
+     *   修复后：com.omni.framework.spring.mvc.DispatcherServlet
+     *           → com.omni.framework.spring.mvc
+     *           → com.omni.framework.spring
+     *           → com.omni                 ← 命中
+     */
     public LoggerConfig getLoggerConfig(String name) {
+        if (name == null || name.isEmpty()) {
+            return rootConfig;
+        }
         LoggerConfig config = loggerConfigs.get(name);
         if (config != null) return config;
-        if (rootConfig != null) return rootConfig;
-        return null;
+
+        int idx = name.length();
+        while ((idx = name.lastIndexOf('.', idx - 1)) > 0) {
+            config = loggerConfigs.get(name.substring(0, idx));
+            if (config != null) return config;
+        }
+        return rootConfig;
     }
 
-    /**
-     * 创建默认配置（仅控制台输出）
-     * ★ 修复：默认级别从 INFO 改为 DEBUG，使 log.debug(...) 也能输出
-     */
     public void useDefaultConsoleConfig() {
         PatternLayout layout = new PatternLayout("%d [%t] %-5level %logger - %msg%n");
         ConsoleAppender console = new ConsoleAppender();
@@ -188,7 +184,6 @@ public class Configuration {
         console.setName("CONSOLE");
         appenders.put("CONSOLE", console);
 
-        // ★ 修复：改为 DEBUG（之前是 INFO，导致 Instantiating bean 等 debug 日志不输出）
         rootConfig = new LoggerConfig("ROOT", Level.DEBUG, true);
         rootConfig.addAppender(console);
     }

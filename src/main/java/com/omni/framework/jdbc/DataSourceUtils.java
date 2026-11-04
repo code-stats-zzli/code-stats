@@ -1,4 +1,3 @@
-// ======== D:\space\git\CodeStats\src\main\java\com\omni\framework\jdbc\DataSourceUtils.java ========
 package com.omni.framework.jdbc;
 
 import com.omni.framework.log.LoggerFactory;
@@ -15,53 +14,81 @@ import java.util.Map;
 
 public class DataSourceUtils {
     private static final Logger log = LoggerFactory.getLogger(DataSourceUtils.class);
-    private static final SimpleDataSource dataSource;
-    private static volatile DbType dbType;
 
-    public enum DbType {
-        MYSQL, ORACLE, UNKNOWN
+    private static final SimpleDataSource dataSource;
+    private static final Throwable initFailure;
+    private static final DbType dbType;
+
+    public enum DbType { MYSQL, ORACLE, UNKNOWN }
+
+    // ★ FIX: 静态块绝不让异常逃逸。
+    //   修复前：db.url 为空 / minIdle=2 建连失败 / initTable NPE 都会让类初始化失败，
+    //           之后所有访问变成 NoClassDefFoundError: Could not initialize class DataSourceUtils，
+    //           catch (Exception) 接不住 Error，日志全部丢失。
+    //   修复后：失败只记录 initFailure，dataSource=null；
+    //           后续 getConnection() 抛带根因的 SQLException，上层 catch (Exception) 能接住并打印。
+    static {
+        SimpleDataSource ds = null;
+        Throwable failure = null;
+        DbType detected = DbType.UNKNOWN;
+        try {
+            String url = ConfigLoader.getProperty("db.url");
+            if (url == null || url.trim().isEmpty()) {
+                throw new IllegalStateException("db.url 未配置（application.properties 缺少 db.url）");
+            }
+            String username = ConfigLoader.getProperty("db.username");
+            String password = ConfigLoader.getProperty("db.password");
+            int maxActive = parseInt(ConfigLoader.getProperty("db.maxActive", "10"), 10);
+            int maxIdle = parseInt(ConfigLoader.getProperty("db.maxIdle", "5"), 5);
+            int minIdle = parseInt(ConfigLoader.getProperty("db.minIdle", "2"), 2);
+            long maxWaitMillis = parseLong(ConfigLoader.getProperty("db.maxWaitMillis", "30000"), 30000L);
+            String validationQuery = ConfigLoader.getProperty("db.validationQuery", "SELECT 1");
+
+            detected = detectDbType(url);
+            loadDriver(detected);
+
+            ds = new SimpleDataSource.Builder()
+                    .url(url.trim())
+                    .username(username)
+                    .password(password)
+                    .maxActive(maxActive)
+                    .maxIdle(maxIdle)
+                    .minIdle(minIdle)
+                    .maxWaitMillis(maxWaitMillis)
+                    .validationQuery(validationQuery)
+                    .build();
+
+            initTable(ds, detected);
+        } catch (Throwable e) {
+            failure = e;
+            try {
+                log.error("DataSourceUtils 初始化失败: " + e, e);
+            } catch (Throwable ignored) {
+                // 日志失败也不能让类初始化失败
+            }
+        }
+        dataSource = ds;
+        initFailure = failure;
+        dbType = detected;
     }
 
-    static {
-        String url = ConfigLoader.getProperty("db.url");
-        String username = ConfigLoader.getProperty("db.username");
-        String password = ConfigLoader.getProperty("db.password");
-        int maxActive = Integer.parseInt(ConfigLoader.getProperty("db.maxActive", "10"));
-        int maxIdle = Integer.parseInt(ConfigLoader.getProperty("db.maxIdle", "5"));
-        int minIdle = Integer.parseInt(ConfigLoader.getProperty("db.minIdle", "2"));
-        long maxWaitMillis = Long.parseLong(ConfigLoader.getProperty("db.maxWaitMillis", "30000"));
-        String validationQuery = ConfigLoader.getProperty("db.validationQuery", "SELECT 1");
-
-        dbType = detectDbType(url);
-        loadDriver();
-
-        dataSource = new SimpleDataSource.Builder()
-                .url(url)
-                .username(username)
-                .password(password)
-                .maxActive(maxActive)
-                .maxIdle(maxIdle)
-                .minIdle(minIdle)
-                .maxWaitMillis(maxWaitMillis)
-                .validationQuery(validationQuery)
-                .build();
-        initTable();
+    private static int parseInt(String s, int def) {
+        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return def; }
+    }
+    private static long parseLong(String s, long def) {
+        try { return Long.parseLong(s.trim()); } catch (Exception e) { return def; }
     }
 
     private static DbType detectDbType(String url) {
         if (url == null) return DbType.UNKNOWN;
         String lowerUrl = url.toLowerCase();
-        if (lowerUrl.contains("mysql")) {
-            return DbType.MYSQL;
-        } else if (lowerUrl.contains("oracle")) {
-            return DbType.ORACLE;
-        }
+        if (lowerUrl.contains("mysql")) return DbType.MYSQL;
+        if (lowerUrl.contains("oracle")) return DbType.ORACLE;
         return DbType.UNKNOWN;
     }
 
-    private static void loadDriver() {
-        String driverClassName = null;
-        switch (dbType) {
+    private static void loadDriver(DbType type) {
+        switch (type) {
             case MYSQL:
                 try {
                     Class.forName("com.mysql.cj.jdbc.Driver");
@@ -85,13 +112,16 @@ public class DataSourceUtils {
         }
     }
 
-    private static void initTable() {
+    // ★ FIX: 改为传参（原实现里 initTable() 通过静态 getConnection() 读 dataSource，
+    //         如果 dataSource 构造失败就会 NPE；传参后语义明确，也不再依赖字段可见性）。
+    private static void initTable(SimpleDataSource ds, DbType type) {
+        if (ds == null) return;
         String createTableSql;
         String checkExistsSql;
         String insertDataSql;
         String updateDataSql;
 
-        if (dbType == DbType.ORACLE) {
+        if (type == DbType.ORACLE) {
             createTableSql = "CREATE TABLE \"user\" (" +
                     "id NUMBER(10) PRIMARY KEY, " +
                     "name VARCHAR2(100), " +
@@ -109,54 +139,52 @@ public class DataSourceUtils {
             updateDataSql = null;
         }
 
-        try (Connection conn = getConnection();
+        try (Connection conn = ds.getConnection();
              Statement stmt = conn.createStatement()) {
-            if (dbType == DbType.ORACLE) {
+            if (type == DbType.ORACLE) {
                 try (ResultSet rs = stmt.executeQuery(checkExistsSql)) {
-                    if (rs.next() && rs.getInt(1) == 0) {
-                        stmt.execute(createTableSql);
-                    }
+                    if (rs.next() && rs.getInt(1) == 0) stmt.execute(createTableSql);
                 }
             } else {
                 stmt.execute(createTableSql);
             }
 
-            if (dbType == DbType.ORACLE) {
+            if (type == DbType.ORACLE) {
                 String countSql = "SELECT COUNT(*) FROM \"user\" WHERE id = 1";
                 try (ResultSet rs = stmt.executeQuery(countSql)) {
-                    if (rs.next() && rs.getInt(1) == 0) {
-                        stmt.execute(insertDataSql);
-                    } else {
-                        stmt.execute(updateDataSql);
-                    }
+                    if (rs.next() && rs.getInt(1) == 0) stmt.execute(insertDataSql);
+                    else stmt.execute(updateDataSql);
                 }
             } else {
                 stmt.execute(insertDataSql);
             }
-            log.info("Table 'user' initialized successfully for {}", dbType);
-        } catch (SQLException e) {
-            log.error("Failed to initialize user table", e);
+            log.info("Table 'user' initialized successfully for {}", type);
+        } catch (Throwable e) {
+            log.warn("Failed to initialize user table", e);
         }
     }
 
+    // ★ FIX: dataSource 为 null 时抛明确 SQLException（带根因），
+    //         上层 catch (Exception) 能接住并打印日志。
     public static Connection getConnection() throws SQLException {
+        if (dataSource == null) {
+            String msg = "数据源未初始化（DataSourceUtils 静态初始化失败）";
+            if (initFailure != null) msg += "：" + initFailure;
+            throw new SQLException(msg, initFailure);
+        }
         return dataSource.getConnection();
     }
 
+    // ★ FIX: null-safe
     public static void closePool() {
-        dataSource.close();
+        if (dataSource != null) {
+            try { dataSource.close(); } catch (Throwable e) { log.warn("close pool failed", e); }
+        }
     }
 
-    public static DbType getDbType() {
-        return dbType;
-    }
+    public static DbType getDbType() { return dbType; }
+    public static SimpleDataSource getDataSource() { return dataSource; }
 
-    // ========== 新增：暴露数据源实例 ==========
-    public static SimpleDataSource getDataSource() {
-        return dataSource;
-    }
-
-    // ========== 新增：获取连接池统计信息 ==========
     public static Map<String, Object> getPoolStats() {
         Map<String, Object> stats = new HashMap<>();
         if (dataSource != null) {

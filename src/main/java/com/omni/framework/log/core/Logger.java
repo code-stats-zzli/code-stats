@@ -16,11 +16,22 @@ public class Logger {
         this.config = config;
     }
 
-    public boolean isTraceEnabled() { return config.level.isGreaterOrEqual(Level.TRACE); }
-    public boolean isDebugEnabled() { return config.level.isGreaterOrEqual(Level.DEBUG); }
-    public boolean isInfoEnabled()  { return config.level.isGreaterOrEqual(Level.INFO); }
-    public boolean isWarnEnabled()  { return config.level.isGreaterOrEqual(Level.WARN); }
-    public boolean isErrorEnabled() { return config.level.isGreaterOrEqual(Level.ERROR); }
+    // ★ FIX: 原实现方向写反了。
+    //   原：return config.level.isGreaterOrEqual(Level.ERROR);   // INFO >= ERROR = false
+    //   正确语义：当前事件级别 >= 配置级别 → 才允许输出。
+    //   等价写法：Level.ERROR.isGreaterOrEqual(config.level)
+    //   额外：config.level == OFF 时全部返回 false。
+    public boolean isTraceEnabled() { return isEnabled(Level.TRACE); }
+    public boolean isDebugEnabled() { return isEnabled(Level.DEBUG); }
+    public boolean isInfoEnabled()  { return isEnabled(Level.INFO);  }
+    public boolean isWarnEnabled()  { return isEnabled(Level.WARN);  }
+    public boolean isErrorEnabled() { return isEnabled(Level.ERROR); }
+
+    private boolean isEnabled(Level eventLevel) {
+        if (config == null) return false;
+        if (config.level == Level.OFF) return false;
+        return eventLevel.isGreaterOrEqual(config.level);
+    }
 
     public void trace(String msg) { log(Level.TRACE, msg, null); }
     public void debug(String msg) { log(Level.DEBUG, msg, null); }
@@ -29,11 +40,8 @@ public class Logger {
     public void error(String msg) { log(Level.ERROR, msg, null); }
     public void error(String msg, Throwable t) { log(Level.ERROR, msg, t); }
 
-    // ==================== 核心：占位符格式化 ====================
     private String formatMessage(String format, Object... args) {
-        if (args == null || args.length == 0) {
-            return format;
-        }
+        if (args == null || args.length == 0) return format;
         StringBuilder sb = new StringBuilder();
         int argIdx = 0;
         int lastIdx = 0;
@@ -47,11 +55,6 @@ public class Logger {
         return sb.toString();
     }
 
-    /**
-     * ★ 新增：检测 args 末尾是否带了 Throwable
-     * 让 log.error("xxx {} {}", a, b, e) 这种调用不再丢失异常堆栈。
-     * 返回值：[0] = 去掉 Throwable 后的真实参数数组，[1] = 提取出的 Throwable（可能为 null）
-     */
     private Object[] extractThrowable(Object[] args) {
         if (args != null && args.length > 0 && args[args.length - 1] instanceof Throwable) {
             Throwable t = (Throwable) args[args.length - 1];
@@ -60,8 +63,6 @@ public class Logger {
         }
         return new Object[]{args, null};
     }
-
-    // ==================== 带占位符 + 可选 Throwable 的日志方法 ====================
 
     public void trace(String format, Object... args) {
         if (!isTraceEnabled()) return;
@@ -87,28 +88,20 @@ public class Logger {
         log(Level.WARN, formatMessage(format, (Object[]) r[0]), (Throwable) r[1]);
     }
 
-    /**
-     * 带占位符的 error；args 末尾若是 Throwable 会被自动识别为异常并打印完整堆栈。
-     * 这样 log.error("处理请求失败: {} {}", method, uri, e) 也能正确工作。
-     */
     public void error(String format, Object... args) {
         if (!isErrorEnabled()) return;
         Object[] r = extractThrowable(args);
         log(Level.ERROR, formatMessage(format, (Object[]) r[0]), (Throwable) r[1]);
     }
 
-    /**
-     * 显式 Throwable 版本：log.error("失败: {}", "ctx", e) —— 第二个参数必须是 Throwable
-     * 保留此重载以兼容原有调用，语义最清晰。
-     */
     public void error(String format, Throwable t, Object... args) {
         if (!isErrorEnabled()) return;
         log(Level.ERROR, formatMessage(format, args), t);
     }
 
-    // ==================== 内部 ====================
-
     private void log(Level level, String msg, Throwable t) {
+        if (config == null) return;
+        if (config.level == Level.OFF) return;
         if (!level.isGreaterOrEqual(config.level)) return;
 
         LogEvent event = LogEvent.builder()

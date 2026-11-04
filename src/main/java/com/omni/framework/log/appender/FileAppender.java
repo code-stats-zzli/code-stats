@@ -10,7 +10,9 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 
 public class FileAppender extends Appender {
-    private PrintWriter writer;
+
+    // ★ 由 private 改为 protected，供 RollingFileAppender 关闭/重开
+    protected PrintWriter writer;
     private final File resolvedFile;
 
     public FileAppender(String fileName) {
@@ -89,8 +91,13 @@ public class FileAppender extends Appender {
         return resolvedFile.getAbsolutePath();
     }
 
+    /**
+     * ★ 加 synchronized：
+     *   - 防止多线程并发写时 writer 被替换导致 NPE
+     *   - 保证与 RollingFileAppender 的 rollover 串行化
+     */
     @Override
-    protected void append(LogEvent event) {
+    protected synchronized void append(LogEvent event) {
         if (writer != null) {
             writer.print(layout.format(event));
             writer.flush();
@@ -98,7 +105,38 @@ public class FileAppender extends Appender {
     }
 
     @Override
-    public void close() {
-        if (writer != null) writer.close();
+    public synchronized void close() {
+        if (writer != null) {
+            try { writer.flush(); } catch (Exception ignored) {}
+            try { writer.close(); } catch (Exception ignored) {}
+            writer = null;
+        }
+    }
+
+    /**
+     * ★ 供子类在 rollover 前调用：关闭并释放文件句柄。
+     *   Windows 上必须关闭文件句柄，Files.move 才能成功。
+     */
+    protected synchronized void closeWriterQuietly() {
+        if (writer != null) {
+            try { writer.flush(); } catch (Exception ignored) {}
+            try { writer.close(); } catch (Exception ignored) {}
+            writer = null;
+        }
+    }
+
+    /**
+     * ★ 供子类在 rollover 后调用：重新打开文件。
+     *   必须以追加模式打开，否则会丢当前批次的事件。
+     */
+    protected synchronized void reopenWriter() throws IOException {
+        if (writer != null) {
+            try { writer.close(); } catch (Exception ignored) {}
+            writer = null;
+        }
+        this.writer = new PrintWriter(
+                new OutputStreamWriter(
+                        new FileOutputStream(this.resolvedFile, true),
+                        StandardCharsets.UTF_8));
     }
 }

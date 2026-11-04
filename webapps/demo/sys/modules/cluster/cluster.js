@@ -1,3 +1,4 @@
+// webapps/demo/sys/modules/cluster/cluster.js
 (function () {
     'use strict';
 
@@ -8,6 +9,8 @@
     });
 
     function mountCluster(container) {
+        // 注意：这里禁止写 ${user.dir} 这类 JS 模板插值，
+        // 因为 user 在浏览器端不存在，会抛 ReferenceError。
         container.innerHTML = `
             <div class="cluster-wrap">
                 <div class="cluster-card">
@@ -56,7 +59,8 @@
 
                     <div class="form-row" id="localRow" style="display:none;">
                         <label>部署目录</label>
-                        <input id="localDeployDir" placeholder="默认 ${user.dir}/cluster/workers"
+                        <input id="localDeployDir"
+                               placeholder="留空则使用 user.dir/cluster/workers"
                                style="min-width:380px;">
                         <button id="checkLocalJdkBtn" class="btn-secondary btn-sm">🔍 检测 JDK</button>
                     </div>
@@ -181,7 +185,6 @@
                 }
                 html += '</tbody></table>';
                 $('nodesWrap').outerHTML = `<div id="nodesWrap">${html}</div>`;
-                // 绑定停止按钮
                 container.querySelectorAll('[data-stop]').forEach(btn => {
                     btn.addEventListener('click', () => stopNode(btn.dataset.stop));
                 });
@@ -450,7 +453,6 @@
             loadNodes();
         }, 3000);
 
-        // 页面离开时清理
         window.addEventListener('beforeunload', () => {
             if (pollTimer) clearInterval(pollTimer);
         });

@@ -78,24 +78,71 @@
 
         <plugins>
 
-            <!-- ① 主 jar：Class-Path 不带前缀（因为依赖和自己在同一个 lib/ 目录下） -->
+            <!-- ================================================================ -->
+            <!-- ① 资源打进 jar 的 META-INF/app-resources/                          -->
+            <!--    AppResourceExtractor 启动时解压到 user.dir（即 deploy/）        -->
+            <!-- ================================================================ -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <version>3.3.0</version>
-                <configuration>
-                    <archive>
-                        <manifest>
-                            <addClasspath>true</addClasspath>
-                            <!-- ★ 关键：空字符串，Class-Path 里每个 jar 就是 xxx.jar -->
-                            <classpathPrefix></classpathPrefix>
-                            <mainClass>com.omni.Bootstrap</mainClass>
-                        </manifest>
-                    </archive>
-                </configuration>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+
+                    <execution>
+                        <id>copy-webapps-into-jar</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/META-INF/app-resources/webapps</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/webapps</directory>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+
+                    <execution>
+                        <id>copy-tessdata-into-jar</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/META-INF/app-resources/tessdata</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/tessdata</directory>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+
+                    <execution>
+                        <id>copy-resources-into-jar</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/META-INF/app-resources/resources</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/resources</directory>
+                                    <filtering>false</filtering>
+                                    <!-- ★ 排除 deploy，防止无限递归 -->
+                                    <excludes>
+                                        <exclude>deploy/**</exclude>
+                                    </excludes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+
+                </executions>
             </plugin>
 
-            <!-- ② 依赖复制到项目根目录/lib/ -->
+            <!-- ================================================================ -->
+            <!-- ② 依赖复制到项目根 /lib/（deploy 同级，独立存在）                    -->
+            <!-- ================================================================ -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
@@ -106,7 +153,7 @@
                         <phase>prepare-package</phase>
                         <goals><goal>copy-dependencies</goal></goals>
                         <configuration>
-                            <outputDirectory>${project.basedir}/lib2</outputDirectory>
+                            <outputDirectory>${project.basedir}/lib</outputDirectory>
                             <includeScope>runtime</includeScope>
                             <overWriteReleases>false</overWriteReleases>
                             <overWriteSnapshots>true</overWriteSnapshots>
@@ -116,21 +163,73 @@
                 </executions>
             </plugin>
 
-            <!-- ③ 主 jar 复制到 lib/（必须排在 jar 插件之后，同在 package 阶段） -->
+            <!-- ================================================================ -->
+            <!-- ③ Shade 打 fat jar：把所有依赖解压合并进 CodeStats.jar             -->
+            <!--    这样 java -jar CodeStats.jar 就能直接跑                          -->
+            <!-- ================================================================ -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals><goal>shade</goal></goals>
+                        <configuration>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <shadedArtifactAttached>false</shadedArtifactAttached>
+                            <transformers>
+                                <!-- 主类 -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.omni.Bootstrap</mainClass>
+                                </transformer>
+                                <!-- ★ 合并 META-INF/services（tess4j / playwright / poi 都有 SPI） -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <!-- ★ 合并 spring handler/schemas（保险） -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.handlers</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.schemas</resource>
+                                </transformer>
+                            </transformers>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <!-- ★ 去掉签名文件，否则 JVM 报 Invalid signature file -->
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <!-- ★ module-info.class 会和 fat jar 冲突 -->
+                                        <exclude>module-info.class</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- ================================================================ -->
+            <!-- ④ 把 fat jar 复制到 /deploy/                                        -->
+            <!--    （必须在 shade 之后，phase 同为 package，靠 plugin 声明顺序保证） -->
+            <!-- ================================================================ -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>3.1.0</version>
                 <executions>
                     <execution>
-                        <id>copy-main-jar-to-lib</id>
+                        <id>copy-fat-jar-to-deploy</id>
                         <phase>package</phase>
                         <goals><goal>run</goal></goals>
                         <configuration>
                             <target>
-                                <mkdir dir="${project.basedir}/lib"/>
+                                <delete dir="${project.basedir}/deploy" quiet="true"/>
+                                <mkdir dir="${project.basedir}/deploy"/>
                                 <copy file="${project.build.directory}/${project.build.finalName}.jar"
-                                      tofile="${project.basedir}//resources/deploy/${project.build.finalName}.jar"
+                                      tofile="${project.basedir}/deploy/${project.build.finalName}.jar"
                                       overwrite="true"/>
                             </target>
                         </configuration>

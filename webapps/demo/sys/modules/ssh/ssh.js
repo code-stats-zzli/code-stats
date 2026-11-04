@@ -283,4 +283,284 @@
             $('sshPathInput').value = currentPath;
             $('sshEmpty').style.display = 'none';
             $('sshWork').style.display = 'flex';
-            renderConn
+            renderConnList();
+            clearCommandOutput();
+            clearEditor();
+            switchTab('files');
+            refreshFileList();
+        }
+
+        // ==================== Tab 切换 ====================
+
+        function switchTab(tabId) {
+            currentTab = tabId;
+            container.querySelectorAll('.ssh-tab').forEach(t =>
+                t.classList.toggle('active', t.dataset.tab === tabId));
+            const map = { files: 'sshPaneFiles', cmd: 'sshPaneCmd', editor: 'sshPaneEditor' };
+            Object.keys(map).forEach(k => {
+                const pane = $(map[k]);
+                if (pane) pane.classList.toggle('active', k === tabId);
+            });
+        }
+        container.querySelectorAll('.ssh-tab').forEach(t => {
+            t.addEventListener('click', () => switchTab(t.dataset.tab));
+        });
+
+        // ==================== 目录浏览 ====================
+
+        async function refreshFileList() {
+            if (!currentId) return;
+            $('sshFileList').innerHTML = '<div class="loading">加载中...</div>';
+            try {
+                const r = await jpost(API + '/list', { id: currentId, path: currentPath });
+                if (!r.success) throw new Error(r.error || '加载失败');
+                renderFileList(r.data || []);
+            } catch (e) {
+                $('sshFileList').innerHTML =
+                    '<div class="ssh-error">❌ ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+
+        function renderFileList(files) {
+            if (!files.length) {
+                $('sshFileList').innerHTML = '<div class="empty-tip">目录为空</div>';
+                return;
+            }
+            $('sshFileList').innerHTML = files.map(f => `
+                <div class="ssh-file-row ${f.directory ? 'is-dir' : ''}" data-path="${escapeHtml(f.path)}" data-dir="${f.directory}">
+                    <span class="ssh-file-icon">${f.directory ? '📁' : '📄'}</span>
+                    <span class="ssh-file-name" title="${escapeHtml(f.path)}">${escapeHtml(f.name)}</span>
+                    <span class="ssh-file-meta">${f.directory ? '' : fmtSize(f.size)}</span>
+                    <span class="ssh-file-time">${escapeHtml(f.modified || '')}</span>
+                    <span class="ssh-file-actions">
+                        ${f.directory ? '' : `
+                            <button class="ssh-mini-btn" data-action="edit" title="编辑">✎</button>
+                            <button class="ssh-mini-btn" data-action="download" title="下载">⬇</button>`}
+                        <button class="ssh-mini-btn" data-action="rename" title="重命名">✏️</button>
+                        <button class="ssh-mini-btn ssh-mini-danger" data-action="delete" title="删除">🗑</button>
+                    </span>
+                </div>
+            `).join('');
+
+            container.querySelectorAll('.ssh-file-row').forEach(row => {
+                row.addEventListener('dblclick', async (e) => {
+                    if (e.target.closest('[data-action]')) return;
+                    const isDir = row.dataset.dir === 'true';
+                    const p = row.dataset.path;
+                    if (isDir) {
+                        currentPath = p;
+                        $('sshPathInput').value = currentPath;
+                        await refreshFileList();
+                    } else {
+                        await openInEditor(p);
+                    }
+                });
+            });
+            container.querySelectorAll('.ssh-file-row [data-action]').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const row = btn.closest('.ssh-file-row');
+                    const p = row.dataset.path;
+                    const action = btn.dataset.action;
+                    if (action === 'edit') await openInEditor(p);
+                    else if (action === 'download') downloadFile(p);
+                    else if (action === 'rename') await renameFile(p);
+                    else if (action === 'delete') await deleteFile(p);
+                });
+            });
+        }
+
+        function downloadFile(path) {
+            const url = API + '/download?id=' + encodeURIComponent(currentId)
+                + '&path=' + encodeURIComponent(path);
+            window.open(url, '_blank');
+        }
+
+        async function renameFile(p) {
+            const sep = currentOs === 'windows' ? '\\' : '/';
+            const idx = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+            const parent = idx > 0 ? p.substring(0, idx) : '';
+            const oldName = p.substring(idx + 1);
+            const newName = prompt('新名称', oldName);
+            if (!newName || newName === oldName) return;
+            if (newName.includes('/') || newName.includes('\\')) {
+                alert('名称不能包含斜杠');
+                return;
+            }
+            const to = parent ? (parent + sep + newName) : newName;
+            try {
+                const r = await jpost(API + '/rename', { id: currentId, from: p, to });
+                if (!r.success) throw new Error(r.error || '重命名失败');
+                refreshFileList();
+            } catch (e) {
+                alert('重命名失败：' + e.message);
+            }
+        }
+
+        async function deleteFile(p) {
+            if (!confirm('确定删除 ' + p + ' ？')) return;
+            try {
+                const r = await jpost(API + '/delete', { id: currentId, path: p });
+                if (!r.success) throw new Error(r.error || '删除失败');
+                refreshFileList();
+            } catch (e) {
+                alert('删除失败：' + e.message);
+            }
+        }
+
+        async function newDir() {
+            const name = prompt('新目录名');
+            if (!name || !name.trim()) return;
+            try {
+                const r = await jpost(API + '/mkdir', {
+                    id: currentId, parent: currentPath, name: name.trim()
+                });
+                if (!r.success) throw new Error(r.error || '创建失败');
+                refreshFileList();
+            } catch (e) {
+                alert('创建失败：' + e.message);
+            }
+        }
+
+        async function uploadFile(file) {
+            if (!file || !currentId) return;
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('id', currentId);
+            fd.append('path', currentPath);
+            try {
+                const resp = await fetch(API + '/upload', { method: 'POST', body: fd });
+                const r = await resp.json();
+                if (!r.success) throw new Error(r.error || '上传失败');
+                await refreshFileList();
+            } catch (e) {
+                alert('上传失败：' + e.message);
+            }
+        }
+
+        // ==================== 命令行 ====================
+
+        function clearCommandOutput() {
+            $('sshCmdOutput').textContent = '';
+            $('sshCmdMeta').textContent = '';
+        }
+
+        async function runCommand() {
+            if (!currentId) return;
+            const cmd = $('sshCmdInput').value;
+            if (!cmd || !cmd.trim()) { alert('请输入命令'); return; }
+            $('sshCmdOutput').textContent = '⏳ 执行中...\n';
+            $('sshCmdMeta').textContent = '';
+            try {
+                const r = await jpost(API + '/exec', { id: currentId, cmd: cmd });
+                if (!r.success) {
+                    $('sshCmdOutput').textContent = '❌ ' + (r.error || '未知错误');
+                    return;
+                }
+                const d = r.data || {};
+                let out = '';
+                if (d.stdout) out += d.stdout;
+                if (d.stderr) out += (out && !out.endsWith('\n') ? '\n' : '') + d.stderr;
+                if (!out) out = '(无输出)';
+                $('sshCmdOutput').textContent = out;
+                $('sshCmdMeta').textContent = 'exitCode=' + d.exitCode
+                    + ' · 耗时=' + d.durationMs + 'ms'
+                    + (d.timeout ? ' · ⏱超时' : '');
+            } catch (e) {
+                $('sshCmdOutput').textContent = '❌ ' + e.message;
+            }
+        }
+
+        // ==================== 编辑器 ====================
+
+        function clearEditor() {
+            $('sshEditorPath').value = '';
+            $('sshEditorContent').value = '';
+        }
+
+        async function openInEditor(p) {
+            switchTab('editor');
+            $('sshEditorPath').value = p;
+            $('sshEditorContent').value = '加载中...';
+            try {
+                const r = await jpost(API + '/read', { id: currentId, path: p });
+                if (!r.success) throw new Error(r.error || '读取失败');
+                $('sshEditorContent').value = (r.data && r.data.content) || '';
+            } catch (e) {
+                $('sshEditorContent').value = '❌ ' + e.message;
+            }
+        }
+
+        async function saveEditor() {
+            const p = $('sshEditorPath').value;
+            if (!p) { alert('请先从目录中选择文件'); return; }
+            const content = $('sshEditorContent').value || '';
+            // UTF-8 → base64
+            const bytes = new TextEncoder().encode(content);
+            let bin = '';
+            for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+            const b64 = btoa(bin);
+            try {
+                const r = await jpost(API + '/write', { id: currentId, path: p, content: b64 });
+                if (!r.success) throw new Error(r.error || '保存失败');
+                alert('✅ 已保存');
+            } catch (e) {
+                alert('保存失败：' + e.message);
+            }
+        }
+
+        // ==================== 事件绑定 ====================
+
+        $('sshAddBtn').addEventListener('click', () => openConnModal(null));
+        $('sshModalClose').addEventListener('click', closeConnModal);
+        $('sshCancelConnBtn').addEventListener('click', closeConnModal);
+        $('sshSaveConnBtn').addEventListener('click', saveConnection);
+        $('sshConnModal').addEventListener('click', (e) => {
+            if (e.target === $('sshConnModal')) closeConnModal();
+        });
+
+        $('sshGoBtn').addEventListener('click', () => {
+            const v = $('sshPathInput').value.trim();
+            if (v) { currentPath = v; refreshFileList(); }
+        });
+        $('sshPathInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') $('sshGoBtn').click();
+        });
+        $('sshUpBtn').addEventListener('click', () => {
+            if (!currentPath) return;
+            const sep = currentOs === 'windows' ? '\\' : '/';
+            let p = currentPath;
+            if (p.length > 1 && (p.endsWith('/') || p.endsWith('\\'))) {
+                p = p.substring(0, p.length - 1);
+            }
+            const idx = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+            if (idx <= 0) {
+                currentPath = currentOs === 'windows' ? 'C:\\' : '/';
+            } else {
+                currentPath = p.substring(0, idx);
+                if (!currentPath && currentOs === 'windows') currentPath = 'C:';
+            }
+            $('sshPathInput').value = currentPath;
+            refreshFileList();
+        });
+        $('sshRefreshBtn').addEventListener('click', refreshFileList);
+        $('sshNewDirBtn').addEventListener('click', newDir);
+        $('sshUploadBtn').addEventListener('click', () => $('sshUploadInput').click());
+        $('sshUploadInput').addEventListener('change', (e) => {
+            const f = e.target.files && e.target.files[0];
+            if (f) uploadFile(f);
+            e.target.value = '';
+        });
+
+        $('sshRunCmdBtn').addEventListener('click', runCommand);
+        $('sshClearCmdBtn').addEventListener('click', clearCommandOutput);
+        $('sshCmdInput').addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); runCommand(); }
+        });
+
+        $('sshSaveBtn').addEventListener('click', saveEditor);
+
+        // ==================== 启动 ====================
+        loadConnections();
+    }
+})();

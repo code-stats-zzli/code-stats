@@ -106,7 +106,7 @@
                         <phase>prepare-package</phase>
                         <goals><goal>copy-dependencies</goal></goals>
                         <configuration>
-                            <outputDirectory>${project.basedir}/lib</outputDirectory>
+                            <outputDirectory>${project.basedir}/lib2</outputDirectory>
                             <includeScope>runtime</includeScope>
                             <overWriteReleases>false</overWriteReleases>
                             <overWriteSnapshots>true</overWriteSnapshots>

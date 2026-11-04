@@ -6,10 +6,11 @@
     <title>系统管理 - CodeStats</title>
     <link rel="stylesheet" href="../global-tech.css">
     <link rel="stylesheet" href="sys.css">
-    <!-- 模块样式：新增模块时在此追加 -->
     <link rel="stylesheet" href="modules/log/log.css">
     <link rel="stylesheet" href="modules/cluster/cluster.css">
     <link rel="stylesheet" href="modules/ssh/ssh.css">
+    <!-- 新增：系统参数模块样式 -->
+    <link rel="stylesheet" href="modules/params/params.css">
     <script src="../global.js"></script>
 </head>
 <body>
@@ -19,9 +20,7 @@
             <span class="sys-brand-icon">🖥️</span>
             <span class="sys-brand-text">系统管理</span>
         </div>
-        <nav class="sys-menu" id="sysMenu">
-            <!-- 菜单项由 sys.js 根据已注册模块动态渲染 -->
-        </nav>
+        <nav class="sys-menu" id="sysMenu"></nav>
         <div class="sys-menu-footer">
             <div class="sys-tip">扩展提示：后续可在此新增 JVM / 线程 / 进程 / 配置 / 命令执行等系统功能</div>
         </div>
@@ -35,10 +34,11 @@
     </main>
 </div>
 
-<!-- 先加载注册中心，再加载各模块（模块调用 SysCenter.register 注册） -->
 <script src="sys.js"></script>
 <script src="modules/log/log.js"></script>
 <script src="modules/cluster/cluster.js"></script>
 <script src="modules/ssh/ssh.js"></script>
+<!-- 新增：系统参数模块 -->
+<script src="modules/params/params.js"></script>
 </body>
 </html>

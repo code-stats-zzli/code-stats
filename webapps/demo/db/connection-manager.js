@@ -28,12 +28,26 @@
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
         }[m]));
     }
+
     function showMsg(el, msg, type) {
+        if (!el) return;
         el.style.display = 'block';
         el.className = 'msg ' + (type || 'ok');
         el.textContent = msg;
     }
-    function hideMsg(el) { el.style.display = 'none'; }
+
+    /** 富文本消息（支持 HTML），用于渲染驱动诊断 details */
+    function showRichMsg(el, html, type) {
+        if (!el) return;
+        el.style.display = 'block';
+        el.className = 'msg ' + (type || 'ok');
+        el.innerHTML = html;
+    }
+
+    function hideMsg(el) {
+        if (!el) return;
+        el.style.display = 'none';
+    }
 
     const DB_TYPE_LABELS = {
         mysql: 'MySQL', oracle: 'Oracle', sqlserver: 'SQL Server', postgresql: 'PostgreSQL'
@@ -43,6 +57,7 @@
     const ALLOWED_DB_TYPES = DB_TYPE_ORDER;
 
     const VERSION_PATTERN = /(\d+(?:\.\d+){1,3})/;
+
     function detectDbTypeFromFileName(fileName) {
         if (!fileName) return null;
         const lower = fileName.toLowerCase();
@@ -55,6 +70,7 @@
         }
         return null;
     }
+
     function detectVersionFromFileName(fileName) {
         if (!fileName) return null;
         const m = fileName.match(VERSION_PATTERN);
@@ -67,6 +83,7 @@
         resource: $('leftPaneResource'),
         sample: $('leftPaneSample')
     };
+
     function switchLeftTab(tabId) {
         leftTabsBar.querySelectorAll('.left-tab-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.tab === tabId);
@@ -77,6 +94,7 @@
         if (tabId === 'resource' && allDrivers.length === 0) loadDrivers();
         if (tabId === 'sample' && sampleList.children.length <= 1) loadSamples();
     }
+
     leftTabsBar.addEventListener('click', (e) => {
         const btn = e.target.closest('.left-tab-btn');
         if (btn) switchLeftTab(btn.dataset.tab);
@@ -86,10 +104,12 @@
     const guideCard = $('guideCard');
     const guideHeader = $('guideHeader');
     const guideToggle = $('guideToggle');
+
     guideHeader.addEventListener('click', () => {
         const collapsed = guideCard.classList.toggle('collapsed');
         guideToggle.textContent = collapsed ? '▶' : '▼';
     });
+
     function highlightStep(step) {
         document.querySelectorAll('.guide-step').forEach(el => {
             const s = parseInt(el.getAttribute('data-step'), 10);
@@ -283,6 +303,7 @@
         el.className = 'editor-msg ' + (type || 'ok');
         el.textContent = msg;
     }
+
     function hideEditorMsg() {
         const el = $('editorMsg');
         if (el) el.style.display = 'none';
@@ -379,6 +400,7 @@
         detectBanner.className = 'detect-banner ' + kind;
         detectBanner.innerHTML = html;
     }
+
     function setUploadError(msg) {
         if (uploadError) uploadError.textContent = msg || '';
     }
@@ -393,6 +415,7 @@
         setUploadError('');
         uploadModal.style.display = 'flex';
     }
+
     function closeUploadModal() { uploadModal.style.display = 'none'; }
 
     filePicker.addEventListener('click', () => jarFileInput.click());
@@ -591,11 +614,13 @@
         });
         panelEl.classList.add('show');
     }
+
     function closeAllComboPanels(except) {
         [connVersionPanel, connDriverClassPanel].forEach(p => {
             if (p && p !== except) p.classList.remove('show');
         });
     }
+
     document.addEventListener('click', (e) => {
         if (e.target.closest('.combo-wrap')) return;
         closeAllComboPanels();
@@ -643,6 +668,7 @@
             });
         });
     }
+
     connVersion.addEventListener('input', () => {
         filterPanel(connVersion, connVersionPanel, currentVersions);
         syncDriverClassFromVersion();
@@ -702,18 +728,9 @@
             if (!data.success) {
                 throw new Error(data.error || '加载驱动下拉失败');
             }
-
             currentVersions = data.versions || [];
             currentDriverClasses = data.driverClasses || [];
             currentVersionDriverMap = data.versionDriverMap || {};
-
-            if (!connVersion.value && currentVersions.length > 0) {
-                connVersion.value = currentVersions[0];
-            }
-            if (!connDriverClass.value && currentVersions.length > 0) {
-                connDriverClass.value = currentVersionDriverMap[connVersion.value]
-                    || inferDriverClassFallback(type, connVersion.value);
-            }
         } catch (e) {
             if (!silent) {
                 showMsg(statusMsg, '加载驱动下拉失败：' + e.message, 'bad');
@@ -768,6 +785,46 @@
         }
     }
 
+    /**
+     * ★ 渲染驱动加载失败的完整诊断信息
+     * 覆盖 not_found / resolve_class / load_class / linkage / cast / instantiate / read_jar
+     */
+    function showDriverError(details, errorText) {
+        if (!statusMsg) return;
+        const d = details || {};
+        let html = '<div style="font-weight:600;margin-bottom:8px;">❌ '
+            + esc(errorText || '驱动加载失败') + '</div>';
+        html += '<div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;line-height:1.75;">';
+        html += '<div><b>失败阶段：</b>' + esc(d.stage || '-') + '</div>';
+        html += '<div><b>数据库类型：</b>' + esc(d.dbType || '-') + '</div>';
+        if (d.version) {
+            html += '<div><b>驱动版本：</b>' + esc(d.version) + '</div>';
+        }
+        html += '<div><b>驱动来源：</b>' + esc(d.jarSource || '-') + '</div>';
+        if (d.jarPath) {
+            html += '<div><b>JAR 位置：</b>' + esc(d.jarPath) + '</div>';
+        }
+        if (d.expectedClass) {
+            html += '<div><b>期望类：</b>' + esc(d.expectedClass) + '</div>';
+        }
+        if (Array.isArray(d.candidates) && d.candidates.length > 0) {
+            html += '<div style="margin-top:4px;"><b>JAR 内候选类：</b></div>';
+            html += '<ul style="margin:4px 0 4px 20px;padding:0;">';
+            d.candidates.forEach(function (c) {
+                html += '<li>' + esc(c) + '</li>';
+            });
+            html += '</ul>';
+        }
+        if (d.hint) {
+            html += '<div style="margin-top:10px;padding:10px 12px;background:rgba(0,0,0,0.04);'
+                + 'border-left:3px solid #dc2626;white-space:pre-wrap;line-height:1.7;">';
+            html += esc(d.hint);
+            html += '</div>';
+        }
+        html += '</div>';
+        showRichMsg(statusMsg, html, 'bad');
+    }
+
     async function testConnection() {
         const url = connUrl.value.trim();
         if (!url) {
@@ -777,6 +834,7 @@
 
         testBtn.disabled = true;
         testBtn.textContent = '⏳ 连接中...';
+        hideMsg(statusMsg);
 
         try {
             const resp = await fetch(API + '/test', {
@@ -802,7 +860,12 @@
                 highlightStep(5);
             } else {
                 setConnected(false);
-                showMsg(statusMsg, data.error || '连接失败', 'bad');
+                // ★ 驱动加载失败 → 渲染结构化诊断
+                if (data.errorType === 'driver_load' && data.details) {
+                    showDriverError(data.details, data.error);
+                } else {
+                    showMsg(statusMsg, data.error || '连接失败', 'bad');
+                }
             }
         } catch (e) {
             setConnected(false);
@@ -815,7 +878,6 @@
 
     async function closeConnection() {
         if (!currentTempId) return;
-
         const id = currentTempId;
         try {
             await fetch(API + '/close', {
@@ -826,12 +888,9 @@
         } catch (e) {
             console.warn('关闭临时连接失败', e);
         }
-
         setConnected(false);
         showMsg(statusMsg, '连接已关闭', 'ok');
-        setTimeout(function () {
-            hideMsg(statusMsg);
-        }, 1500);
+        setTimeout(() => hideMsg(statusMsg), 1500);
     }
 
     function renderSqlResult(data) {
@@ -850,7 +909,6 @@
             html += `<th>${esc(c)}</th>`;
         });
         html += '</tr></thead><tbody>';
-
         rows.forEach(function (row) {
             html += '<tr>';
             cols.forEach(function (c) {
@@ -861,7 +919,6 @@
             });
             html += '</tr>';
         });
-
         html += '</tbody></table></div>';
         sqlResult.innerHTML = html;
     }
@@ -910,7 +967,6 @@
             showMsg(statusMsg, '请先测试连接', 'bad');
             return;
         }
-
         const name = dsName.value.trim();
         saveDsBtn.disabled = true;
         saveDsBtn.textContent = '⏳ 保存中...';
@@ -941,17 +997,14 @@
     }
 
     // ==================== 事件绑定 ====================
-
     parseBtn.addEventListener('click', doParse);
     testBtn.addEventListener('click', testConnection);
     closeBtn.addEventListener('click', closeConnection);
     execSqlBtn.addEventListener('click', executeSql);
-
     clearSqlBtn.addEventListener('click', function () {
         sqlInput.value = '';
         sqlResult.innerHTML = '';
     });
-
     saveDsBtn.addEventListener('click', saveDataSource);
 
     connDbType.addEventListener('change', async function () {
@@ -961,13 +1014,10 @@
     });
 
     // ==================== 初始化 ====================
-
     setConnected(false);
     loadSamples();
 
-    // 如果默认有数据库类型，加载下拉
     if (connDbType.value) {
         loadComboboxOptions(connDbType.value, true);
     }
-
 })();

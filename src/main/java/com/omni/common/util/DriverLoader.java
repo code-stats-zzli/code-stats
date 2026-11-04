@@ -15,11 +15,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * 驱动加载器。
  *
  * <p>加载顺序（命中即返回，classpath 放最后兜底）：</p>
- *   <ol>
- *     <li><b>driver_jar 表</b>（数据库 blob，dbType+version 精确；无 version 取该 dbType 最新）</li>
- *     <li><b>resources/drivers 目录</b>（文件名 {dbType}_{version}_{fileName}.jar）</li>
- *     <li><b>classpath</b> 内置驱动（最后兜底）</li>
- *   </ol>
+ * <ol>
+ *   <li><b>driver_jar 表</b>（数据库 blob，dbType+version 精确；无 version 取该 dbType 最新）</li>
+ *   <li><b>resources/drivers 目录</b>（文件名 {dbType}_{version}_{fileName}.jar）</li>
+ *   <li><b>classpath</b> 内置驱动（最后兜底）</li>
+ * </ol>
  *
  * <p>失败时统一抛 {@link DriverLoadException}，携带来源 / JAR 位置 / 期望类 / 候选类 / 修复建议，
  * 供上层 Controller 序列化到前端展示。</p>
@@ -68,7 +68,6 @@ public class DriverLoader {
         }
 
         // ---------- ② resources/drivers 目录 ----------
-        // 若目录里找到匹配文件，直接加载；失败抛 DriverLoadException（不静默回退）
         Driver dirDriver = DriverResourceScanner.loadDriver(type, version);
         if (dirDriver != null) {
             driverCache.put(key, dirDriver);
@@ -86,7 +85,10 @@ public class DriverLoader {
         }
 
         // ---------- ④ 全部失败 ----------
-        String hint = "驱动加载失败。请按以下顺序排查：\n"
+        String versionInfo = (version == null || version.trim().isEmpty())
+                ? "" : "（version=" + version + "）";
+        String hint = "未找到 " + type + versionInfo + " 数据库驱动，已检查 driver_jar 表、resources/drivers 目录、classpath 三处均无可用驱动。\n"
+                + "请按以下顺序排查：\n"
                 + "1) 是否已在「系统管理 → 资源管理 → 驱动管理」上传 " + type + " 驱动 JAR？\n"
                 + "2) 上传的 JAR 是否完整、是否是对应数据库的驱动包？\n"
                 + "3) 若已上传但类名不匹配，请在数据源配置中手动指定 driverClass；\n"

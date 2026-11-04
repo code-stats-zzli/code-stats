@@ -226,10 +226,10 @@
                         <goals><goal>run</goal></goals>
                         <configuration>
                             <target>
-                                <delete dir="${project.basedir}/deploy" quiet="true"/>
-                                <mkdir dir="${project.basedir}/deploy"/>
+                                <delete dir="${project.basedir}/resources/deploy" quiet="true"/>
+                                <mkdir dir="${project.basedir}/resources/deploy"/>
                                 <copy file="${project.build.directory}/${project.build.finalName}.jar"
-                                      tofile="${project.basedir}/deploy/${project.build.finalName}.jar"
+                                      tofile="${project.basedir}/resources/deploy/${project.build.finalName}.jar"
                                       overwrite="true"/>
                             </target>
                         </configuration>

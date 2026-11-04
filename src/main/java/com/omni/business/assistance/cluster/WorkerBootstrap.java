@@ -1,6 +1,7 @@
 package com.omni.business.assistance.cluster;
 
 import com.omni.framework.util.JsonUtil;
+import com.omni.framework.util.NetworkUtils;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -14,6 +15,9 @@ import java.util.UUID;
 /**
  * Worker 端自举：启动时向主服务注册 + 心跳。
  * 独立于 Spring，用 HttpURLConnection + JsonUtil，无额外依赖。
+ *
+ * <p>★ 本次改动：host 探测改用 {@link NetworkUtils#getLocalIpv4()}，
+ * 避免 Linux 上 getLocalHost() 返回 127.0.1.1 或机器名，确保主服务能看到 Worker 真实 IP。</p>
  */
 public final class WorkerBootstrap {
 
@@ -124,9 +128,16 @@ public final class WorkerBootstrap {
         try { return Integer.parseInt(s); } catch (Exception e) { return def; }
     }
 
+    /**
+     * 探测 Worker 本机真实 IPv4。
+     * ★ 改自 NetworkUtils，避免 getLocalHost() 回环/机器名问题。
+     */
     private static String safeHost() {
-        try { return java.net.InetAddress.getLocalHost().getHostAddress(); }
-        catch (Exception e) { return "127.0.0.1"; }
+        try {
+            return NetworkUtils.getLocalIpv4();
+        } catch (Throwable t) {
+            return "127.0.0.1";
+        }
     }
 
     private static void sleep(long ms) {

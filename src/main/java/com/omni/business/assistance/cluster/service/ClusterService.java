@@ -11,11 +11,19 @@ import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Service;
 import com.omni.framework.spring.config.ConfigLoader;
-import com.omni.framework.util.JsonUtil;
+import com.omni.framework.util.NetworkUtils;
 
-import java.nio.file.*;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -23,6 +31,21 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * 集群服务：节点注册表 + Token 管理 + 部署编排。
+ *
+ * <p><b>masterId / masterToken 来源（★ 本次改动）</b></p>
+ * <ol>
+ *   <li>从 {@code application.properties} 读取：</li>
+ *   <li>{@code cluster.master.id} → masterNodeId</li>
+ *   <li>{@code cluster.master.token} → masterToken</li>
+ *   <li>未配置时启动期临时生成随机值（仅内存，重启即变），并打印 WARN 提示</li>
+ * </ol>
+ * <p>不再向 {@code .cluster/} 目录落盘任何文件。</p>
+ *
+ * <p><b>masterUrl 解析顺序</b></p>
+ * <ol>
+ *   <li>显式配置 {@code cluster.master.url} → 直接使用</li>
+ *   <li>未配置 → 使用 {@link NetworkUtils#getLocalIpv4()} 探测本机真实 IPv4 拼装</li>
+ * </ol>
  */
 @Service
 public class ClusterService {
@@ -38,39 +61,55 @@ public class ClusterService {
 
     private final String masterNodeId;
     private final String masterToken;
-    private final Path   clusterDir;
-    private final Path   deployDir;     // resources/deploy
-    private final String masterUrl;     // 外部可访问的主服务 URL
+    private final Path   deployDir;
+    /** 主服务访问 URL（如 http://192.168.1.10:28080/omni） */
+    private final String masterUrl;
+    /** 主服务纯 host（不含端口，例如 192.168.1.10） */
+    private final String masterHost;
     private final int    masterPort;
     private final String contextPath;
 
     public ClusterService() {
-        this.clusterDir = Paths.get(System.getProperty("user.dir"), ".cluster");
-        this.deployDir  = Paths.get(System.getProperty("user.dir"), "resources", "deploy");
-        try { Files.createDirectories(clusterDir); Files.createDirectories(deployDir); }
-        catch (Exception e) { log.error("创建集群目录失败", e); }
+        // ---------- 1. 部署目录 ----------
+        this.deployDir = Paths.get(System.getProperty("user.dir"), "resources", "deploy");
+        try { Files.createDirectories(deployDir); }
+        catch (Exception e) { log.error("创建部署目录失败", e); }
 
-        this.masterNodeId = loadOrCreate(clusterDir.resolve("master.id"),
-                () -> UUID.randomUUID().toString().replace("-", ""));
-        this.masterToken  = loadOrCreate(clusterDir.resolve("master.token"),
-                () -> UUID.randomUUID().toString().replace("-", ""));
+        // ---------- 2. masterNodeId：从配置读取，不再落盘 ----------
+        this.masterNodeId = resolveMasterId();
 
+        // ---------- 3. masterToken：从配置读取，不再落盘 ----------
+        this.masterToken = resolveMasterToken();
+
+        // ---------- 4. 端口 / contextPath ----------
         this.masterPort  = Integer.parseInt(ConfigLoader.getProperty("server.port", "28080"));
         this.contextPath = ConfigLoader.getProperty("context.path", "/omni");
-        this.masterUrl   = ConfigLoader.getProperty("cluster.master.url",
-                "http://127.0.0.1:" + masterPort + contextPath);
 
-        // 注册通道
+        // ---------- 5. masterUrl：配置优先，否则探测本机真实 IPv4 ----------
+        String configured = ConfigLoader.getProperty("cluster.master.url", "");
+        if (configured != null && !configured.trim().isEmpty()) {
+            this.masterUrl  = configured.trim();
+            this.masterHost = extractHost(this.masterUrl);
+            log.info("使用配置的 cluster.master.url = {}", masterUrl);
+        } else {
+            this.masterHost = NetworkUtils.getLocalIpv4();
+            this.masterUrl  = "http://" + masterHost + ":" + masterPort + contextPath;
+            log.info("未配置 cluster.master.url，自动探测本机 IP = {}，masterUrl = {}",
+                    masterHost, masterUrl);
+        }
+
+        // ---------- 6. 注册通道 ----------
         CHANNELS.put("local",  new LocalDeployChannel());
         CHANNELS.put("ssh",    new SshDeployChannel());
         CHANNELS.put("manual", new ManualDeployChannel());
 
-        // 主节点入表
+        // ---------- 7. 主节点入表 ----------
         ClusterNode master = new ClusterNode();
         master.setNodeId(masterNodeId);
         master.setRole("MASTER");
         master.setChannel("local");
         master.setState("RUNNING");
+        master.setHost(masterHost);
         master.setPort(masterPort);
         master.setStartTime(System.currentTimeMillis());
         master.setLastHeartbeat(System.currentTimeMillis());
@@ -79,17 +118,58 @@ public class ClusterService {
         master.setMasterUrl(masterUrl);
         NODES.put(masterNodeId, master);
 
-        // 启动心跳检查
+        // ---------- 8. 启动心跳检查 ----------
         heartbeatChecker.scheduleAtFixedRate(this::checkHeartbeats, 15, 15, TimeUnit.SECONDS);
 
         log.info("ClusterService 就绪: masterNodeId={}, masterUrl={}, token 长度={}",
                 masterNodeId, masterUrl, masterToken.length());
     }
 
+    // ==================== masterId / masterToken 解析 ====================
+
+    private static String resolveMasterId() {
+        String v = ConfigLoader.getProperty("cluster.master.id", "");
+        if (v != null && !v.trim().isEmpty()) {
+            String id = v.trim();
+            log.info("cluster.master.id = {}（来自配置）", id);
+            return id;
+        }
+        String tmp = UUID.randomUUID().toString().replace("-", "");
+        log.warn("════════════════════════════════════════════════════════════");
+        log.warn("  ⚠ 未配置 cluster.master.id，临时生成内存 ID = {}", tmp);
+        log.warn("    重启后该 ID 会变化，之前注册的 Worker 会变成 UNKNOWN。");
+        log.warn("    强烈建议在 application.properties 中配置固定值，例如：");
+        log.warn("      cluster.master.id=master-001");
+        log.warn("════════════════════════════════════════════════════════════");
+        return tmp;
+    }
+
+    private static String resolveMasterToken() {
+        String v = ConfigLoader.getProperty("cluster.master.token", "");
+        if (v != null && !v.trim().isEmpty()) {
+            String token = v.trim();
+            log.info("cluster.master.token 已配置（长度={}，预览={}****）",
+                    token.length(), token.substring(0, Math.min(8, token.length())));
+            return token;
+        }
+        String tmp = UUID.randomUUID().toString().replace("-", "");
+        log.warn("════════════════════════════════════════════════════════════");
+        log.warn("  ⚠ 未配置 cluster.master.token，临时生成内存 token（预览={}****）",
+                tmp.substring(0, 8));
+        log.warn("    重启后该 token 会变化，之前部署的 Worker 将无法通过 Token 校验。");
+        log.warn("    强烈建议在 application.properties 中配置固定值，例如：");
+        log.warn("      cluster.master.token=change-me-please-use-a-long-random-string");
+        log.warn("    并保证 Worker 启动参数一致：");
+        log.warn("      --cluster.master.token=<与上面一致>");
+        log.warn("════════════════════════════════════════════════════════════");
+        return tmp;
+    }
+
     // ==================== 主节点 / Token ====================
 
     public ClusterNode getMaster() { return NODES.get(masterNodeId); }
     public String getMasterUrl() { return masterUrl; }
+    public String getMasterHost() { return masterHost; }
     public String getMasterToken() { return masterToken; }
     public int getMasterPort() { return masterPort; }
 
@@ -97,10 +177,15 @@ public class ClusterService {
         return token != null && token.equals(masterToken);
     }
 
+    /**
+     * 主节点信息（前端卡片使用）。
+     * <p>注意：返回的 tokenPreview 仅为展示用，完整 token 不向浏览器暴露，
+     * 手动部署时的 downloadUrl / startCommand 已在后端内嵌完整 token。</p>
+     */
     public Map<String, Object> getMasterInfo() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("nodeId", masterNodeId);
-        m.put("host", masterUrl.replaceAll("^https?://", "").replaceAll("/.*$", ""));
+        m.put("host", masterHost);              // ★ 纯 host，不含端口
         m.put("port", masterPort);
         m.put("contextPath", contextPath);
         m.put("masterUrl", masterUrl);
@@ -108,7 +193,7 @@ public class ClusterService {
         m.put("osName", System.getProperty("os.name"));
         m.put("osArch", System.getProperty("os.arch"));
         m.put("startTime", getMaster().getStartTime());
-        m.put("tokenPreview", masterToken.substring(0, 8) + "****");
+        m.put("tokenPreview", masterToken.substring(0, Math.min(8, masterToken.length())) + "****");
         return m;
     }
 
@@ -206,14 +291,12 @@ public class ClusterService {
         if (result.pid != null) node.setPid(result.pid);
 
         if (result.manualOnly) {
-            // 手动模式：只返回命令，不登记节点（等 Worker 上线才注册）
             resp.put("success", true);
             resp.put("manualOnly", true);
             resp.put("nodeId", node.getNodeId());
             resp.put("downloadUrl", result.downloadUrl);
             resp.put("startCommand", result.startCommand);
             resp.put("logs", result.logs);
-            // 先入表 STARTING，让用户能看到"等待注册"
             NODES.put(node.getNodeId(), node);
         } else {
             NODES.put(node.getNodeId(), node);
@@ -269,8 +352,8 @@ public class ClusterService {
         incoming.setLastHeartbeat(System.currentTimeMillis());
         if (incoming.getStartTime() == 0) incoming.setStartTime(System.currentTimeMillis());
         NODES.put(incoming.getNodeId(), incoming);
-        log.info("worker 注册: nodeId={}, port={}, host={}",
-                incoming.getNodeId(), incoming.getPort(), incoming.getHost());
+        log.info("worker 注册: nodeId={}, host={}, port={}",
+                incoming.getNodeId(), incoming.getHost(), incoming.getPort());
         resp.put("success", true);
         resp.put("masterNodeId", masterNodeId);
         return resp;
@@ -325,15 +408,6 @@ public class ClusterService {
         return ch != null ? ch : CHANNELS.get("manual");
     }
 
-    private static String loadOrCreate(Path p, java.util.function.Supplier<String> sup) {
-        try {
-            if (Files.exists(p)) return new String(Files.readAllBytes(p), "UTF-8").trim();
-            String v = sup.get();
-            Files.write(p, v.getBytes("UTF-8"));
-            return v;
-        } catch (Exception e) { return sup.get(); }
-    }
-
     private static String md5(Path p) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
@@ -343,5 +417,16 @@ public class ClusterService {
             for (byte b : d) sb.append(String.format("%02x", b));
             return sb.toString();
         } catch (Exception e) { return ""; }
+    }
+
+    /** 从 URL 提取纯 host（不含 scheme / 端口 / path） */
+    private static String extractHost(String url) {
+        if (url == null || url.isEmpty()) return "127.0.0.1";
+        String s = url.replaceFirst("^https?://", "");
+        int slash = s.indexOf('/');
+        if (slash >= 0) s = s.substring(0, slash);
+        int colon = s.lastIndexOf(':');
+        if (colon > 0) s = s.substring(0, colon);
+        return s;
     }
 }

@@ -71,6 +71,13 @@
                         </span>
                     </div>
 
+                    <div class="form-row" id="clientIpHintRow" style="display:none;">
+                        <span style="font-size:12px;color:#0066ff;">
+                            🖥️ 当前浏览器所在主机 IP：<b id="clientIpText">-</b>
+                            （可修改下方目标机 IP 后再部署到本机）
+                        </span>
+                    </div>
+
                     <div id="jdkResult"></div>
 
                     <div class="form-row">
@@ -92,9 +99,11 @@
         `;
 
         const $ = id => container.querySelector('#' + id);
-        let currentChannel = 'ssh';
+        let currentChannel = 'ssh';           // ★ 默认走 SSH
         let selectedJavaPath = '';
         let cachedPackages = [];
+        /** ★ 新增：服务器网络信息（/server-info 返回） */
+        let serverInfo = null;
 
         const API = window.apiUrl('/cluster/api');
 
@@ -115,29 +124,63 @@
             return (b/1024/1024).toFixed(2) + ' MB';
         }
 
-        // ============== 主节点信息 ==============
+        // ============== ★ 新增：加载服务器 / 客户端网络信息 ==============
+        async function loadServerInfo() {
+            try {
+                const r = await fetch(API + '/server-info', { cache: 'no-store' })
+                    .then(x => x.json());
+                if (!r.success) return null;
+                serverInfo = r.data || {};
+                return serverInfo;
+            } catch (e) {
+                console.warn('[cluster] 获取服务器信息失败', e);
+                return null;
+            }
+        }
+
+        // ============== 主节点信息（含真实 IP 与客户端 IP） ==============
         async function loadMaster() {
             try {
-                const r = await fetch(API + '/master').then(x => x.json());
-                if (!r.success) throw new Error(r.error);
-                const m = r.data || {};
+                // ★ 并行拉 master + server-info，一次渲染
+                const [masterResp, si] = await Promise.all([
+                    fetch(API + '/master', { cache: 'no-store' }).then(x => x.json()),
+                    loadServerInfo()
+                ]);
+                if (!masterResp.success) throw new Error(masterResp.error);
+                const m = masterResp.data || {};
+                const clientIp = si && si.clientIp ? si.clientIp : '-';
+                const candidateIps = si && si.candidateIps ? si.candidateIps : [];
+
+                // ★ 主节点卡片额外展示：真实服务器 IP + 客户端 IP + 候选网卡
+                const items = [
+                    item('节点 ID', m.nodeId),
+                    item('服务器 IP', m.host + ':' + m.port),
+                    item('客户端 IP', clientIp),
+                    item('Context', m.contextPath),
+                    item('JDK', m.jdkVersion),
+                    item('OS', m.osName + ' / ' + m.osArch),
+                    item('启动时间', fmtTime(m.startTime)),
+                    item('Master URL', m.masterUrl),
+                    item('Token', m.tokenPreview)
+                ];
+                if (candidateIps.length > 1) {
+                    items.push(item('其他候选 IP', candidateIps.slice(1).join(' / ')));
+                }
+
                 $('masterInfo').outerHTML = `
                     <div class="master-grid" id="masterInfo">
-                        ${item('节点 ID', m.nodeId)}
-                        ${item('Host:Port', m.host + ':' + m.port)}
-                        ${item('Context', m.contextPath)}
-                        ${item('JDK', m.jdkVersion)}
-                        ${item('OS', m.osName + ' / ' + m.osArch)}
-                        ${item('启动时间', fmtTime(m.startTime))}
-                        ${item('Master URL', m.masterUrl)}
-                        ${item('Token', m.tokenPreview)}
+                        ${items.join('')}
                     </div>
                 `;
+
+                // ★ SSH 目标机默认填客户端 IP
+                applyClientIpToSshHost(si);
             } catch (e) {
                 $('masterInfo').outerHTML =
                     `<div id="masterInfo" class="result-err result-box">❌ ${escapeHtml(e.message)}</div>`;
             }
         }
+
         function item(lbl, val) {
             return `<div class="master-item">
                 <div class="lbl">${escapeHtml(lbl)}</div>
@@ -145,11 +188,27 @@
             </div>`;
         }
 
+        // ★ 把客户端 IP 自动填入 SSH 目标机（仅默认，允许用户修改）
+        function applyClientIpToSshHost(si) {
+            if (!si || !si.clientIp || si.clientIp === 'unknown') return;
+            const hintRow = $('clientIpHintRow');
+            const hintText = $('clientIpText');
+            if (hintRow && hintText) {
+                hintText.textContent = si.clientIp;
+                hintRow.style.display = 'flex';
+            }
+            const sshHostInput = $('sshHost');
+            if (sshHostInput && !sshHostInput.value) {
+                sshHostInput.value = si.clientIp;
+                sshHostInput.title = '已自动填充当前浏览器所在主机的 IP，可修改';
+            }
+        }
+
         // ============== 节点列表 ==============
         let pollTimer = null;
         async function loadNodes() {
             try {
-                const r = await fetch(API + '/nodes').then(x => x.json());
+                const r = await fetch(API + '/nodes', { cache: 'no-store' }).then(x => x.json());
                 if (!r.success) throw new Error(r.error);
                 const nodes = r.nodes || [];
                 if (nodes.length === 0) {
@@ -214,7 +273,7 @@
         // ============== 部署包列表 ==============
         async function loadPackages() {
             try {
-                const r = await fetch(API + '/packages').then(x => x.json());
+                const r = await fetch(API + '/packages', { cache: 'no-store' }).then(x => x.json());
                 if (!r.success) throw new Error(r.error);
                 cachedPackages = r.packages || [];
                 const sel = $('jarSelect');
@@ -434,13 +493,15 @@
             $('jdkResult').innerHTML = '';
             $('deployResult').innerHTML = '';
             selectedJavaPath = '';
+            // ★ 重置时重新应用客户端 IP
+            applyClientIpToSshHost(serverInfo);
             checkEnable();
         });
 
         $('refreshNodesBtn').addEventListener('click', loadNodes);
 
         // ============== 初始化 & 轮询 ==============
-        loadMaster();
+        loadMaster();          // ★ 会并行请求 /master + /server-info，并自动填客户端 IP
         loadPackages();
         loadNodes();
 

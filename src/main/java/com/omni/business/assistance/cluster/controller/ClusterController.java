@@ -10,8 +10,10 @@ import com.omni.framework.spring.mvc.ResponseContextHolder;
 import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
 import com.omni.framework.util.JsonUtil;
+import com.omni.framework.util.NetworkUtils;
 
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -31,6 +33,62 @@ public class ClusterController {
     @ResponseBody
     public String master() {
         return JsonUtil.toJson(ok(service.getMasterInfo()));
+    }
+
+    /**
+     * ★ 新增：服务器 / 客户端网络信息。
+     *
+     * <p>返回：</p>
+     * <ul>
+     *   <li>{@code serverIp}  服务端真实 IPv4</li>
+     *   <li>{@code clientIp}  客户端真实 IPv4（兼容反向代理）</li>
+     *   <li>{@code hostname}  服务端主机名</li>
+     *   <li>{@code masterUrl} 主服务访问 URL</li>
+     *   <li>{@code interfaces} 所有候选网卡</li>
+     *   <li>{@code candidateIps} 候选 IP（按优先级排序）</li>
+     * </ul>
+     */
+    @RequestMapping("/server-info")
+    @ResponseBody
+    public String serverInfo() {
+        try {
+            Map<String, Object> data = new LinkedHashMap<>();
+            HttpServletRequest req = RequestContextHolder.getRequest();
+
+            String serverIp = service.getMasterHost();
+            String clientIp = NetworkUtils.getClientIp(req);
+            String hostname;
+            try { hostname = InetAddress.getLocalHost().getHostName(); }
+            catch (Exception e) { hostname = "unknown"; }
+
+            data.put("serverIp", serverIp);
+            data.put("serverPort", service.getMasterPort());
+            data.put("clientIp", clientIp);
+            data.put("hostname", hostname);
+            data.put("masterUrl", service.getMasterUrl());
+
+            List<Map<String, Object>> interfaces = NetworkUtils.listNetworkInterfaces();
+            data.put("interfaces", interfaces);
+
+            // 候选 IP：过滤掉回环，按 listNetworkInterfaces 内部排序（同优先级保序）
+            List<String> candidateIps = new java.util.ArrayList<>();
+            if (interfaces != null) {
+                for (Map<String, Object> ni : interfaces) {
+                    Boolean loopback = (Boolean) ni.get("loopback");
+                    Boolean virtual  = (Boolean) ni.get("virtual");
+                    String ip = (String) ni.get("ip");
+                    if (Boolean.FALSE.equals(loopback) && Boolean.FALSE.equals(virtual) && ip != null) {
+                        candidateIps.add(ip);
+                    }
+                }
+            }
+            // 去重
+            data.put("candidateIps", new java.util.ArrayList<>(new java.util.LinkedHashSet<>(candidateIps)));
+
+            return JsonUtil.toJson(ok(data));
+        } catch (Exception e) {
+            return error("获取服务器信息失败: " + e.getMessage());
+        }
     }
 
     @RequestMapping("/packages")

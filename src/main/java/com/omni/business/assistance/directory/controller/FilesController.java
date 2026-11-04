@@ -235,7 +235,6 @@ public class FilesController {
         catch (Exception e) { return errorResponse(e.getMessage()); }
     }
 
-    /** 列出某类型某路径下的资源（目录 + 文件） */
     @RequestMapping("/resources/list")
     @ResponseBody
     public String listResources() {
@@ -250,7 +249,6 @@ public class FilesController {
         }
     }
 
-    /** 新增子目录 */
     @RequestMapping("/resources/mkdir")
     @ResponseBody
     public String createResourceSubDir() {
@@ -273,14 +271,9 @@ public class FilesController {
 
     /**
      * 上传资源（multipart）。
-     *
-     * <p>普通类型（images/pages/sql/attachments/others）：
-     *   只需 file + type + path，后端按 {basename}_{uuid}.ext 命名。</p>
-     *
-     * <p>驱动类型（drivers）：
-     *   额外需要 dbType（mysql/oracle/sqlserver/postgresql）+ version，
-     *   后端按 {dbType}_{version}_{原始文件名}.jar 命名，
-     *   严格限制只允许 .jar；同 dbType + version 不可重复。</p>
+     *   - drivers：需 dbType + version，{dbType}_{version}_{原始文件名}.jar
+     *   - deploy：只允许 .jar，保留原文件名，同名拒绝
+     *   - 其他：{basename}_{uuid}.ext
      */
     @RequestMapping("/resources/upload")
     @ResponseBody
@@ -294,7 +287,6 @@ public class FilesController {
         FileItem fileItem = multipart.getFileItem("file");
         String type = multipart.getParameter("type");
         String path = multipart.getParameter("path");
-        // ★ 驱动专用参数（普通类型忽略）
         String dbType = multipart.getParameter("dbType");
         String version = multipart.getParameter("version");
         if (path == null) path = "";
@@ -306,7 +298,6 @@ public class FilesController {
             String originalName = fileItem.getFileName();
             if (originalName == null || originalName.isEmpty()) return errorResponse("文件名为空");
 
-            // ★ 驱动类型：Controller 层做前置校验，Service 层还会再校验一次
             if (DirectoryService.RES_TYPE_DRIVERS.equals(type)) {
                 if (!originalName.toLowerCase().endsWith(".jar")) {
                     return errorResponse("驱动只允许上传 .jar 文件");
@@ -319,6 +310,13 @@ public class FilesController {
                 }
             }
 
+            // ★ 新增：项目部署类型前置校验
+            if (DirectoryService.RES_TYPE_DEPLOY.equals(type)) {
+                if (!originalName.toLowerCase().endsWith(".jar")) {
+                    return errorResponse("项目部署目录只允许上传 .jar 文件");
+                }
+            }
+
             byte[] content = fileItem.getBytes();
             Map<String, Object> result = directoryService.uploadResource(
                     type, path, originalName, content, dbType, version);
@@ -328,10 +326,8 @@ public class FilesController {
             resp.put("data", result);
             return JsonUtil.toJson(resp);
         } catch (IllegalArgumentException | SecurityException e) {
-            // 参数 / 路径校验类错误，直接展示给用户
             return errorResponse(e.getMessage());
         } catch (IOException e) {
-            // 文件写入类错误（如驱动重复）
             log.warn("上传资源失败(IO): type={}, path={}, msg={}", type, path, e.getMessage());
             return errorResponse("上传失败: " + e.getMessage());
         } catch (Exception e) {
@@ -340,7 +336,6 @@ public class FilesController {
         }
     }
 
-    /** 删除资源（文件或目录，递归） */
     @RequestMapping("/resources/delete")
     @ResponseBody
     public String deleteResource() {
@@ -357,7 +352,6 @@ public class FilesController {
         }
     }
 
-    /** 下载资源 */
     @RequestMapping("/resources/download")
     public void downloadResource() throws Exception {
         HttpServletResponse response = ResponseContextHolder.getResponse();
@@ -379,7 +373,6 @@ public class FilesController {
                 return;
             }
             String fileName = filePath.getFileName().toString();
-            // ★ 驱动类型的展示名要反解（去掉 {dbType}_{version}_ 前缀）
             String displayName = directoryService.parseDisplayName(type, fileName);
             String encoded = URLEncoder.encode(displayName, StandardCharsets.UTF_8.name())
                     .replaceAll("\\+", "%20");
@@ -395,7 +388,6 @@ public class FilesController {
         }
     }
 
-    /** 预览资源（inline，用于图片/HTML） */
     @RequestMapping("/resources/preview")
     public void previewResource() throws Exception {
         HttpServletResponse response = ResponseContextHolder.getResponse();
@@ -426,7 +418,6 @@ public class FilesController {
         }
     }
 
-    /** 读取文本内容（SQL / 页面等） */
     @RequestMapping("/resources/read")
     @ResponseBody
     public String readResourceContent() {
@@ -491,7 +482,6 @@ public class FilesController {
         return request.getBody();
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, Object> parseJson(String json) {
         Map<String, Object> map = new HashMap<>();
         if (json == null || json.trim().isEmpty()) return map;

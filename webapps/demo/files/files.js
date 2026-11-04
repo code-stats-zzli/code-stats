@@ -11,7 +11,6 @@
         sqlserver: 'SQL Server',
         postgresql: 'PostgreSQL'
     };
-    // 与后端 DriverFileNameParser.VERSION_PATTERN 完全一致
     const VERSION_PATTERN = /(\d+(?:\.\d+){1,3})/;
 
     const TYPE_ICONS = {
@@ -20,6 +19,8 @@
         sql: '🗃️',
         attachments: '📎',
         drivers: '🔌',
+        // ★ 新增：项目部署
+        deploy: '🚀',
         others: '📦'
     };
     function getTypeIcon(type) { return TYPE_ICONS[type] || '📦'; }
@@ -29,7 +30,7 @@
     let currentSubPath = '';
     let resourceTypes = {};
 
-    // ==================== DOM 引用（全部可能为 null，逐一 null 检查） ====================
+    // ==================== DOM 引用 ====================
     const resourceTypeList    = document.getElementById('resourceTypeList');
     const resourceTitle       = document.getElementById('resourceTitle');
     const breadcrumb          = document.getElementById('breadcrumb');
@@ -72,7 +73,6 @@
     }
     function showMsg(msg) { alert(msg); }
 
-    // 文件名识别
     function detectDbTypeFromFileName(fileName) {
         if (!fileName) return null;
         const lower = fileName.toLowerCase();
@@ -218,6 +218,9 @@
                 thumbHtml = `<div class="res-thumb-fallback page-icon">📄</div>`;
             } else if (currentType === 'drivers') {
                 thumbHtml = `<div class="res-thumb-fallback" style="color:#7c3aed;">🔌</div>`;
+            } else if (currentType === 'deploy') {
+                // ★ 新增：项目部署专用缩略图
+                thumbHtml = `<div class="res-thumb-fallback" style="color:#ef4444;font-size:36px;">🚀</div>`;
             } else {
                 thumbHtml = `<div class="res-thumb-fallback">${getTypeIcon(currentType)}</div>`;
             }
@@ -228,6 +231,8 @@
                 metaLine = `<span style="color:#0066ff;font-weight:600;">${escapeHtml(typeLabel)}</span> · `
                     + `<span style="font-family:monospace;">${escapeHtml(item.version || '')}</span> · `
                     + `${formatSize(item.size)}`;
+            } else if (currentType === 'deploy' && !isDir) {
+                metaLine = `<span style="color:#ef4444;font-weight:600;">JAR</span> · ${formatSize(item.size)} · ${item.modified || ''}`;
             } else {
                 metaLine = isDir ? '目录' : formatSize(item.size) + ' · ' + (item.modified || '');
             }
@@ -253,7 +258,6 @@
         html += '</div>';
         resourceListPanel.innerHTML = html;
 
-        // 双击
         resourceListPanel.querySelectorAll('.resource-card').forEach(card => {
             card.addEventListener('dblclick', (e) => {
                 if (e.target.closest('.res-action-btn')) return;
@@ -268,7 +272,6 @@
             });
         });
 
-        // 操作按钮
         resourceListPanel.querySelectorAll('.res-action-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -289,6 +292,12 @@
     function handleFileDblClick(fullPath) {
         const name = fullPath.split('/').pop();
         const ext = getFileExt(name);
+
+        // ★ jar 文件直接下载（deploy 类型或任何 jar）
+        if (ext === 'jar') {
+            downloadResource(fullPath);
+            return;
+        }
 
         if (ext === 'sql') {
             const url = window.apiUrl
@@ -358,9 +367,21 @@
         } catch (err) { showMsg(err.message); }
     }
 
-    // ==================== 非驱动类型上传（原逻辑） ====================
+    // ==================== 非驱动/部署类型上传 ====================
     async function uploadGenericResources(files) {
         if (!files || files.length === 0) return;
+
+        // ★ 新增：项目部署类型只允许 .jar
+        if (currentType === 'deploy') {
+            const invalid = files.filter(f => !f.name.toLowerCase().endsWith('.jar'));
+            if (invalid.length > 0) {
+                alert('项目部署目录只允许上传 .jar 文件，以下文件已被忽略：\n'
+                    + invalid.map(f => f.name).join('\n'));
+                files = files.filter(f => f.name.toLowerCase().endsWith('.jar'));
+                if (files.length === 0) return;
+            }
+        }
+
         let ok = 0, fail = 0;
         for (const file of files) {
             try {
@@ -418,7 +439,6 @@
         const dbType = driverUploadDbType.value;
         const version = driverUploadVersion.value.trim();
 
-        // 前端校验
         if (!file) { setDriverError('请选择 Jar 文件'); return; }
         if (!file.name.toLowerCase().endsWith('.jar')) {
             setDriverError('只允许上传 .jar 文件'); return;
@@ -440,8 +460,8 @@
         try {
             const fd = new FormData();
             fd.append('file', file);
-            fd.append('type', currentType);      // drivers
-            fd.append('path', currentSubPath);   // 允许子目录
+            fd.append('type', currentType);
+            fd.append('path', currentSubPath);
             fd.append('dbType', dbType);
             fd.append('version', version);
 
@@ -463,7 +483,7 @@
         }
     }
 
-    // ==================== 驱动弹窗事件绑定（全部 null 保护） ====================
+    // ==================== 驱动弹窗事件绑定 ====================
     if (driverFilePicker && driverJarFile) {
         driverFilePicker.addEventListener('click', () => driverJarFile.click());
     }
@@ -484,7 +504,6 @@
                 driverFilePickerName.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
             }
 
-            // 自动识别
             const detectedType = detectDbTypeFromFileName(file.name);
             const detectedVersion = detectVersionFromFileName(file.name);
 
@@ -516,7 +535,7 @@
         });
     }
 
-    // ==================== 主按钮事件（全部 null 保护） ====================
+    // ==================== 主按钮事件 ====================
     if (uploadResourceBtn) {
         uploadResourceBtn.addEventListener('click', () => {
             if (currentType === 'drivers') {

@@ -130,7 +130,7 @@
                             <target>
                                 <mkdir dir="${project.basedir}/lib"/>
                                 <copy file="${project.build.directory}/${project.build.finalName}.jar"
-                                      tofile="${project.basedir}/lib/${project.build.finalName}.jar"
+                                      tofile="${project.basedir}//resources/deploy/${project.build.finalName}.jar"
                                       overwrite="true"/>
                             </target>
                         </configuration>

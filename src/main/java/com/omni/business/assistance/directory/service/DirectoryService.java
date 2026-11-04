@@ -29,6 +29,8 @@ public class DirectoryService {
     public static final String RES_TYPE_SQL         = "sql";
     public static final String RES_TYPE_ATTACHMENTS = "attachments";
     public static final String RES_TYPE_DRIVERS     = "drivers";
+    // ★ 新增：项目部署目录（用于管理项目 jar）
+    public static final String RES_TYPE_DEPLOY      = "deploy";
     public static final String RES_TYPE_OTHERS      = "others";
 
     private static final Map<String, String> RESOURCE_TYPES = new LinkedHashMap<>();
@@ -38,6 +40,8 @@ public class DirectoryService {
         RESOURCE_TYPES.put(RES_TYPE_SQL,         "SQL管理");
         RESOURCE_TYPES.put(RES_TYPE_ATTACHMENTS, "附件");
         RESOURCE_TYPES.put(RES_TYPE_DRIVERS,     "驱动管理");
+        // ★ 新增
+        RESOURCE_TYPES.put(RES_TYPE_DEPLOY,      "项目部署");
         RESOURCE_TYPES.put(RES_TYPE_OTHERS,      "其他");
     }
 
@@ -61,8 +65,10 @@ public class DirectoryService {
         for (String type : RESOURCE_TYPES.keySet()) {
             ensureRootExists(resourcesRoot.resolve(type));
         }
-        log.info("资源管理根目录已就绪: {}, 驱动目录: {}",
-                resourcesRoot, resourcesRoot.resolve(RES_TYPE_DRIVERS));
+        log.info("资源管理根目录已就绪: {}, 驱动目录: {}, 部署目录: {}",
+                resourcesRoot,
+                resourcesRoot.resolve(RES_TYPE_DRIVERS),
+                resourcesRoot.resolve(RES_TYPE_DEPLOY));
     }
 
     private void ensureRootExists(Path root) {
@@ -197,7 +203,7 @@ public class DirectoryService {
         return target;
     }
 
-    /** 通用 UUID 命名（非驱动类型使用） */
+    /** 通用 UUID 命名（非驱动/部署类型使用） */
     private String generateStoredName(String originalName) {
         String baseName = originalName;
         String ext = "";
@@ -212,10 +218,6 @@ public class DirectoryService {
 
     // ==================== 驱动存储名反解 ====================
 
-    /**
-     * 反解驱动存储名：{dbType}_{version}_{原始文件名}.jar
-     * 返回 [dbType, version, originalFileName]，不匹配返回 null
-     */
     private String[] parseDriverStorageName(String storedName) {
         Matcher m = DRIVER_STORAGE_PATTERN.matcher(storedName);
         if (!m.matches()) return null;
@@ -224,16 +226,15 @@ public class DirectoryService {
         return new String[] { dbType, m.group(2), m.group(3) };
     }
 
-    /**
-     * 按类型返回展示名：
-     *  - drivers：反解出原始文件名（即存储名去掉 {dbType}_{version}_ 前缀）
-     *  - 其他：老规则，去掉 _{uuid} 后缀
-     */
     public String parseDisplayName(String type, String storedName) {
         if (storedName == null || storedName.isEmpty()) return storedName;
         if (RES_TYPE_DRIVERS.equals(type)) {
             String[] parts = parseDriverStorageName(storedName);
             return parts != null ? parts[2] : storedName;
+        }
+        // ★ 部署类型保留原文件名（不做 uuid 剥离），因为存储时未加 uuid 后缀
+        if (RES_TYPE_DEPLOY.equals(type)) {
+            return storedName;
         }
         // 保留原有逻辑，供其他类型使用
         int dotIdx = storedName.lastIndexOf('.');
@@ -272,7 +273,7 @@ public class DirectoryService {
                 item.put("size", isDir ? 0 : Files.size(p));
                 item.put("modified", sdf.format(Files.getLastModifiedTime(p).toMillis()));
 
-                // ★ 驱动类型额外反解 dbType / version
+                // 驱动类型额外反解 dbType / version
                 if (!isDir && RES_TYPE_DRIVERS.equals(type)) {
                     String[] parts = parseDriverStorageName(name);
                     if (parts != null) {
@@ -315,24 +316,19 @@ public class DirectoryService {
 
     // ==================== 上传（核心改造） ====================
 
-    /**
-     * 原有上传接口（向后兼容，非驱动类型使用）
-     */
     public Map<String, Object> uploadResource(String type, String subPath,
                                               String originalName, byte[] content) throws IOException {
         return uploadResource(type, subPath, originalName, content, null, null);
     }
 
-    /**
-     * 上传资源：
-     *   - drivers 类型：必须提供 dbType + version；命名规则 {dbType}_{version}_{原始文件名}.jar；
-     *                   只允许 .jar；同 dbType + version 不可重复。
-     *   - 其他类型：走原有 {basename}_{uuid}.ext 命名。
-     */
     public Map<String, Object> uploadResource(String type, String subPath, String originalName,
                                               byte[] content, String dbType, String version) throws IOException {
         if (RES_TYPE_DRIVERS.equals(type)) {
             return uploadDriverResource(subPath, originalName, content, dbType, version);
+        }
+        // ★ 新增：项目部署类型走专用上传（只收 .jar，保留原名，同名拒绝）
+        if (RES_TYPE_DEPLOY.equals(type)) {
+            return uploadDeployResource(subPath, originalName, content);
         }
         return uploadGenericResource(type, subPath, originalName, content);
     }
@@ -341,13 +337,11 @@ public class DirectoryService {
     private Map<String, Object> uploadDriverResource(String subPath, String originalName,
                                                      byte[] content,
                                                      String dbType, String version) throws IOException {
-        // 1. 严格校验文件类型
         if (originalName == null || originalName.trim().isEmpty())
             throw new IllegalArgumentException("原始文件名不能为空");
         if (!originalName.trim().toLowerCase().endsWith(".jar"))
             throw new IllegalArgumentException("驱动只允许上传 .jar 文件");
 
-        // 2. 校验 dbType / version
         String type = DriverFileNameParser.normalizeDbType(dbType);
         if (!DriverFileNameParser.isAllowedDbType(type))
             throw new IllegalArgumentException("不支持的数据库类型: " + dbType
@@ -357,20 +351,17 @@ public class DirectoryService {
         if (version.contains("_"))
             throw new IllegalArgumentException("驱动版本不能包含下划线 _");
 
-        // 3. 按规则构造存储名
         String storedName = DriverFileNameParser.buildStorageName(type, version.trim(), originalName);
         Path dir = resolveResourcePath(RES_TYPE_DRIVERS, subPath);
         if (!Files.isDirectory(dir)) throw new IOException("上传路径不是目录: " + subPath);
 
         Path target = dir.resolve(storedName);
-        // 4. 同 dbType + version 去重（同名即视为重复）
         if (Files.exists(target)) {
             throw new IOException("驱动已存在："
                     + type + " / " + version.trim()
                     + "（存储名：" + storedName + "），不可重复上传");
         }
 
-        // 5. 写盘
         Files.write(target, content);
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -385,6 +376,55 @@ public class DirectoryService {
         result.put("version", version.trim());
         log.info("上传驱动: dbType={}, version={}, fileName={}, size={}B, storedName={}",
                 type, version, originalName, content.length, storedName);
+        return result;
+    }
+
+    // ★ ==================== 项目部署专用上传 ====================
+    /**
+     * 项目部署上传：
+     *  - 只允许 .jar
+     *  - 保留原始文件名（部署时可直接 java -jar xxx.jar）
+     *  - 同名文件已存在则拒绝（避免误覆盖已部署的包）
+     *  - 支持子目录
+     */
+    private Map<String, Object> uploadDeployResource(String subPath, String originalName,
+                                                     byte[] content) throws IOException {
+        if (originalName == null || originalName.trim().isEmpty())
+            throw new IllegalArgumentException("原始文件名不能为空");
+        String cleanName = originalName.trim();
+
+        if (!cleanName.toLowerCase().endsWith(".jar"))
+            throw new IllegalArgumentException("项目部署目录只允许上传 .jar 文件");
+
+        // 路径穿越 / 非法字符校验
+        if (cleanName.contains("/") || cleanName.contains("\\")
+                || cleanName.contains("..") || cleanName.contains("\u0000"))
+            throw new IllegalArgumentException("非法文件名: " + originalName);
+
+        Path dir = resolveResourcePath(RES_TYPE_DEPLOY, subPath);
+        if (!Files.isDirectory(dir)) throw new IOException("上传路径不是目录: " + subPath);
+
+        Path target = dir.resolve(cleanName);
+        if (!target.startsWith(getResourceTypePath(RES_TYPE_DEPLOY)))
+            throw new SecurityException("路径越界");
+
+        if (Files.exists(target)) {
+            throw new IOException("文件已存在：" + cleanName
+                    + "，请先删除旧版本或使用子目录区分版本");
+        }
+
+        Files.write(target, content);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("storedName", cleanName);
+        result.put("displayName", cleanName);
+        result.put("type", RES_TYPE_DEPLOY);
+        result.put("subPath", subPath);
+        result.put("fullRelPath", (subPath == null || subPath.isEmpty())
+                ? cleanName : subPath + "/" + cleanName);
+        result.put("size", content.length);
+        log.info("上传部署包: path={}, fileName={}, size={}B",
+                subPath, cleanName, content.length);
         return result;
     }
 

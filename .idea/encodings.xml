@@ -51,7 +51,10 @@
     <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-web/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/omni-framework/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/omni-framework/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/tessdata" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/webapps" charset="UTF-8" />
   </component>
 </project>

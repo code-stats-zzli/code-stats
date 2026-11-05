@@ -1,5 +1,5 @@
 # 分析根目录
-rootDir: src\main\java
+rootDir: D:/work/git/code-stats
 # 包含的扩展名
 extensions:
   - java

@@ -23,6 +23,8 @@ import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Service;
 import com.omni.framework.util.JsonUtil;
 
+import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,8 +46,6 @@ public class CodeAnalysisService {
 
     /**
      * ★ 产出文件注册表：analyze 生成的合并文件自动加入，download 时命中即放行。
-     * key 为 toAbsolutePath().normalize().toString()。
-     * 上限 1000 条，超过后清空，避免长期运行内存膨胀。
      */
     private static final Set<String> DOWNLOADABLE_PATHS = ConcurrentHashMap.newKeySet();
     private static final int DOWNLOADABLE_CAP = 1000;
@@ -55,6 +55,9 @@ public class CodeAnalysisService {
             ".idea", ".vscode", ".gradle", ".m2", ".cache",
             "__pycache__", ".venv", "venv", ".pytest_cache", ".next", ".nuxt"
     ));
+
+    /** ★ 根目录直属文件的特殊 module 名 */
+    private static final String ROOT_FILES_MODULE = "(根目录文件)";
 
     /** ★ 注册可下载文件（由 analyze 生成合并文件后调用） */
     public static void registerDownloadable(Path file) {
@@ -95,6 +98,134 @@ public class CodeAnalysisService {
         return JsonUtil.toJson(getDefaultConfig());
     }
 
+    // ==================== ★ 新增：模块列表 ====================
+
+    /**
+     * 扫描 rootDir 下的"模块"候选（一级子目录），返回每个模块的文件数与总字节数。
+     *
+     * <p>识别规则：</p>
+     * <ul>
+     *   <li>rootDir 下的每个一级子目录 = 一个 module；</li>
+     *   <li>跳过 .git / target / node_modules 等噪音目录；</li>
+     *   <li>rootDir 直属的散文件合并为特殊 module {@code (根目录文件)}；</li>
+     *   <li>返回按 fileCount 降序，方便前端默认展示热门模块。</li>
+     * </ul>
+     */
+    public List<Map<String, Object>> getModules(Map<String, String> params) {
+        try {
+            Config config = buildConfig(params);
+            Path rootDir = config.getRootDir().toAbsolutePath().normalize();
+            if (!Files.isDirectory(rootDir)) return new ArrayList<>();
+
+            List<String> extensions = config.getExtensions();
+            if (extensions == null || extensions.isEmpty()) {
+                extensions = Collections.singletonList("java");
+            }
+            final Set<String> extSet = new HashSet<>();
+            for (String e : extensions) {
+                if (e != null && !e.trim().isEmpty()) extSet.add(e.trim().toLowerCase());
+            }
+
+            List<Map<String, Object>> modules = new ArrayList<>();
+
+            // 1) rootDir 下的一级子目录
+            try (DirectoryStream<Path> ds = Files.newDirectoryStream(rootDir)) {
+                for (Path p : ds) {
+                    if (!Files.isDirectory(p)) continue;
+                    String name = p.getFileName() == null ? "" : p.getFileName().toString();
+                    if (name.isEmpty() || name.startsWith(".") || EXTRA_SKIP_DIRS.contains(name)) continue;
+
+                    int[] stats = countFiles(p, extSet);
+                    if (stats[0] == 0) continue; // 没有匹配文件，不展示
+
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("name", name);
+                    m.put("path", p.toString());
+                    m.put("fileCount", stats[0]);
+                    m.put("totalBytes", stats[1]);
+                    m.put("isRootFiles", false);
+                    modules.add(m);
+                }
+            }
+
+            // 2) rootDir 直属文件
+            int[] rootStats = countFilesFlat(rootDir, extSet);
+            if (rootStats[0] > 0) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("name", ROOT_FILES_MODULE);
+                m.put("path", rootDir.toString());
+                m.put("fileCount", rootStats[0]);
+                m.put("totalBytes", rootStats[1]);
+                m.put("isRootFiles", true);
+                modules.add(m);
+            }
+
+            modules.sort((a, b) -> Integer.compare(
+                    (int) b.get("fileCount"), (int) a.get("fileCount")));
+            return modules;
+        } catch (Exception e) {
+            log.error("获取模块列表失败", e);
+            return new ArrayList<>();
+        }
+    }
+
+    private int[] countFiles(Path dir, Set<String> extSet) {
+        final int[] count = {0};
+        final long[] bytes = {0};
+        try {
+            Files.walkFileTree(dir, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path d, BasicFileAttributes attrs) {
+                    String n = d.getFileName() == null ? "" : d.getFileName().toString();
+                    if (!d.equals(dir) && (EXTRA_SKIP_DIRS.contains(n) || n.startsWith("."))) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path f, BasicFileAttributes attrs) {
+                    if (Files.isRegularFile(f)) {
+                        String fn = f.getFileName().toString().toLowerCase();
+                        int dot = fn.lastIndexOf('.');
+                        if (dot > 0 && extSet.contains(fn.substring(dot + 1))) {
+                            count[0]++;
+                            bytes[0] += attrs.size();
+                        }
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path f, IOException e) {
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (Exception ignored) {
+        }
+        return new int[]{count[0], (int) Math.min(bytes[0], Integer.MAX_VALUE)};
+    }
+
+    private int[] countFilesFlat(Path rootDir, Set<String> extSet) {
+        final int[] count = {0};
+        final long[] bytes = {0};
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(rootDir)) {
+            for (Path p : ds) {
+                if (!Files.isRegularFile(p)) continue;
+                String fn = p.getFileName().toString().toLowerCase();
+                int dot = fn.lastIndexOf('.');
+                if (dot > 0 && extSet.contains(fn.substring(dot + 1))) {
+                    count[0]++;
+                    bytes[0] += Files.size(p);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return new int[]{count[0], (int) Math.min(bytes[0], Integer.MAX_VALUE)};
+    }
+
+    // ==================== ★ 修改：analyze 支持 modules 过滤 ====================
+
     public String analyze(Map<String, String> params) {
         try {
             Config config = buildConfig(params);
@@ -103,6 +234,12 @@ public class CodeAnalysisService {
             CompositeFilter filterChain = buildFilterChain(config);
             List<Path> files = new CollectStage(filterChain).process(config.getRootDir());
             files = appendExtraFiles(files, params.get("extraPaths"));
+
+            // ★ 新增：modules 过滤
+            String modulesParam = params.get("modules");
+            if (modulesParam != null && !modulesParam.trim().isEmpty()) {
+                files = filterByModules(files, modulesParam, config.getRootDir());
+            }
 
             ParallelAnalyzeStage analyzeStage = new ParallelAnalyzeStage(
                     config.getThreadCount(), config.isExcludeComments(), null);
@@ -127,14 +264,11 @@ public class CodeAnalysisService {
                 try {
                     Path mergePath = Paths.get(mergeOutputFile).toAbsolutePath().normalize();
                     new MergeFilesStage(mergePath).process(files);
-                    // ★ 合并成功 → 注册为可下载
                     registerDownloadable(mergePath);
-                    // 同时返回归一化后的绝对路径，前端展示与实际一致
                     mergeOutputFile = mergePath.toString();
                     log.info("合并文件已注册可下载: {}", mergeOutputFile);
                 } catch (Exception e) {
                     log.error("合并文件失败: {}", mergeOutputFile, e);
-                    // 合并失败 → 不注册，但也不返回 mergeOutput
                     mergeOutputFile = null;
                 }
             }
@@ -144,6 +278,47 @@ public class CodeAnalysisService {
             log.error("代码分析失败", e);
             return errorJson(e);
         }
+    }
+
+    /**
+     * 按 modules 参数过滤文件列表。
+     * - 普通 module：保留路径前缀匹配的文件
+     * - (根目录文件)：保留 parent == rootDir 的直属文件
+     */
+    private List<Path> filterByModules(List<Path> files, String modulesParam, Path rootDir) {
+        Path rootAbs = rootDir.toAbsolutePath().normalize();
+        Set<Path> modulePaths = new LinkedHashSet<>();
+        boolean includeRootFiles = false;
+
+        for (String raw : modulesParam.split(",")) {
+            String name = raw.trim();
+            if (name.isEmpty()) continue;
+            if (ROOT_FILES_MODULE.equals(name)) {
+                includeRootFiles = true;
+            } else {
+                modulePaths.add(rootAbs.resolve(name).normalize());
+            }
+        }
+
+        if (modulePaths.isEmpty() && !includeRootFiles) {
+            return files;
+        }
+
+        final Set<Path> finalPaths = modulePaths;
+        final boolean finalIncludeRoot = includeRootFiles;
+        return files.stream()
+                .filter(f -> {
+                    Path abs = f.toAbsolutePath().normalize();
+                    if (finalIncludeRoot && abs.getParent() != null
+                            && abs.getParent().equals(rootAbs)) {
+                        return true;
+                    }
+                    for (Path p : finalPaths) {
+                        if (abs.startsWith(p)) return true;
+                    }
+                    return false;
+                })
+                .collect(Collectors.toList());
     }
 
     // ==================== 依赖分析 ====================

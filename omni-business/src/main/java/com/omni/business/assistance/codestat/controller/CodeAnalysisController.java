@@ -61,6 +61,27 @@ public class CodeAnalysisController {
         return codeAnalysisService.getDefaultConfigJson();
     }
 
+    // ==================== ★ 新增：模块列表 ====================
+
+    /**
+     * 获取 rootDir 下的模块列表（一级子目录统计），供前端"模块过滤"选择。
+     * GET /code/api/modules?rootDir=...&extensions=java&excludePaths=...&useGitIgnore=...
+     */
+    @RequestMapping("/modules")
+    @ResponseBody
+    public String getModules() {
+        try {
+            List<Map<String, Object>> modules = codeAnalysisService.getModules(ParamUtils.parseQueryParams());
+            Map<String, Object> res = new LinkedHashMap<>();
+            res.put("success", true);
+            res.put("modules", modules);
+            return JsonUtil.toJson(res);
+        } catch (Exception e) {
+            log.error("获取模块列表失败", e);
+            return errorResponse("获取模块列表失败: " + e.getMessage());
+        }
+    }
+
     @RequestMapping("/analyze")
     @ResponseBody
     public String analyze() {
@@ -241,7 +262,6 @@ public class CodeAnalysisController {
      *   - 是普通文件
      *   - 扩展名在 MERGE_EXTENSIONS
      *   - 修改时间在最近 GRACE_WINDOW_MS 内（允许未来时间 1 分钟内的小误差）
-     *   - 路径不包含目录逃逸（已 normalize，无需再查）
      */
     private boolean isRecentMergeFile(Path p) {
         if (p == null || !Files.exists(p) || Files.isDirectory(p)) return false;

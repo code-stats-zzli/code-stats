@@ -11,6 +11,11 @@
     let localInited = false;
     let activePicker = null;
 
+    // ★ 新增：模块过滤状态
+    let availableModules = [];
+    let selectedModules = new Set();
+    let modulesLoaded = false;
+
     // ==================== DOM ====================
     const modeList = document.getElementById('modeList');
     const serverWorkspace = document.getElementById('serverWorkspace');
@@ -18,7 +23,7 @@
     const spiderWorkspace = document.getElementById('spiderWorkspace');
     const qbWorkspace = document.getElementById('qbWorkspace');
     const systemcheckWorkspace = document.getElementById('systemcheckWorkspace');
-    const importWorkspace = document.getElementById('importWorkspace');   // ★ 新增
+    const importWorkspace = document.getElementById('importWorkspace');
 
     const serverDirTree = document.getElementById('serverDirTree');
     const serverRefreshTreeBtn = document.getElementById('serverRefreshTreeBtn');
@@ -50,6 +55,13 @@
     const exportCsvBtn = document.getElementById('exportCsvBtn');
     const downloadMergeBtn = document.getElementById('downloadMergeBtn');
 
+    // ★ 新增：模块过滤 DOM
+    const moduleLoadBtn = document.getElementById('moduleLoadBtn');
+    const moduleSelectAllBtn = document.getElementById('moduleSelectAllBtn');
+    const moduleSelectNoneBtn = document.getElementById('moduleSelectNoneBtn');
+    const moduleList = document.getElementById('moduleList');
+    const moduleHint = document.getElementById('moduleHint');
+
     const localDirTree = document.getElementById('localDirTree');
     const localRefreshTreeBtn = document.getElementById('localRefreshTreeBtn');
     const localCurrentPathSpan = document.getElementById('localCurrentPath');
@@ -72,6 +84,7 @@
     }
     function truncatePath(path) { return path.length > 60 ? '...' + path.slice(-57) : path; }
     function formatSize(bytes) {
+        if (bytes == null || bytes < 0) return '0 B';
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
@@ -90,14 +103,14 @@
         spiderWorkspace.style.display = 'none';
         qbWorkspace.style.display = 'none';
         if (systemcheckWorkspace) systemcheckWorkspace.style.display = 'none';
-        if (importWorkspace) importWorkspace.style.display = 'none';        // ★ 新增
+        if (importWorkspace) importWorkspace.style.display = 'none';
 
         if (mode === 'server') serverWorkspace.style.display = 'flex';
         else if (mode === 'local') { localWorkspace.style.display = 'flex'; initLocalFileManager(); }
         else if (mode === 'webspider') spiderWorkspace.style.display = 'flex';
         else if (mode === 'questionbank') qbWorkspace.style.display = 'flex';
         else if (mode === 'systemcheck') systemcheckWorkspace.style.display = 'flex';
-        else if (mode === 'import') {                                        // ★ 新增
+        else if (mode === 'import') {
             if (importWorkspace) importWorkspace.style.display = 'flex';
             if (window.ImportModule && window.ImportModule.onShow) window.ImportModule.onShow();
         }
@@ -265,6 +278,103 @@
         }
     }
 
+    // ==================== ★ 新增：模块过滤器 ====================
+
+    function updateModuleHint() {
+        if (!moduleHint) return;
+        if (selectedModules.size === 0) {
+            moduleHint.textContent = '未选择 = 分析全部';
+            moduleHint.classList.remove('has-selection');
+        } else {
+            moduleHint.textContent = `已选 ${selectedModules.size} 个模块（仅合并这些）`;
+            moduleHint.classList.add('has-selection');
+        }
+    }
+
+    function renderModuleList() {
+        if (!moduleList) return;
+        if (availableModules.length === 0) {
+            moduleList.innerHTML = '<div class="empty-tip">未发现模块，请确认 rootDir 下有一级子目录</div>';
+            return;
+        }
+        moduleList.innerHTML = availableModules.map(m => {
+            const name = m.name || '';
+            const checked = selectedModules.has(name) ? 'checked' : '';
+            const selected = selectedModules.has(name) ? 'selected' : '';
+            const size = formatSize(m.totalBytes || 0);
+            const isRoot = m.isRootFiles === true;
+            return `
+                <label class="module-item ${selected}" title="${escapeHtml(m.path || '')}">
+                    <input type="checkbox" data-name="${escapeHtml(name)}" ${checked}>
+                    <span class="mod-name">${escapeHtml(name)}</span>
+                    <span class="mod-meta">${m.fileCount} · ${size}</span>
+                </label>
+            `;
+        }).join('');
+
+        moduleList.querySelectorAll('.module-item input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const name = cb.dataset.name;
+                if (cb.checked) selectedModules.add(name);
+                else selectedModules.delete(name);
+                // 更新卡片高亮
+                const label = cb.closest('.module-item');
+                if (label) label.classList.toggle('selected', cb.checked);
+                updateModuleHint();
+            });
+        });
+        updateModuleHint();
+    }
+
+    async function loadModules() {
+        if (!moduleList) return;
+        moduleList.innerHTML = '<div class="loading">扫描中...</div>';
+        moduleLoadBtn.disabled = true;
+        moduleLoadBtn.textContent = '⏳ 扫描中...';
+
+        try {
+            const params = new URLSearchParams();
+            params.append('rootDir', rootDirInput.value || '');
+            params.append('extensions', extensionsInput.value || 'java');
+            params.append('excludePaths', excludePathsInput.value || '');
+            params.append('useGitIgnore', useGitIgnoreCheck.checked ? 'true' : 'false');
+
+            const resp = await fetch(API_CODE + '/modules?' + params.toString());
+            const data = await resp.json();
+            if (!data.success) {
+                moduleList.innerHTML = `<div class="error-tip">❌ ${escapeHtml(data.error || '加载失败')}</div>`;
+                return;
+            }
+            availableModules = data.modules || [];
+            // 清理已选模块中不存在的项
+            const validNames = new Set(availableModules.map(m => m.name));
+            selectedModules.forEach(n => { if (!validNames.has(n)) selectedModules.delete(n); });
+            modulesLoaded = true;
+            renderModuleList();
+        } catch (err) {
+            moduleList.innerHTML = `<div class="error-tip">❌ ${escapeHtml(err.message)}</div>`;
+        } finally {
+            moduleLoadBtn.disabled = false;
+            moduleLoadBtn.textContent = '🔄 扫描模块';
+        }
+    }
+
+    if (moduleLoadBtn) {
+        moduleLoadBtn.addEventListener('click', loadModules);
+    }
+    if (moduleSelectAllBtn) {
+        moduleSelectAllBtn.addEventListener('click', () => {
+            availableModules.forEach(m => selectedModules.add(m.name));
+            renderModuleList();
+        });
+    }
+    if (moduleSelectNoneBtn) {
+        moduleSelectNoneBtn.addEventListener('click', () => {
+            selectedModules.clear();
+            renderModuleList();
+        });
+    }
+
     // ==================== 服务器分析 ====================
     async function loadDefaultConfig() {
         try {
@@ -297,6 +407,12 @@
         mergeEnabledCheck.checked = false;
         mergeOutputFileInput.value = '';
         useGitIgnoreCheck.checked = false;
+        // ★ 清空模块选择
+        selectedModules.clear();
+        availableModules = [];
+        modulesLoaded = false;
+        if (moduleList) moduleList.innerHTML = '<div class="empty-tip">点击「扫描模块」列出 rootDir 下的子模块</div>';
+        updateModuleHint();
         toggleMergeRow();
         setPickerTarget(null);
     }
@@ -329,9 +445,17 @@
         params.append('mergeOutputFile', mergeOutputFileInput.value);
         params.append('useGitIgnore', useGitIgnoreCheck.checked);
 
+        // ★ 新增：携带模块过滤参数
+        if (selectedModules.size > 0) {
+            params.append('modules', Array.from(selectedModules).join(','));
+        }
+
         progressBar.style.display = 'block';
         progressFill.style.width = '10%';
-        showMsg('正在分析（大工程请耐心等待）...');
+        const moduleInfo = selectedModules.size > 0
+            ? `（模块：${Array.from(selectedModules).join(', ')}）`
+            : '（全量）';
+        showMsg(`正在分析${moduleInfo}（大工程请耐心等待）...`);
 
         try {
             const resp = await fetch(API_CODE + '/analyze?' + params.toString());
@@ -544,7 +668,6 @@
             showMsg('没有可用的合并文件，请先执行分析');
             return;
         }
-
         let encodedPath;
         try {
             encodedPath = utf8ToBase64(currentMergeFilePath);

@@ -69,6 +69,22 @@
                         <label>.gitignore 过滤:</label>
                         <input type="checkbox" id="useGitIgnore">
                     </div>
+
+                    <!-- ★ 新增：模块过滤（按模块合并代码） -->
+                    <div class="form-row full-width">
+                        <label>模块过滤:</label>
+                        <div id="moduleSelector" class="module-selector">
+                            <div class="module-selector-header">
+                                <button id="moduleLoadBtn" class="btn-secondary btn-sm" type="button">🔄 扫描模块</button>
+                                <button id="moduleSelectAllBtn" class="btn-secondary btn-sm" type="button">全选</button>
+                                <button id="moduleSelectNoneBtn" class="btn-secondary btn-sm" type="button">全不选</button>
+                                <span id="moduleHint" class="module-hint">未选择 = 分析全部</span>
+                            </div>
+                            <div id="moduleList" class="module-list">
+                                <div class="empty-tip">点击「扫描模块」列出 rootDir 下的子模块</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="action-bar">
                     <button id="analyzeBtn" class="btn-primary">🚀 开始分析</button>
@@ -161,12 +177,10 @@
 
     <!-- ============ 代码导入工作区 ============ -->
     <main class="workspace" id="importWorkspace" style="display:none;">
-        <!-- 左侧目录树（可折叠） -->
         <aside class="dir-tree-panel import-dir-panel" id="importDirPanel">
             <div class="dir-panel-header">
                 <span>📂 目标根目录</span>
                 <button id="importRefreshTreeBtn" class="mini-btn" title="刷新">🔄</button>
-                <!-- ★ 折叠按钮独立在 header 最右侧，任何状态都可见 -->
                 <button id="importToggleTreeBtn" class="btn-toggle" title="折叠目录树">◀</button>
             </div>
             <div class="dir-tree-wrapper" id="importDirTree">
@@ -178,7 +192,6 @@
         </aside>
 
         <div class="import-panel" id="importPanel">
-            <!-- 1. 内容输入（可折叠） -->
             <section class="import-card import-input-card" id="importInputCard">
                 <div class="import-card-header">
                     <span class="card-title">📥 内容输入</span>
@@ -195,7 +208,6 @@
                         </select>
                         <button id="importParseBtn" class="btn-primary btn-sm">🔍 解析</button>
                     </div>
-                    <!-- ★ 折叠按钮独立于 toolbar，固定右侧 -->
                     <button id="importToggleInputBtn" class="btn-toggle" title="折叠输入区">▲</button>
                 </div>
                 <textarea id="importMdInput" class="import-md-input"
@@ -203,7 +215,6 @@
                 <div id="importParseStatus" class="import-status"></div>
             </section>
 
-            <!-- 2. 结构树 + 预览（可折叠） -->
             <section class="import-card import-main-card" id="importMainCard">
                 <div class="import-card-header">
                     <span class="card-title">📂 解析结果</span>
@@ -213,7 +224,6 @@
                         <button id="importSelectAllBtn" class="btn-secondary btn-sm">全选</button>
                         <button id="importSelectNoneBtn" class="btn-secondary btn-sm">全不选</button>
                     </div>
-                    <!-- ★ 折叠按钮独立于 toolbar，固定右侧 -->
                     <button id="importToggleMainBtn" class="btn-toggle" title="折叠主卡">▲</button>
                 </div>
                 <div class="import-main-body" id="importMainBody">
@@ -239,7 +249,6 @@
                 </div>
             </section>
 
-            <!-- 3. 操作区（固定，不折叠） -->
             <section class="import-card import-action-card">
                 <div class="import-action-row">
                     <label class="field-label">目标根目录:</label>
@@ -261,7 +270,6 @@
 <script src="codeStats.js"></script>
 <script src="codeImport.js"></script>
 
-<!-- ★ 生成示例：内联，避免外部文件 404 / 时序问题 -->
 <script>
     (function () {
         'use strict';

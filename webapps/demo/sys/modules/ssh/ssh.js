@@ -5,7 +5,7 @@
         id: 'ssh',
         name: '远程 SSH',
         icon: '🖥️',
-        desc: 'SSH / SCP 远程服务器管理：连接测试 / 命令执行 / 目录浏览 / 文件上传下载与编辑（支持密码与密钥两种认证）',
+        desc: 'SSH 远程服务器管理：连接测试 / 命令执行 / 目录浏览 / 文件上传下载与编辑（密码不入库，仅内存缓存）',
         mount: mountSsh
     });
 
@@ -131,6 +131,8 @@
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
             }[m]));
         }
+        function escapeAttr(s) { return escapeHtml(s); }
+
         function fmtSize(b) {
             if (b == null || b < 0) return '-';
             if (b < 1024) return b + ' B';
@@ -138,6 +140,7 @@
             if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(2) + ' MB';
             return (b / 1024 / 1024 / 1024).toFixed(2) + ' GB';
         }
+
         async function jpost(url, body) {
             const resp = await fetch(url, {
                 method: 'POST',
@@ -146,6 +149,8 @@
             });
             return await resp.json();
         }
+
+        // ==================== 连接列表 ====================
 
         async function loadConnections() {
             try {
@@ -165,20 +170,24 @@
                     '<div class="empty-tip" style="padding:20px;text-align:center;">暂无连接</div>';
                 return;
             }
-            $('sshConnList').innerHTML = connections.map(c => `
-                <div class="ssh-conn-item ${c.id === currentId ? 'active' : ''}" data-id="${escapeHtml(c.id)}">
+            $('sshConnList').innerHTML = connections.map(c => {
+                const statusCls = c.lastTestOk ? 'ok' : 'unk';
+                const statusDot = c.lastTestOk ? '●' : '○';
+                const osText = (c.osType && c.osType !== 'auto') ? ' · ' + c.osType : '';
+                return `
+                <div class="ssh-conn-item ${c.id === currentId ? 'active' : ''}" data-id="${escapeAttr(c.id)}">
                     <div class="ssh-conn-name">
-                        <span class="ssh-conn-status ${c.lastTestOk ? 'ok' : 'unk'}">${c.lastTestOk ? '●' : '○'}</span>
+                        <span class="ssh-conn-status ${statusCls}">${statusDot}</span>
                         <span>${escapeHtml(c.name || c.host)}</span>
                     </div>
-                    <div class="ssh-conn-meta">${escapeHtml(c.username)}@${escapeHtml(c.host)}:${c.port}${c.osType && c.osType !== 'auto' ? ' · ' + c.osType : ''}</div>
+                    <div class="ssh-conn-meta">${escapeHtml(c.username)}@${escapeHtml(c.host)}:${c.port}${escapeHtml(osText)}</div>
                     <div class="ssh-conn-actions">
                         <button class="ssh-mini-btn" data-action="test">🔌 测试</button>
                         <button class="ssh-mini-btn" data-action="edit">✎ 编辑</button>
                         <button class="ssh-mini-btn ssh-mini-danger" data-action="delete">🗑</button>
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
 
             container.querySelectorAll('.ssh-conn-item').forEach(el => {
                 el.addEventListener('click', (e) => {
@@ -203,8 +212,11 @@
                 const r = await jpost(API + '/connection/test', { id });
                 if (!r.success) throw new Error(r.error || '请求失败');
                 const d = r.data || {};
-                if (d.success) alert('✅ 连接成功\nOS: ' + (d.osType || '未知'));
-                else alert('❌ 连接失败：' + (d.error || '未知错误'));
+                if (d.success) {
+                    alert('✅ 连接成功\nOS: ' + (d.osType || '未知'));
+                } else {
+                    alert('❌ 连接失败：' + (d.error || '未知错误'));
+                }
                 await loadConnections();
                 if (currentId === id) {
                     const cur = connections.find(x => x.id === id);
@@ -227,6 +239,8 @@
             }
         }
 
+        // ==================== 弹窗 ====================
+
         function openConnModal(c) {
             $('sshModalTitle').textContent = c ? '编辑服务器' : '新增服务器';
             $('sshConnId').value = c ? c.id : '';
@@ -242,14 +256,18 @@
             $('sshRemark').value = c ? (c.remark || '') : '';
             $('sshConnModal').style.display = 'flex';
         }
-        function closeConnModal() { $('sshConnModal').style.display = 'none'; }
+
+        function closeConnModal() {
+            $('sshConnModal').style.display = 'none';
+            $('sshPassword').value = '';
+        }
 
         async function saveConnection() {
             const body = {
                 id: $('sshConnId').value || null,
                 name: $('sshName').value.trim(),
                 host: $('sshHost').value.trim(),
-                port: parseInt($('sshPort').value) || 22,
+                port: parseInt($('sshPort').value, 10) || 22,
                 username: $('sshUsername').value.trim(),
                 keyPath: $('sshKeyPath').value.trim(),
                 password: $('sshPassword').value,
@@ -274,6 +292,8 @@
             }
         }
 
+        // ==================== 选中连接 ====================
+
         function selectConnection(id) {
             currentId = id;
             const c = connections.find(x => x.id === id);
@@ -295,6 +315,8 @@
             refreshFileList();
         }
 
+        // ==================== Tab ====================
+
         function switchTab(tabId) {
             currentTab = tabId;
             container.querySelectorAll('.ssh-tab').forEach(t =>
@@ -308,6 +330,8 @@
         container.querySelectorAll('.ssh-tab').forEach(t => {
             t.addEventListener('click', () => switchTab(t.dataset.tab));
         });
+
+        // ==================== 文件列表 ====================
 
         async function refreshFileList() {
             if (!currentId) return;
@@ -327,21 +351,23 @@
                 $('sshFileList').innerHTML = '<div class="empty-tip">目录为空</div>';
                 return;
             }
-            $('sshFileList').innerHTML = files.map(f => `
-                <div class="ssh-file-row ${f.directory ? 'is-dir' : ''}" data-path="${escapeHtml(f.path)}" data-dir="${f.directory}">
-                    <span class="ssh-file-icon">${f.directory ? '📁' : '📄'}</span>
-                    <span class="ssh-file-name" title="${escapeHtml(f.path)}">${escapeHtml(f.name)}</span>
-                    <span class="ssh-file-meta">${f.directory ? '' : fmtSize(f.size)}</span>
+            $('sshFileList').innerHTML = files.map(f => {
+                const isDir = f.directory;
+                return `
+                <div class="ssh-file-row ${isDir ? 'is-dir' : ''}" data-path="${escapeAttr(f.path)}" data-dir="${isDir}">
+                    <span class="ssh-file-icon">${isDir ? '📁' : '📄'}</span>
+                    <span class="ssh-file-name" title="${escapeAttr(f.path)}">${escapeHtml(f.name)}</span>
+                    <span class="ssh-file-meta">${isDir ? '' : fmtSize(f.size)}</span>
                     <span class="ssh-file-time">${escapeHtml(f.modified || '')}</span>
                     <span class="ssh-file-actions">
-                        ${f.directory ? '' : `
+                        ${isDir ? '' : `
                             <button class="ssh-mini-btn" data-action="edit" title="编辑">✎</button>
                             <button class="ssh-mini-btn" data-action="download" title="下载">⬇</button>`}
                         <button class="ssh-mini-btn" data-action="rename" title="重命名">✏️</button>
                         <button class="ssh-mini-btn ssh-mini-danger" data-action="delete" title="删除">🗑</button>
                     </span>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
 
             container.querySelectorAll('.ssh-file-row').forEach(row => {
                 row.addEventListener('dblclick', async (e) => {
@@ -390,7 +416,7 @@
             }
             const to = parent ? (parent + sep + newName) : newName;
             try {
-                const r = await jpost(API + '/rename', { id: currentId, from: p, to });
+                const r = await jpost(API + '/rename', { id: currentId, from: p, to: to });
                 if (!r.success) throw new Error(r.error || '重命名失败');
                 refreshFileList();
             } catch (e) {
@@ -439,6 +465,8 @@
             }
         }
 
+        // ==================== 命令行 ====================
+
         function clearCommandOutput() {
             $('sshCmdOutput').textContent = '';
             $('sshCmdMeta').textContent = '';
@@ -469,6 +497,8 @@
                 $('sshCmdOutput').textContent = '❌ ' + e.message;
             }
         }
+
+        // ==================== 编辑器 ====================
 
         function clearEditor() {
             $('sshEditorPath').value = '';
@@ -505,6 +535,8 @@
             }
         }
 
+        // ==================== 事件绑定 ====================
+
         $('sshAddBtn').addEventListener('click', () => openConnModal(null));
         $('sshModalClose').addEventListener('click', closeConnModal);
         $('sshCancelConnBtn').addEventListener('click', closeConnModal);
@@ -522,7 +554,6 @@
         });
         $('sshUpBtn').addEventListener('click', () => {
             if (!currentPath) return;
-            const sep = currentOs === 'windows' ? '\\' : '/';
             let p = currentPath;
             if (p.length > 1 && (p.endsWith('/') || p.endsWith('\\'))) {
                 p = p.substring(0, p.length - 1);
@@ -553,6 +584,48 @@
         });
 
         $('sshSaveBtn').addEventListener('click', saveEditor);
+
+        // ==================== 页面关闭清理密码缓存 ====================
+
+        function closeCurrentSessionBeacon() {
+            if (!currentId) return;
+            const url = API + '/connection/close';
+            const body = JSON.stringify({ id: currentId });
+            try {
+                if (navigator.sendBeacon) {
+                    const blob = new Blob([body], { type: 'application/json;charset=UTF-8' });
+                    const ok = navigator.sendBeacon(url, blob);
+                    if (ok) return;
+                }
+            } catch (e) {
+                // fallback
+            }
+            try {
+                fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+                    body: body,
+                    keepalive: true
+                });
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        window.addEventListener('beforeunload', closeCurrentSessionBeacon);
+        window.addEventListener('pagehide', closeCurrentSessionBeacon);
+
+        // 模块卸载时解绑
+        const observer = new MutationObserver(() => {
+            if (!document.body.contains(container)) {
+                window.removeEventListener('beforeunload', closeCurrentSessionBeacon);
+                window.removeEventListener('pagehide', closeCurrentSessionBeacon);
+                observer.disconnect();
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        // ==================== 启动 ====================
 
         loadConnections();
     }

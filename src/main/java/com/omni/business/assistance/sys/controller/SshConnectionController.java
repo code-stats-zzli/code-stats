@@ -28,9 +28,10 @@ import java.util.Map;
  *
  * <pre>
  * GET  /sys/api/ssh/connections             → 列表
- * POST /sys/api/ssh/connection/save         → 保存（body=SshConnection）
+ * POST /sys/api/ssh/connection/save         → 保存（body=SshConnection，密码进缓存不入库）
  * POST /sys/api/ssh/connection/delete       → 删除 {id}
  * POST /sys/api/ssh/connection/test         → 测试 {id}
+ * POST /sys/api/ssh/connection/close        → 页面关闭清理密码缓存 {id}
  * POST /sys/api/ssh/exec                    → 执行 {id, cmd}
  * POST /sys/api/ssh/list                    → 目录 {id, path}  → List&lt;RemoteFile&gt;
  * POST /sys/api/ssh/read                    → 读文件 {id, path} → {path, content}
@@ -95,6 +96,20 @@ public class SshConnectionController {
             String id = str(body, "id");
             if (id == null) return error("缺少 id");
             return JsonUtil.toJson(ok(service.test(id)));
+        } catch (Exception e) {
+            return error(e.getMessage());
+        }
+    }
+
+    /** 页面关闭时清理密码缓存 */
+    @RequestMapping("/connection/close")
+    @ResponseBody
+    public String close(@RequestBody Map<String, Object> body) {
+        try {
+            String id = str(body, "id");
+            if (id == null) return error("缺少 id");
+            service.closeSession(id);
+            return JsonUtil.toJson(ok(null));
         } catch (Exception e) {
             return error(e.getMessage());
         }

@@ -15,9 +15,9 @@
     let availableModules = [];
     let selectedModules = new Set();
     let modulesLoaded = false;
-    /** ★ 首次自动选择是否已应用（防止用户手动改动后又被覆盖） */
+    /** 首次自动选择是否已应用（防止用户手动改动后又被覆盖） */
     let autoSelectedApplied = false;
-    /** ★ 当前选中状态是否为"自动选中 omni*"，用于 moduleHint 文案区分 */
+    /** 当前选中状态是否为"自动选中 omni*"，用于 moduleHint 文案区分 */
     let autoSelectedIndicator = false;
 
     // ==================== DOM ====================
@@ -97,7 +97,20 @@
     function normalizePath(p) { return (p || '').replace(/\\/g, '/'); }
     function showMsg(msg) { if (progressText) progressText.textContent = msg; }
 
-    /** ★ 判断模块名是否符合默认选中规则（omni 前缀，大小写不敏感） */
+    /**
+     * ★ 新增：从完整路径中提取最后一段（兼容 Windows 反斜杠 / 末尾斜杠）
+     * 例：D:\work\git\code-stats\omni-common  →  omni-common
+     *     /home/user/projects/omni-framework/  →  omni-framework
+     */
+    function basenameOf(path) {
+        if (!path) return '';
+        const s = String(path).replace(/\\/g, '/').replace(/\/+$/, '');
+        if (!s) return '';
+        const idx = s.lastIndexOf('/');
+        return idx >= 0 ? s.substring(idx + 1) : s;
+    }
+
+    /** 判断模块名是否符合默认选中规则（omni 前缀，大小写不敏感） */
     function isDefaultOmniModule(name) {
         return !!name && name.toLowerCase().startsWith('omni');
     }
@@ -312,6 +325,11 @@
         }
     }
 
+    /**
+     * ★ 修改：模块卡片
+     *   - 显示名 = 路径最后一段（优先 m.name，否则 basenameOf(m.path)）
+     *   - tooltip = 完整路径（title + data-full-path）
+     */
     function renderModuleList() {
         if (!moduleList) return;
         if (availableModules.length === 0) {
@@ -319,17 +337,27 @@
             return;
         }
         moduleList.innerHTML = availableModules.map(m => {
-            const name = m.name || '';
-            const checked = selectedModules.has(name) ? 'checked' : '';
-            const selected = selectedModules.has(name) ? 'selected' : '';
+            const rawName = (m.name == null ? '' : String(m.name)).trim();
+            const fullPath = m.path ? String(m.path) : '';
+            // 显示名：优先 m.name，其次从 path 提取 basename；两者都空则用占位
+            let displayName = rawName || basenameOf(fullPath);
+            if (!displayName) displayName = '(未命名模块)';
+
+            const checked = selectedModules.has(m.name) ? 'checked' : '';
+            const selected = selectedModules.has(m.name) ? 'selected' : '';
             const size = formatSize(m.totalBytes || 0);
-            const isDefault = isDefaultOmniModule(name);
-            // ★ 默认 omni 模块加一个小标记，帮助识别
+            const isDefault = isDefaultOmniModule(m.name);
             const badge = isDefault ? '<span class="mod-badge-omni">omni</span>' : '';
+
+            // title 指向完整路径；若 path 为空则退化为显示名，避免出现空 tooltip
+            const tip = fullPath || displayName;
+
             return `
-                <label class="module-item ${selected}" title="${escapeHtml(m.path || '')}">
-                    <input type="checkbox" data-name="${escapeHtml(name)}" ${checked}>
-                    <span class="mod-name">${escapeHtml(name)}${badge}</span>
+                <label class="module-item ${selected}"
+                       title="${escapeHtml(tip)}"
+                       data-full-path="${escapeHtml(fullPath)}">
+                    <input type="checkbox" data-name="${escapeHtml(m.name || '')}" ${checked}>
+                    <span class="mod-name">${escapeHtml(displayName)}${badge}</span>
                     <span class="mod-meta">${m.fileCount} · ${size}</span>
                 </label>
             `;
@@ -337,7 +365,6 @@
 
         moduleList.querySelectorAll('.module-item input[type="checkbox"]').forEach(cb => {
             cb.addEventListener('change', () => {
-                // 用户手动操作，取消自动标识
                 autoSelectedIndicator = false;
                 const name = cb.dataset.name;
                 if (cb.checked) selectedModules.add(name);
@@ -392,19 +419,15 @@
             }
             availableModules = data.modules || [];
 
-            // 清理已选模块中不存在的项
             const validNames = new Set(availableModules.map(m => m.name));
             selectedModules.forEach(n => { if (!validNames.has(n)) selectedModules.delete(n); });
 
-            // ★ 首次扫描后自动选中 omni* 模块
             if (!autoSelectedApplied) {
                 const autoCount = applyDefaultOmniSelection(false);
                 if (autoCount === 0 && availableModules.length > 0) {
-                    // 没有 omni 模块，提示但不强制选择
                     autoSelectedIndicator = false;
                 }
             } else if (autoSelectedIndicator) {
-                // 之前是自动选择的，重新校验是否仍有对应模块
                 const stillHas = availableModules.some(m => isDefaultOmniModule(m.name));
                 if (!stillHas) autoSelectedIndicator = false;
             }
@@ -421,10 +444,8 @@
         }
     }
 
-    /** ★ 手动恢复默认选择（清空当前选择后重选 omni*） */
     function restoreDefaultModules() {
         if (!availableModules.length) {
-            // 还没扫描过，先扫描（扫描内部会自动选）
             loadModules();
             return;
         }
@@ -489,7 +510,6 @@
         mergeEnabledCheck.checked = false;
         mergeOutputFileInput.value = '';
         useGitIgnoreCheck.checked = false;
-        // 清空模块选择，并允许下次扫描重新自动选
         selectedModules.clear();
         availableModules = [];
         modulesLoaded = false;
@@ -529,7 +549,6 @@
         params.append('mergeOutputFile', mergeOutputFileInput.value);
         params.append('useGitIgnore', useGitIgnoreCheck.checked);
 
-        // 携带模块过滤参数
         if (selectedModules.size > 0) {
             params.append('modules', Array.from(selectedModules).join(','));
         }
@@ -1060,7 +1079,7 @@
     });
     localSaveFileBtn.addEventListener('click', saveLocalFile);
 
-    // ==================== ★ 启动引导（页面加载后自动扫描 + 默认选 omni*） ====================
+    // ==================== 启动引导（页面加载后自动扫描 + 默认选 omni*） ====================
     async function bootstrap() {
         // 1. 先拿默认配置（填 rootDir / extensions / 等）——必须 await，因为 loadModules 依赖 rootDir
         await loadDefaultConfig();

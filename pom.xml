@@ -71,6 +71,12 @@
             <version>${slf4j.version}</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- JSch：SSH2 协议 Java 实现，mwiede 版支持 ed25519 等现代密钥 -->
+        <dependency>
+            <groupId>com.github.mwiede</groupId>
+            <artifactId>jsch</artifactId>
+            <version>0.2.20</version>
+        </dependency>
     </dependencies>
 
     <build>

@@ -9,7 +9,6 @@ import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Service;
 import com.omni.framework.spring.config.ConfigLoader;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -22,18 +21,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * SSH 远程连接服务。
- *
- * <p>连接配置持久化到 {@code resources/ssh-connections.json}（可通过 ssh.store.path 覆盖）。</p>
- *
- * <p>安全约束：</p>
- * <ul>
- *   <li>只走 SSH 密钥免密，不支持密码落地</li>
- *   <li>拒绝路径包含 {@code ..} 段</li>
- *   <li>命令黑名单：rm -rf /、shutdown、reboot、mkfs 等</li>
- *   <li>读文件大小限制（默认 1MB），上传单文件 20MB</li>
- *   <li>不允许删除根目录</li>
- * </ul>
+ * SSH 远程连接服务（JSch 化改造版本）。
+ * <p>不再依赖系统 ssh / scp 命令，改用 JSch 直接走 SSH 协议；支持密码 / 密钥双认证。</p>
  */
 @Service
 public class SshConnectionService {
@@ -41,7 +30,6 @@ public class SshConnectionService {
 
     private final Map<String, SshConnection> connections = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final SshCommandRunner runner = new SshCommandRunner();
     private final Path storeFile;
 
     private final int execTimeout;
@@ -87,6 +75,7 @@ public class SshConnectionService {
             Path parent = storeFile.getParent();
             if (parent != null && !Files.exists(parent)) Files.createDirectories(parent);
             List<SshConnection> list = new ArrayList<>(connections.values());
+            // password 标注 @JsonProperty(WRITE_ONLY)，序列化时自动忽略
             byte[] data = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(list);
             Files.write(storeFile, data);
         } catch (Exception e) {
@@ -105,6 +94,12 @@ public class SshConnectionService {
     public SshConnection save(SshConnection c) {
         if (c.getId() == null || c.getId().trim().isEmpty()) {
             c.setId(UUID.randomUUID().toString().replace("-", ""));
+        } else {
+            SshConnection existing = connections.get(c.getId());
+            if (existing != null
+                    && (c.getPassword() == null || c.getPassword().isEmpty())) {
+                c.setPassword(existing.getPassword());
+            }
         }
         connections.put(c.getId(), c);
         saveToDisk();
@@ -123,28 +118,23 @@ public class SshConnectionService {
         SshConnection c = require(id);
         Map<String, Object> r = new LinkedHashMap<>();
         try {
-            SshCommandRunner.Result res = runner.exec(c, "uname -s 2>/dev/null || echo WINDOWS", 15);
+            String osType = JschSshClient.detectOsType(c, 15);
+            c.setOsType(osType);
             c.setLastTestTime(System.currentTimeMillis());
-            if (res.exitCode == 0 && !res.timeout) {
-                String os = res.stdout == null ? "" : res.stdout.trim();
-                if (os.contains("Linux") || os.contains("Darwin")) c.setOsType("linux");
-                else c.setOsType("windows");
-                c.setLastTestOk(true);
-                c.setLastTestError(null);
-                r.put("osType", c.getOsType());
-                r.put("stdout", os);
-            } else {
-                c.setLastTestOk(false);
-                c.setLastTestError(res.timeout ? "连接超时"
-                        : "exitCode=" + res.exitCode + " " + safeTrim(res.stderr));
-            }
+            c.setLastTestOk(true);
+            c.setLastTestError(null);
+            r.put("osType", osType);
+            r.put("stdout", osType);
+            r.put("success", true);
+            r.put("error", null);
         } catch (Exception e) {
+            c.setLastTestTime(System.currentTimeMillis());
             c.setLastTestOk(false);
             c.setLastTestError(e.getMessage());
+            r.put("success", false);
+            r.put("error", e.getMessage());
         }
         saveToDisk();
-        r.put("success", c.isLastTestOk());
-        r.put("error", c.getLastTestError());
         return r;
     }
 
@@ -157,7 +147,7 @@ public class SshConnectionService {
         ensureOs(c);
 
         String finalCmd = wrapCommand(c, cmd);
-        SshCommandRunner.Result res = runner.exec(c, finalCmd, execTimeout);
+        JschSshClient.Result res = JschSshClient.exec(c, finalCmd, execTimeout);
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("exitCode", res.exitCode);
         r.put("stdout", res.stdout);
@@ -179,7 +169,7 @@ public class SshConnectionService {
 
     private List<RemoteFile> listDirLinux(SshConnection c, String path) throws Exception {
         String cmd = "ls -lA --time-style=long-iso -- " + shellQuote(path) + " 2>/dev/null";
-        SshCommandRunner.Result res = runner.exec(c, cmd, 20);
+        JschSshClient.Result res = JschSshClient.exec(c, cmd, 20);
         List<RemoteFile> list = new ArrayList<>();
         if (res.exitCode != 0 && (res.stdout == null || res.stdout.isEmpty())) return list;
 
@@ -221,7 +211,7 @@ public class SshConnectionService {
         String q = path.replace("'", "''");
         String cmd = "powershell -NoProfile -Command \"Get-ChildItem -Force -LiteralPath '" + q
                 + "' | Select-Object Name,Length,LastWriteTime,Attributes | ConvertTo-Json -Compress\"";
-        SshCommandRunner.Result res = runner.exec(c, cmd, 25);
+        JschSshClient.Result res = JschSshClient.exec(c, cmd, 25);
         List<RemoteFile> list = new ArrayList<>();
         if (res.exitCode != 0 && (res.stdout == null || res.stdout.isEmpty())) return list;
         String json = res.stdout == null ? "" : res.stdout.trim();
@@ -268,12 +258,11 @@ public class SshConnectionService {
         SshConnection c = require(id);
         ensureOs(c);
 
-        // 先查大小
         String sizeCmd = "windows".equalsIgnoreCase(c.getOsType())
                 ? "powershell -NoProfile -Command \"(Get-Item -LiteralPath '" + path.replace("'", "''") + "').Length\""
                 : "stat -c %s -- " + shellQuote(path);
         try {
-            SshCommandRunner.Result sz = runner.exec(c, sizeCmd, 10);
+            JschSshClient.Result sz = JschSshClient.exec(c, sizeCmd, 10);
             if (sz.stdout != null && !sz.stdout.trim().isEmpty()) {
                 long size = Long.parseLong(sz.stdout.trim());
                 if (size > maxReadBytes) {
@@ -285,7 +274,7 @@ public class SshConnectionService {
         String cmd = "windows".equalsIgnoreCase(c.getOsType())
                 ? "powershell -NoProfile -Command \"[System.IO.File]::ReadAllText('" + path.replace("'", "''") + "')\""
                 : "cat -- " + shellQuote(path);
-        SshCommandRunner.Result res = runner.exec(c, cmd, 20);
+        JschSshClient.Result res = JschSshClient.exec(c, cmd, 20);
         if (res.exitCode != 0 && (res.stdout == null || res.stdout.isEmpty())) {
             throw new Exception("读取文件失败: " + safeTrim(res.stderr));
         }
@@ -296,30 +285,12 @@ public class SshConnectionService {
         if (data == null) throw new IllegalArgumentException("内容为空");
         if (data.length > maxUploadBytes) throw new IllegalArgumentException("文件过大");
         SshConnection c = require(id);
-        Path tmp = Files.createTempFile("ssh-upload-", ".tmp");
-        try {
-            Files.write(tmp, data);
-            SshCommandRunner.Result res = runner.scpUpload(c, tmp, path, scpTimeout);
-            if (res.exitCode != 0) {
-                throw new Exception("写入失败: " + safeTrim(res.stderr));
-            }
-        } finally {
-            try { Files.deleteIfExists(tmp); } catch (Exception ignored) {}
-        }
+        JschSshClient.upload(c, data, path, scpTimeout);
     }
 
     public byte[] download(String id, String path) throws Exception {
         SshConnection c = require(id);
-        Path tmp = Files.createTempFile("ssh-download-", ".tmp");
-        try {
-            SshCommandRunner.Result res = runner.scpDownload(c, path, tmp, scpTimeout);
-            if (res.exitCode != 0) {
-                throw new Exception("下载失败: " + safeTrim(res.stderr));
-            }
-            return Files.readAllBytes(tmp);
-        } finally {
-            try { Files.deleteIfExists(tmp); } catch (Exception ignored) {}
-        }
+        return JschSshClient.download(c, path, scpTimeout);
     }
 
     // ==================== 增 / 删 / 改 ====================
@@ -341,7 +312,7 @@ public class SshConnectionService {
         } else {
             cmd = "rm -rf -- " + shellQuote(path);
         }
-        SshCommandRunner.Result res = runner.exec(c, cmd, 30);
+        JschSshClient.Result res = JschSshClient.exec(c, cmd, 30);
         if (res.exitCode != 0) throw new Exception("删除失败: " + safeTrim(res.stderr));
     }
 
@@ -356,7 +327,7 @@ public class SshConnectionService {
         } else {
             cmd = "mv -- " + shellQuote(from) + " " + shellQuote(to);
         }
-        SshCommandRunner.Result res = runner.exec(c, cmd, 15);
+        JschSshClient.Result res = JschSshClient.exec(c, cmd, 15);
         if (res.exitCode != 0) throw new Exception("重命名失败: " + safeTrim(res.stderr));
     }
 
@@ -373,7 +344,7 @@ public class SshConnectionService {
         } else {
             cmd = "mkdir -p -- " + shellQuote(full);
         }
-        SshCommandRunner.Result res = runner.exec(c, cmd, 15);
+        JschSshClient.Result res = JschSshClient.exec(c, cmd, 15);
         if (res.exitCode != 0) throw new Exception("创建目录失败: " + safeTrim(res.stderr));
     }
 
@@ -388,13 +359,7 @@ public class SshConnectionService {
     private void ensureOs(SshConnection c) {
         if (c.getOsType() == null || c.getOsType().isEmpty() || "auto".equalsIgnoreCase(c.getOsType())) {
             try {
-                SshCommandRunner.Result r = runner.exec(c, "uname -s 2>/dev/null || echo WINDOWS", 15);
-                if (r.exitCode == 0 && r.stdout != null) {
-                    String s = r.stdout.trim();
-                    c.setOsType((s.contains("Linux") || s.contains("Darwin")) ? "linux" : "windows");
-                } else {
-                    c.setOsType("linux");
-                }
+                c.setOsType(JschSshClient.detectOsType(c, 15));
             } catch (Exception e) {
                 c.setOsType("linux");
             }

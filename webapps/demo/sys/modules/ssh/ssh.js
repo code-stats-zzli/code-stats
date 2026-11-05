@@ -1,9 +1,3 @@
-/**
- * 系统管理 · 远程 SSH / SCP 模块。
- *
- * 支持：连接管理（增删改查 + 测试） / 目录浏览 / 命令执行 / 文件编辑 / 上传下载 / 新建目录 / 重命名 / 删除。
- * 挂载方式与 log.js、cluster.js 完全一致，通过 SysCenter.register 注册。
- */
 (function () {
     'use strict';
 
@@ -11,7 +5,7 @@
         id: 'ssh',
         name: '远程 SSH',
         icon: '🖥️',
-        desc: 'SSH / SCP 远程服务器管理：连接测试 / 命令执行 / 目录浏览 / 文件上传下载与编辑',
+        desc: 'SSH / SCP 远程服务器管理：连接测试 / 命令执行 / 目录浏览 / 文件上传下载与编辑（支持密码与密钥两种认证）',
         mount: mountSsh
     });
 
@@ -36,7 +30,6 @@
                             <button class="ssh-tab" data-tab="editor">📝 文件编辑</button>
                         </div>
 
-                        <!-- Tab 1: 目录浏览 -->
                         <div class="ssh-pane active" id="sshPaneFiles">
                             <div class="ssh-path-bar">
                                 <input id="sshPathInput" placeholder="/">
@@ -52,7 +45,6 @@
                             </div>
                         </div>
 
-                        <!-- Tab 2: 命令行 -->
                         <div class="ssh-pane" id="sshPaneCmd">
                             <textarea id="sshCmdInput" rows="4" placeholder="输入远程命令，Ctrl+Enter 执行"></textarea>
                             <div class="ssh-cmd-actions">
@@ -63,7 +55,6 @@
                             <pre id="sshCmdOutput" class="ssh-terminal"></pre>
                         </div>
 
-                        <!-- Tab 3: 文件编辑 -->
                         <div class="ssh-pane" id="sshPaneEditor">
                             <div class="ssh-editor-bar">
                                 <input id="sshEditorPath" placeholder="从「目录浏览」双击文件打开" readonly>
@@ -75,7 +66,6 @@
                 </main>
             </div>
 
-            <!-- 连接编辑弹窗 -->
             <div id="sshConnModal" class="ssh-modal" style="display:none;">
                 <div class="ssh-modal-content">
                     <div class="ssh-modal-header">
@@ -86,6 +76,7 @@
                         <input type="hidden" id="sshConnId">
                         <label>名称</label>
                         <input id="sshName" type="text" placeholder="如：测试服务器">
+
                         <div class="ssh-row2">
                             <div>
                                 <label>Host</label>
@@ -96,10 +87,22 @@
                                 <input id="sshPort" type="number" value="22">
                             </div>
                         </div>
+
                         <label>用户名</label>
                         <input id="sshUsername" type="text" placeholder="root">
-                        <label>私钥路径（可选，留空走默认 ~/.ssh）</label>
-                        <input id="sshKeyPath" type="text" placeholder="C:\\Users\\me\\.ssh\\id_rsa 或 /root/.ssh/id_rsa">
+
+                        <label>私钥路径（可选，与密码二选一）</label>
+                        <input id="sshKeyPath" type="text"
+                               placeholder="C:\\Users\\me\\.ssh\\id_rsa 或 /root/.ssh/id_rsa">
+
+                        <label>密码（可选，与私钥二选一）</label>
+                        <input id="sshPassword" type="password"
+                               placeholder="留空则走默认私钥 ~/.ssh/id_rsa">
+                        <div style="font-size:11px;color:#94a3b8;margin-top:2px;line-height:1.4;">
+                            安全说明：密码只内存持有，<b>不写盘</b>。服务重启后需要重新输入。
+                            编辑已有连接时若留空，表示<b>保持原密码不变</b>。
+                        </div>
+
                         <label>备注</label>
                         <input id="sshRemark" type="text">
                     </div>
@@ -121,8 +124,6 @@
         let currentPath = '';
         let currentOs = 'linux';
         let currentTab = 'files';
-
-        // ==================== 工具 ====================
 
         function escapeHtml(s) {
             if (s == null) return '';
@@ -146,8 +147,6 @@
             return await resp.json();
         }
 
-        // ==================== 连接列表 ====================
-
         async function loadConnections() {
             try {
                 const r = await fetch(API + '/connections', { cache: 'no-store' }).then(x => x.json());
@@ -162,7 +161,8 @@
 
         function renderConnList() {
             if (!connections.length) {
-                $('sshConnList').innerHTML = '<div class="empty-tip" style="padding:20px;text-align:center;">暂无连接</div>';
+                $('sshConnList').innerHTML =
+                    '<div class="empty-tip" style="padding:20px;text-align:center;">暂无连接</div>';
                 return;
             }
             $('sshConnList').innerHTML = connections.map(c => `
@@ -227,8 +227,6 @@
             }
         }
 
-        // ==================== 弹窗 ====================
-
         function openConnModal(c) {
             $('sshModalTitle').textContent = c ? '编辑服务器' : '新增服务器';
             $('sshConnId').value = c ? c.id : '';
@@ -237,6 +235,10 @@
             $('sshPort').value = c ? c.port : 22;
             $('sshUsername').value = c ? (c.username || '') : '';
             $('sshKeyPath').value = c ? (c.keyPath || '') : '';
+            $('sshPassword').value = '';
+            $('sshPassword').placeholder = c
+                ? '留空表示不修改当前密码'
+                : '留空则走默认私钥 ~/.ssh/id_rsa';
             $('sshRemark').value = c ? (c.remark || '') : '';
             $('sshConnModal').style.display = 'flex';
         }
@@ -250,12 +252,17 @@
                 port: parseInt($('sshPort').value) || 22,
                 username: $('sshUsername').value.trim(),
                 keyPath: $('sshKeyPath').value.trim(),
+                password: $('sshPassword').value,
                 remark: $('sshRemark').value.trim(),
                 osType: 'auto'
             };
             if (!body.name) { alert('请填写名称'); return; }
             if (!body.host) { alert('请填写 Host'); return; }
             if (!body.username) { alert('请填写用户名'); return; }
+            if (!body.id && !body.keyPath && !body.password) {
+                alert('请填写「密码」或「私钥路径」其中一项');
+                return;
+            }
             try {
                 const r = await jpost(API + '/connection/save', body);
                 if (!r.success) throw new Error(r.error || '保存失败');
@@ -266,8 +273,6 @@
                 alert('保存失败：' + e.message);
             }
         }
-
-        // ==================== 选择连接 ====================
 
         function selectConnection(id) {
             currentId = id;
@@ -290,8 +295,6 @@
             refreshFileList();
         }
 
-        // ==================== Tab 切换 ====================
-
         function switchTab(tabId) {
             currentTab = tabId;
             container.querySelectorAll('.ssh-tab').forEach(t =>
@@ -305,8 +308,6 @@
         container.querySelectorAll('.ssh-tab').forEach(t => {
             t.addEventListener('click', () => switchTab(t.dataset.tab));
         });
-
-        // ==================== 目录浏览 ====================
 
         async function refreshFileList() {
             if (!currentId) return;
@@ -438,8 +439,6 @@
             }
         }
 
-        // ==================== 命令行 ====================
-
         function clearCommandOutput() {
             $('sshCmdOutput').textContent = '';
             $('sshCmdMeta').textContent = '';
@@ -471,8 +470,6 @@
             }
         }
 
-        // ==================== 编辑器 ====================
-
         function clearEditor() {
             $('sshEditorPath').value = '';
             $('sshEditorContent').value = '';
@@ -495,7 +492,6 @@
             const p = $('sshEditorPath').value;
             if (!p) { alert('请先从目录中选择文件'); return; }
             const content = $('sshEditorContent').value || '';
-            // UTF-8 → base64
             const bytes = new TextEncoder().encode(content);
             let bin = '';
             for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
@@ -508,8 +504,6 @@
                 alert('保存失败：' + e.message);
             }
         }
-
-        // ==================== 事件绑定 ====================
 
         $('sshAddBtn').addEventListener('click', () => openConnModal(null));
         $('sshModalClose').addEventListener('click', closeConnModal);
@@ -560,7 +554,6 @@
 
         $('sshSaveBtn').addEventListener('click', saveEditor);
 
-        // ==================== 启动 ====================
         loadConnections();
     }
 })();

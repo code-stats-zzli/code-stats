@@ -17,11 +17,4 @@
     <name>omni-common</name>
     <description>基础工具层：不依赖任何自研框架</description>
 
-    <modules>
-        <module>omni-common-log</module>
-        <module>omni-common-core</module>
-        <module>omni-common-config</module>
-        <module>omni-common-cache</module>
-        <module>omni-common-excel</module>
-    </modules>
 </project>

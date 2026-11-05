@@ -17,13 +17,4 @@
     <name>omni-business</name>
     <description>业务层：按领域聚合</description>
 
-    <modules>
-        <module>omni-business-common</module>
-        <module>omni-business-ai</module>
-        <module>omni-business-data</module>
-        <module>omni-business-devtool</module>
-        <module>omni-business-analysis</module>
-        <module>omni-business-file</module>
-        <module>omni-business-system</module>
-    </modules>
 </project>

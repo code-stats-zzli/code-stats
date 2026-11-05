@@ -1,12 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ExternalStorageConfigurationManager" enabled="true" />
-  <component name="KubernetesApiProvider"><![CDATA[{}]]></component>
+  <component name="KubernetesApiProvider">{}</component>
   <component name="MavenProjectsManager">
     <option name="originalFiles">
       <list>
         <option value="$PROJECT_DIR$/pom.xml" />
       </list>
+    </option>
+    <option name="ignoredFiles">
+      <set>
+        <option value="$PROJECT_DIR$/omni-business/omni-business-ai/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-business/omni-business-analysis/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-business/omni-business-common/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-business/omni-business-data/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-business/omni-business-devtool/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-business/omni-business-file/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-business/omni-business-system/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-common/omni-common-cache/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-common/omni-common-config/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-common/omni-common-core/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-common/omni-common-excel/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-common/omni-common-log/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-framework/omni-framework-codestats/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-framework/omni-framework-expression/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-framework/omni-framework-jdbc/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-framework/omni-framework-jstats/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-framework/omni-framework-mybatis/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-framework/omni-framework-scriptexec/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-framework/omni-framework-spider/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-framework/omni-framework-v4j/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-framework/omni-framework-web/pom.xml" />
+      </set>
     </option>
   </component>
   <component name="ProjectRootManager" version="2" languageLevel="JDK_1_8" project-jdk-name="1.8" project-jdk-type="JavaSDK">

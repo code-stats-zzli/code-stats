@@ -1,6 +1,56 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="Encoding">
+    <file url="file://$PROJECT_DIR$/omni-bootstrap/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-bootstrap/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-ai/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-ai/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-analysis/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-analysis/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-common/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-common/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-data/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-data/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-devtool/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-devtool/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-file/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-file/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-system/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/omni-business-system/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-business/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-common/omni-common-cache/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-common/omni-common-cache/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-common/omni-common-config/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-common/omni-common-config/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-common/omni-common-core/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-common/omni-common-core/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-common/omni-common-excel/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-common/omni-common-excel/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-common/omni-common-log/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-common/omni-common-log/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-common/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-common/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-codestats/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-codestats/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-expression/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-expression/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-jdbc/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-jdbc/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-jstats/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-jstats/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-mybatis/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-mybatis/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-scriptexec/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-scriptexec/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-spider/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-spider/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-v4j/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-v4j/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-web/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-web/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-framework/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
   </component>

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>连接管理 - CodeStats</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="connection-manager.css">
+    <script src="../global.js"></script>
+</head>
+<body>
+<div class="cm-layout">
+    <!-- ==================== 顶部 Header ==================== -->
+    <header class="cm-main-header">
+        <h2>🔗 连接管理</h2>
+        <span class="status-badge disconnected" id="connStatus">未连接</span>
+    </header>
+
+    <!-- ==================== 主体左右布局 ==================== -->
+    <div class="cm-body-layout">
+        <!-- ---------- 左侧：示例 / 上传驱动 双 Tab ---------- -->
+        <aside class="cm-left">
+            <div class="left-tabs-bar">
+                <button class="left-tab-btn active" data-tab="sample">📋 示例</button>
+                <button class="left-tab-btn" data-tab="resource">📤 上传驱动</button>
+            </div>
+
+            <!-- Tab 1：示例（默认激活） -->
+            <div class="left-tab-pane active" id="leftPaneSample">
+                <div class="sample-list" id="sampleList">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+
+            <!-- Tab 2：上传驱动 -->
+            <div class="left-tab-pane" id="leftPaneResource">
+                <div class="resource-toolbar">
+                    <button id="uploadDriverBtn" class="btn-primary btn-sm">📤 上传驱动</button>
+                    <button id="refreshDriversBtn" class="btn-secondary btn-sm">🔄 刷新</button>
+                    <input type="text" id="driverFilter" class="driver-filter"
+                           placeholder="按类型或版本过滤...">
+                </div>
+                <div class="driver-list-wrapper">
+                    <div id="driverList" class="driver-list">
+                        <div class="loading">加载中...</div>
+                    </div>
+                </div>
+                <div id="driverEditor" class="driver-editor-panel" style="display:none;"></div>
+            </div>
+        </aside>
+
+        <!-- ---------- 右侧：操作步骤（默认折叠） + 连接配置 ---------- -->
+        <main class="cm-right">
+            <div class="guide-card collapsed" id="guideCard">
+                <div class="guide-header" id="guideHeader">
+                    <div class="guide-title">
+                        <span class="num-badge">?</span>
+                        <span>操作步骤（点击展开/收起）</span>
+                    </div>
+                    <span class="guide-toggle" id="guideToggle">▶</span>
+                </div>
+                <div class="guide-body">
+                    <div class="guide-step" data-step="1">
+                        <div class="step-num">1</div>
+                        <div class="step-content">
+                            <strong>上传 / 选择驱动</strong>
+                            <span>在左侧「上传驱动」中上传 .jar，或选择已有驱动文件</span>
+                        </div>
+                    </div>
+                    <div class="guide-step" data-step="2">
+                        <div class="step-num">2</div>
+                        <div class="step-content">
+                            <strong>配置版本与驱动类</strong>
+                            <span>选中驱动后，编辑器面板展示在下方</span>
+                        </div>
+                    </div>
+                    <div class="guide-step" data-step="3">
+                        <div class="step-num">3</div>
+                        <div class="step-content">
+                            <strong>点击示例连接串（可选）</strong>
+                            <span>左侧「示例」Tab 提供常用连接串，点击即可填充到右侧</span>
+                        </div>
+                    </div>
+                    <div class="guide-step" data-step="4">
+                        <div class="step-num">4</div>
+                        <div class="step-content">
+                            <strong>测试连接</strong>
+                            <span>填写连接串后点 <code>🔌 测试连接</code></span>
+                        </div>
+                    </div>
+                    <div class="guide-step" data-step="5">
+                        <div class="step-num">5</div>
+                        <div class="step-content">
+                            <strong>执行 SQL</strong>
+                            <span>连接成功后可以执行 SELECT / SHOW / DESC 等查询</span>
+                        </div>
+                    </div>
+                    <div class="guide-step" data-step="6">
+                        <div class="step-num">6</div>
+                        <div class="step-content">
+                            <strong>保存为数据源</strong>
+                            <span>填写名称并保存，用于后续复用</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 连接配置 -->
+            <div class="connection-panel">
+                <div class="connection-body">
+                    <div class="form-group">
+                        <label>连接串 (JDBC URL) <span style="color:#dc2626;">*</span></label>
+                        <input type="text" id="connUrl"
+                               placeholder="例如: jdbc:mysql://localhost:3306/test?useSSL=false&serverTimezone=UTC">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>用户名</label>
+                            <input type="text" id="connUsername" placeholder="root">
+                        </div>
+                        <div class="form-group">
+                            <label>密码</label>
+                            <input type="password" id="connPassword">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>数据库类型</label>
+                            <select id="connDbType">
+                                <option value="">自动识别</option>
+                                <option value="mysql">MySQL</option>
+                                <option value="oracle">Oracle</option>
+                                <option value="sqlserver">SQL Server</option>
+                                <option value="postgresql">PostgreSQL</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>驱动版本（选择后自动关联驱动类）</label>
+                            <div class="combo-wrap">
+                                <input type="text" id="connVersion" placeholder="选择数据库类型后自动加载" autocomplete="off">
+                                <button type="button" class="combo-btn" id="connVersionBtn" title="展开版本列表">▾</button>
+                                <div class="combo-panel" id="connVersionPanel"></div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>驱动类（随版本自动切换，可手动修改）</label>
+                            <div class="combo-wrap">
+                                <input type="text" id="connDriverClass" placeholder="选择版本后自动匹配" autocomplete="off">
+                                <button type="button" class="combo-btn" id="connDriverClassBtn" title="展开驱动类列表">▾</button>
+                                <div class="combo-panel" id="connDriverClassPanel"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="btn-row">
+                        <button id="parseBtn" class="btn-secondary">🔍 解析连接串</button>
+                        <button id="testBtn" class="btn-primary">🔌 测试连接</button>
+                        <button id="closeBtn" class="btn-secondary" disabled>✖ 关闭连接</button>
+                    </div>
+
+                    <div id="parseResult" class="parse-result" style="display:none;"></div>
+                    <div id="statusMsg" style="display:none;"></div>
+
+                    <div id="sqlSection" style="display:none;">
+                        <h3 class="section-title">📝 执行 SQL 查询</h3>
+                        <div class="form-group">
+                            <textarea id="sqlInput" rows="4"
+                                      placeholder="输入查询语句，如：SELECT * FROM user LIMIT 10"></textarea>
+                        </div>
+                        <div class="btn-row">
+                            <button id="execSqlBtn" class="btn-primary">▶️ 执行 SQL</button>
+                            <button id="clearSqlBtn" class="btn-secondary">🗑️ 清空</button>
+                        </div>
+                        <div id="sqlResult" style="margin-top:16px;"></div>
+                    </div>
+
+                    <div id="saveSection" style="display:none;">
+                        <h3 class="section-title">💾 保存为正式数据源</h3>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:2;">
+                                <label>数据源名称</label>
+                                <input type="text" id="dsName" placeholder="留空自动生成：dbType_host_database">
+                            </div>
+                            <div class="form-group" style="flex:1; display:flex; align-items:flex-end;">
+                                <button id="saveDsBtn" class="btn-primary" style="width:100%;">💾 保存</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- ==================== 驱动上传弹窗（不变） ==================== -->
+<div id="driverUploadModal" class="modal" style="display:none;">
+    <div class="modal-content" style="width: 560px; max-width: 92%;">
+        <div class="modal-header">
+            <h3>🔌 上传驱动 Jar</h3>
+            <span class="close" id="closeDriverUploadModal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Jar 文件 <span style="color:#dc2626;">*</span></label>
+                <input type="file" id="driverJarFile" accept=".jar,application/java-archive" style="display:none;">
+                <div class="file-picker" id="driverFilePicker">
+                    <div class="file-picker-name" id="driverFilePickerName">点击选择 .jar 文件</div>
+                    <div class="file-picker-hint">仅允许 .jar 格式</div>
+                </div>
+            </div>
+            <div id="driverDetectBanner" class="detect-banner info">
+                选择文件后自动识别数据库类型与版本
+            </div>
+            <div class="form-group">
+                <label>数据库类型 <span style="color:#dc2626;">*</span></label>
+                <select id="driverUploadDbType">
+                    <option value="mysql">MySQL</option>
+                    <option value="oracle">Oracle</option>
+                    <option value="sqlserver">SQL Server</option>
+                    <option value="postgresql">PostgreSQL</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>驱动版本 <span style="color:#dc2626;">*</span></label>
+                <input type="text" id="driverUploadVersion" placeholder="如 8.0.33；识别不到请手动填写">
+            </div>
+            <div id="driverUploadError" class="error-text"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="driverUploadConfirmBtn" class="btn-primary">保存</button>
+            <button id="driverUploadCancelBtn" class="btn-secondary">取消</button>
+        </div>
+    </div>
+</div>
+
+<script src="connection-manager.js"></script>
+</body>
+</html>

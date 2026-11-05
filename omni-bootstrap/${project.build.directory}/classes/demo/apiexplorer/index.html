@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Explorer - 接口调试与自定义请求</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="apiexplorer.css">
+    <script src="../global.js"></script>
+</head>
+<body>
+<div class="api-container">
+    <aside class="api-sidebar">
+        <div class="sidebar-header">
+            <h3>📡 API Explorer</h3>
+            <div class="search-box">
+                <input type="text" id="apiSearch" placeholder="搜索接口...">
+            </div>
+        </div>
+        <div class="api-tree-wrapper">
+            <ul class="api-tree" id="apiTree">
+                <li class="loading">加载中...</li>
+            </ul>
+        </div>
+    </aside>
+
+    <main class="api-content">
+        <!-- 双标签页容器 -->
+        <div class="api-tabs">
+            <div class="tab-bar">
+                <button class="tab-button active" data-tab="api-debug">🔧 接口调试</button>
+                <button class="tab-button" data-tab="custom-request">✨ 自定义请求</button>
+            </div>
+
+            <!-- 接口调试标签页（原有完整功能） -->
+            <div class="tab-pane active" id="apiDebugPane">
+                <div id="apiDetail" class="api-detail">
+                    <div class="empty-state">
+                        <span class="empty-icon">🔍</span>
+                        <p>从左侧选择一个接口</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 自定义请求标签页（全新独立功能） -->
+            <div class="tab-pane" id="customRequestPane">
+                <div class="custom-request-container">
+                    <div class="form-group">
+                        <label>🌐 请求地址 (URL)</label>
+                        <input type="text" id="customApiUrl" placeholder="https://api.example.com/endpoint" value="https://jsonplaceholder.typicode.com/posts">
+                    </div>
+                    <div class="form-group">
+                        <label>⚙️ 请求方法</label>
+                        <select id="customApiMethod">
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                            <option value="PATCH">PATCH</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>📄 参数格式</label>
+                        <select id="bodyFormatSelect">
+                            <option value="json">JSON (application/json)</option>
+                            <option value="form">表单 (application/x-www-form-urlencoded)</option>
+                            <option value="text">纯文本 (text/plain)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="customBodyContainer">
+                        <label>📦 请求 Body</label>
+                        <div id="bodyEditor"></div>
+                    </div>
+                    <button id="sendCustomRequestBtn" class="send-btn">🚀 发送自定义请求</button>
+                    <div id="customResponseArea" class="response-area" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+<script src="apiexplorer.js"></script>
+<script src="custom-request.js"></script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统管理 - CodeStats</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="sys.css">
+    <link rel="stylesheet" href="modules/log/log.css">
+    <link rel="stylesheet" href="modules/cluster/cluster.css">
+    <link rel="stylesheet" href="modules/ssh/ssh.css">
+    <!-- 新增：系统参数模块样式 -->
+    <link rel="stylesheet" href="modules/params/params.css">
+    <script src="../global.js"></script>
+</head>
+<body>
+<div class="sys-layout">
+    <aside class="sys-sidebar">
+        <div class="sys-brand">
+            <span class="sys-brand-icon">🖥️</span>
+            <span class="sys-brand-text">系统管理</span>
+        </div>
+        <nav class="sys-menu" id="sysMenu"></nav>
+        <div class="sys-menu-footer">
+            <div class="sys-tip">扩展提示：后续可在此新增 JVM / 线程 / 进程 / 配置 / 命令执行等系统功能</div>
+        </div>
+    </aside>
+    <main class="sys-content">
+        <div class="sys-content-header">
+            <h2 id="sysContentTitle">系统管理</h2>
+            <div class="sys-content-subtitle" id="sysContentDesc"></div>
+        </div>
+        <div class="sys-content-body" id="sysContentBody"></div>
+    </main>
+</div>
+
+<script src="sys.js"></script>
+<script src="modules/log/log.js"></script>
+<script src="modules/cluster/cluster.js"></script>
+<script src="modules/ssh/ssh.js"></script>
+<!-- 新增：系统参数模块 -->
+<script src="modules/params/params.js"></script>
+</body>
+</html>

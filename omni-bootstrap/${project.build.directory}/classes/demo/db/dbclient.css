@@ -1,0 +1,321 @@
+/* ==================== 全局与布局 ==================== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', sans-serif; display: flex; height: 100vh; background: transparent; }
+
+.db-layout {
+    display: flex; flex-direction: column; height: 100vh; width: 100%; background: transparent;
+}
+.db-toolbar {
+    display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+    background: var(--bg-card); backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(0, 102, 255, 0.2); margin-bottom: 12px;
+}
+.db-selector { display: flex; align-items: center; gap: 8px; }
+.db-selector select { min-width: 180px; }
+
+.db-main-row {
+    display: flex; flex: 1; gap: 12px; padding: 0 16px 16px 16px; overflow: hidden;
+}
+
+/* ==================== 左侧表列表面板 ==================== */
+.table-list-panel {
+    width: 220px; background: var(--bg-card); border-radius: 20px; padding: 12px;
+    display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+}
+.table-list-panel h3 { margin-bottom: 10px; color: var(--accent-primary); font-size: 15px; }
+
+.db-info-inline {
+    display: flex; align-items: center; gap: 4px; margin-bottom: 10px; padding: 6px 10px;
+    background: rgba(0, 102, 255, 0.05); border-radius: 10px; font-size: 12px;
+    border: 1px dashed rgba(0, 102, 255, 0.3); line-height: 1.4;
+}
+.db-info-label { color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+.db-info-value { color: var(--accent-primary); font-weight: 600; font-family: monospace; word-break: break-all; }
+
+.table-filter-inline { margin-bottom: 10px; }
+.table-filter-inline input {
+    width: 100%; padding: 6px 10px; font-size: 13px; border-radius: 16px;
+    background: white; border: 1px solid rgba(0, 102, 255, 0.3);
+}
+.table-list { flex: 1; overflow-y: auto; }
+.table-item {
+    padding: 6px 10px; margin: 3px 0; border-radius: 12px; cursor: grab;
+    transition: 0.2s; font-size: 13px; display: flex; align-items: center; gap: 6px;
+    user-select: none;
+}
+.table-item:active { cursor: grabbing; }
+.table-item:hover { background: rgba(0, 102, 255, 0.1); }
+.table-item.active { background: var(--accent-primary); color: white; }
+.table-item .icon { font-size: 14px; }
+.table-item .name { flex: 1; word-break: break-word; }
+
+/* ==================== 右侧内容面板 ==================== */
+.content-panel {
+    flex: 1; display: flex; flex-direction: column; background: var(--bg-card);
+    border-radius: 20px; overflow: hidden; min-width: 0; min-height: 0;
+}
+.tab-header {
+    background: rgba(0, 0, 0, 0.3); border-bottom: 1px solid rgba(0, 200, 255, 0.3);
+    padding: 0 16px; display: flex; flex-shrink: 0;
+}
+.tab-btn {
+    padding: 10px 20px; border: none; background: transparent; cursor: pointer;
+    font-size: 13px; color: var(--text-dark); border-bottom: 2px solid transparent; transition: 0.2s;
+}
+.tab-btn.active {
+    color: white; background: var(--accent-primary); border-radius: 20px 20px 0 0;
+    border-bottom: 2px solid var(--accent-primary); box-shadow: 0 -2px 8px rgba(0, 102, 255, 0.2);
+}
+.tab-content {
+    flex: 1; padding: 16px; overflow: hidden; display: flex; flex-direction: column; min-height: 0;
+}
+.tab-pane { display: none; }
+.tab-pane.active { display: block; flex: 1; min-height: 0; overflow-y: auto; }
+#tab-diagram.active { overflow: hidden; }
+
+/* ==================== 视图画布 ==================== */
+.diagram-simple-container {
+    display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 8px;
+}
+.canvas-toolbar {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-shrink: 0; padding: 0 4px;
+}
+.canvas-toolbar .canvas-hint-text { font-size: 12px; color: var(--text-muted); }
+.btn-sm { padding: 4px 14px; font-size: 12px; border-radius: 20px; }
+
+.canvas-area { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.canvas-container {
+    flex: 1; background: #f8fafc; border-radius: 16px;
+    border: 1px solid rgba(0, 102, 255, 0.2);
+    overflow: auto; position: relative; min-height: 0;
+}
+#diagramSvg {
+    width: 2000px;
+    height: 1500px;
+    min-width: 100%;
+    min-height: 100%;
+    background-image: linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+    linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+    background-size: 20px 20px;
+    cursor: crosshair;
+    display: block;
+}
+.canvas-placeholder {
+    position: absolute; top: 40px; left: 40px;
+    color: #94a3b8; pointer-events: none; font-size: 14px;
+}
+
+/* ==================== 视图 SQL 面板 ==================== */
+.sql-preview-panel {
+    flex-shrink: 0; background: var(--bg-card); border-radius: 16px;
+    border: 1px solid rgba(0, 102, 255, 0.2); padding: 10px 14px;
+    display: flex; flex-direction: column; max-height: 220px;
+}
+.sql-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+#viewSqlText {
+    width: 100%; font-family: monospace; background: #f1f5f9; border-radius: 12px;
+    padding: 8px 10px; resize: vertical; border: 1px solid rgba(0, 102, 255, 0.3);
+    font-size: 12px; line-height: 1.4; min-height: 80px;
+}
+
+/* ==================== 表节点选中高亮 ==================== */
+.table-node-group.selected .header-rect {
+    stroke: #ff6b6b;
+    stroke-width: 3;
+    filter: drop-shadow(0 0 8px rgba(255, 107, 107, 0.8));
+}
+.table-node-group.multi-selected .header-rect {
+    stroke: #22c55e;
+    stroke-width: 3;
+    filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.8));
+}
+.join-node-group.selected rect {
+    stroke: #ff6b6b !important;
+    stroke-width: 4 !important;
+    filter: drop-shadow(0 0 10px rgba(255, 107, 107, 0.9));
+}
+.join-node-group.multi-selected rect {
+    stroke: #22c55e !important;
+    stroke-width: 4 !important;
+}
+.transform-node-group.selected rect {
+    stroke: #ff6b6b;
+    stroke-width: 3;
+}
+
+/* ==================== 表格/其他通用 ==================== */
+.data-table, .props-table, .sql-result-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th, .props-table td:first-child, .sql-result-table th { background: rgba(0, 102, 255, 0.15); padding: 8px; }
+.data-table td, .props-table td, .sql-result-table td { padding: 6px 8px; border-bottom: 1px solid rgba(0, 102, 255, 0.1); }
+
+.pagination button {
+    margin: 0 4px; padding: 4px 10px; background: rgba(0, 102, 255, 0.1);
+    border: 1px solid rgba(0, 102, 255, 0.3); border-radius: 20px; cursor: pointer;
+}
+.pagination button.active { background: var(--accent-primary); color: white; }
+
+.sql-editor textarea {
+    width: 100%; font-family: monospace; background: #f8fafc; color: #1e293b;
+    border-radius: 16px; padding: 12px;
+}
+.loading, .error, .empty-state { padding: 20px; text-align: center; color: var(--text-muted); }
+.error { color: #dc2626; }
+
+/* 表节点基础样式 */
+.table-node-group { cursor: move; }
+.table-node-group:hover { filter: drop-shadow(0 4px 8px rgba(0, 102, 255, 0.2)); }
+.header-rect { fill: #0066ff; stroke: none; rx: 6; ry: 6; }
+.header-text {
+    font-family: 'Inter', sans-serif; font-size: 14px; font-weight: bold;
+    fill: white; dominant-baseline: middle; text-anchor: middle;
+}
+.field-rect { rx: 6; ry: 6; fill: #ffffff; stroke: #cbd5e1; stroke-width: 1; }
+.field-text { font-family: monospace; font-size: 12px; fill: #1e293b; dominant-baseline: middle; }
+.field-type-badge { font-family: monospace; font-size: 10px; fill: #64748b; }
+
+/* 转换节点 */
+.transform-node-group { cursor: move; }
+.transform-node-group rect { fill: #f59e0b; rx: 8; }
+.transform-node-group text {
+    fill: white; font-size: 12px; font-weight: bold;
+    text-anchor: middle; dominant-baseline: middle;
+}
+
+/* Join 节点 */
+.join-node-group { cursor: move; }
+.join-node-group:hover { filter: drop-shadow(0 4px 10px rgba(245, 158, 11, 0.4)); }
+
+/* 箭头连线 */
+.edge { stroke: #0066ff; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+.edge-label { font-size: 10px; fill: #0066ff; }
+
+/* 右键菜单 */
+.context-menu {
+    background: white; border-radius: 12px; border: 1px solid rgba(0, 102, 255, 0.3);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15); min-width: 180px;
+}
+.context-item { padding: 8px 16px; cursor: pointer; transition: 0.2s; font-size: 14px; color: #1e293b; }
+.context-item:hover { background: #0066ff10; color: #0066ff; }
+
+/* ==================== ★ 弹窗（可拖动 + 内容滚动） ==================== */
+.modal {
+    position: fixed; z-index: 10001; left: 0; top: 0; width: 100%; height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+}
+.modal-content {
+    background: white; border-radius: 24px; box-shadow: 0 20px 35px rgba(0, 0, 0, 0.2);
+    animation: modalFadeIn 0.2s;
+    /* ★ 让弹窗内容超出时内部滚动，避免页面撑爆 */
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+    min-height: 0;
+}
+.modal-header {
+    padding: 16px 24px; border-bottom: 1px solid #e2e8f0;
+    display: flex; justify-content: space-between; align-items: center; font-weight: 600;
+    /* ★ 拖拽手柄 */
+    cursor: move;
+    user-select: none;
+    flex-shrink: 0;
+}
+.modal-header .close-modal { cursor: pointer; }
+.modal-body {
+    padding: 24px;
+    /* ★ 内容滚动 */
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+.modal-footer {
+    padding: 16px 24px; border-top: 1px solid #e2e8f0; text-align: right;
+    gap: 8px; display: flex; justify-content: flex-end;
+    flex-shrink: 0;
+}
+@keyframes modalFadeIn {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 字段转换弹窗内部 */
+.source-fields-list .field-item {
+    background: white; border-radius: 12px; padding: 8px 12px; margin-bottom: 8px;
+    cursor: grab; border: 1px solid #e2e8f0; transition: 0.2s;
+}
+.source-fields-list .field-item:active { cursor: grabbing; }
+.source-fields-list .field-item:hover { border-color: var(--accent-primary); background: rgba(0, 102, 255, 0.05); }
+.transform-item {
+    background: #f8fafc; border-radius: 16px; padding: 12px; margin-bottom: 12px;
+    border-left: 4px solid var(--accent-primary);
+}
+.transform-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+.transform-expression, .transform-alias {
+    font-family: monospace; font-size: 12px; padding: 6px 8px;
+    border-radius: 12px; border: 1px solid #cbd5e1; width: 100%;
+}
+.function-bar button {
+    background: rgba(0, 102, 255, 0.1); border: none; border-radius: 20px;
+    padding: 4px 12px; margin: 0 4px; cursor: pointer;
+}
+.function-bar button:hover { background: var(--accent-primary); color: white; }
+.icon-btn {
+    background: none; border: 1px solid rgba(0, 102, 255, 0.3); border-radius: 20px;
+    padding: 2px 10px; cursor: pointer; font-size: 14px;
+}
+.icon-btn:hover { background: var(--accent-primary); color: white; }
+.empty-hint { text-align: center; color: var(--text-muted); padding: 20px; font-size: 13px; }
+
+/* ==================== Join 弹窗专用样式 ==================== */
+#joinModal .form-row {
+    display: flex; align-items: center; margin-bottom: 12px; gap: 8px;
+}
+#joinModal .form-row label {
+    width: 100px; font-weight: 600; color: #1e293b; flex-shrink: 0;
+}
+#joinModal .form-row input,
+#joinModal .form-row select {
+    flex: 1; padding: 8px 12px; border-radius: 10px;
+    border: 1px solid rgba(0, 102, 255, 0.3); background: white;
+    font-size: 13px; color: #1e293b;
+}
+#joinModal .form-row input:focus,
+#joinModal .form-row select:focus {
+    outline: none; border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.15);
+}
+#joinModal .join-condition {
+    flex: 1; display: flex; gap: 6px; align-items: center;
+}
+#joinModal .join-condition select { flex: 1; min-width: 0; }
+#joinModal .join-condition #joinOperator {
+    flex: 0 0 70px;
+    text-align: center;
+}
+#joinModal .join-table-name {
+    flex: 1; padding: 8px 12px; background: rgba(0, 102, 255, 0.08);
+    border-radius: 10px; font-family: monospace; font-weight: 600; color: #0066ff;
+}
+#joinModal .mini-btn {
+    padding: 4px 12px; font-size: 12px; border-radius: 20px;
+    border: 1px solid rgba(0, 102, 255, 0.3); background: rgba(0, 102, 255, 0.08);
+    color: #0066ff; cursor: pointer; transition: 0.2s;
+}
+#joinModal .mini-btn:hover { background: rgba(0, 102, 255, 0.2); }
+
+/* 下拉菜单 */
+.dropdown { position: relative; display: inline-block; }
+.dropdown-toggle { cursor: pointer; }
+.dropdown-menu {
+    position: absolute; top: 100%; left: 0; background: var(--bg-card);
+    backdrop-filter: blur(16px); border: 1px solid rgba(0, 102, 255, 0.3);
+    border-radius: 16px; min-width: 160px; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    z-index: 1000; display: none; padding: 8px 0;
+}
+.dropdown:hover .dropdown-menu { display: block; }
+.dropdown-menu a {
+    display: block; padding: 8px 20px; color: var(--text-dark);
+    text-decoration: none; font-size: 14px; transition: 0.2s;
+}
+.dropdown-menu a:hover { background: rgba(0, 102, 255, 0.1); color: var(--accent-primary); }

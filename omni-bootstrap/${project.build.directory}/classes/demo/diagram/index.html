@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG 画图工具 · CodeStats</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="diagram.css">
+    <script src="../global.js"></script>
+</head>
+<body>
+<div class="dg-app">
+    <header class="dg-toolbar">
+        <div class="dg-brand">🎨 SVG 画图</div>
+        <div class="dg-tools">
+            <button class="dg-tool active" data-tool="select" title="选择 (V)">↖ 选择</button>
+            <button class="dg-tool" data-tool="rect"     title="矩形 (R)">▭ 矩形</button>
+            <button class="dg-tool" data-tool="ellipse"  title="椭圆 (O)">◯ 椭圆</button>
+            <button class="dg-tool" data-tool="line"     title="直线 (L)">／ 直线</button>
+            <button class="dg-tool" data-tool="arrow"    title="箭头 (A)">→ 箭头</button>
+            <button class="dg-tool" data-tool="text"     title="文本 (T)">T 文本</button>
+            <button class="dg-tool" data-tool="pen"      title="自由笔 (P)">✎ 自由笔</button>
+        </div>
+        <div class="dg-actions">
+            <button id="btn-undo"   title="撤销 Ctrl+Z">↶</button>
+            <button id="btn-redo"   title="重做 Ctrl+Y">↷</button>
+            <button id="btn-delete" title="删除 Delete">🗑</button>
+            <button id="btn-fit"    title="适应画布">⛶</button>
+            <button id="btn-clear"  title="清空">🧹</button>
+            <span class="dg-sep"></span>
+            <button id="btn-import"      title="导入 JSON">📥</button>
+            <button id="btn-export-json" title="导出 JSON">💾</button>
+            <button id="btn-export-svg"  title="导出 SVG">📤</button>
+            <button id="btn-export-png"  title="导出 PNG">🖼</button>
+            <input type="file" id="file-import" accept=".json,application/json" style="display:none;">
+        </div>
+    </header>
+    <div class="dg-body">
+        <main class="dg-canvas-wrap">
+            <svg id="dg-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+        </main>
+        <aside class="dg-inspector" id="dg-inspector">
+            <div class="dg-empty-tip">未选中任何元素</div>
+        </aside>
+    </div>
+</div>
+<script type="module" src="main.js"></script>
+</body>
+</html>

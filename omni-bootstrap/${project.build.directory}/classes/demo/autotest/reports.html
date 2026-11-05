@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>报告中心</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <script src="../global.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: transparent; padding: 20px; margin: 0; }
+        .container { max-width: 1200px; margin: auto; background: var(--bg-card); border-radius: 16px; padding: 24px; }
+        h1 { color: var(--accent-primary); }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: var(--accent-primary); color: white; padding: 10px; text-align: left; }
+        td { padding: 10px; border-bottom: 1px solid rgba(0,102,255,0.2); }
+        .status-pass { color: #22c55e; font-weight: bold; }
+        .status-fail { color: #ef4444; font-weight: bold; }
+        .status-running { color: #f59e0b; font-weight: bold; }
+        .link { color: var(--accent-primary); text-decoration: none; }
+        .link:hover { text-decoration: underline; }
+        .empty-tip { text-align: center; color: var(--text-muted); padding: 40px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 报告中心</h1>
+    <table>
+        <thead><tr><th>执行编号</th><th>开始时间</th><th>总步骤</th><th>通过</th><th>失败</th><th>通过率</th><th>状态</th><th>耗时</th><th>报告</th></tr></thead>
+        <tbody id="execTableBody"></tbody>
+    </table>
+</div>
+
+<script>
+    (function() {
+        let caseId = new URLSearchParams(window.location.search).get('caseId');
+
+        // API 路径映射到 Controller
+        const API_EXECUTIONS = window.apiUrl('/autotest/api/execute/executions');
+
+        async function loadExecutions() {
+            if (!caseId) {
+                document.getElementById('execTableBody').innerHTML = '<tr><td colspan="9" class="empty-tip">请从用例管理进入查看报告</td></tr>';
+                return;
+            }
+            const resp = await fetch(API_EXECUTIONS + '?caseId=' + caseId);
+            const data = await resp.json();
+            const tbody = document.getElementById('execTableBody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-tip">暂无执行记录</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map(e => `
+                <tr>
+                    <td>${escapeHtml(e.executionCode)}</td>
+                    <td>${new Date(e.startTime).toLocaleString()}</td>
+                    <td>${e.totalSteps}</td>
+                    <td>${e.passCount}</td>
+                    <td>${e.failCount}</td>
+                    <td>${e.passRate}%</td>
+                    <td class="status-${e.status === 1 ? 'pass' : e.status === 2 ? 'fail' : 'running'}">${e.status === 1 ? '通过' : e.status === 2 ? '失败' : '执行中'}</td>
+                    <td>${e.totalTimeMs}ms</td>
+                    <td><a href="${e.reportUrl || '#'}" target="_blank" class="link">查看</a></td>
+                </tr>
+            `).join('');
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+        }
+
+        loadExecutions();
+    })();
+</script>
+</body>
+</html>

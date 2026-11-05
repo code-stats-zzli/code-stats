@@ -1,0 +1,45 @@
+# 分析根目录
+rootDir: src\main\java
+# 包含的扩展名
+extensions:
+  - java
+  - xml
+  - properties
+  - md
+  - py
+  - service
+# 排除路径
+excludePaths:
+  - target
+  - .git
+  - node_modules
+  - lib
+# 是否排除注释
+excludeComments: true
+# 线程数
+threadCount: 8
+# 排序方式
+sortBy: lines
+# 输出格式
+outputFormat: console
+# 输出文件（当 format 为 file 时使用）
+outputFile: "output.csv"
+# 是否使用 .gitignore
+useGitIgnore: true
+
+# 新增的默认路径
+
+defaultInputPath: 'D:\space\code\merge.txt'
+defaultOutputPath: 'D:\space\code\merge.txt'
+
+# ★ 额外要追加的其他代码文件路径（逗号分隔的目录或文件）
+extraPaths:
+  - webapps
+
+questionbank:
+  default:
+    rootDir: D:/work/tk
+    outputFile: D:/work/tk/merged_questionbank.txt
+    keyword: ""
+    namePrefixes: "1-,5-,8-,15-,18-,19-,21-,22-,23-,24-,59-1-"
+

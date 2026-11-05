@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D 场景中心 · 页签切换</title>
+    <link rel="stylesheet" href="3d-scene.css" />
+</head>
+<body>
+<div id="app">
+    <aside class="sidebar">
+        <div class="sidebar-header"><h3>🌐 3D 场景</h3></div>
+        <ul class="nav-list">
+            <li class="nav-item active" data-tab="modules"><span class="icon">🧩</span> 项目模块</li>
+            <li class="nav-item" data-tab="barchart"><span class="icon">📊</span> 3D 柱状图</li>
+            <li class="nav-item" data-tab="callchain"><span class="icon">🔗</span> 调用链拓扑</li>
+            <li class="nav-item" data-tab="trace"><span class="icon">⚡</span> 动态调用链</li>
+            <li class="nav-item" data-tab="realtime"><span class="icon">📡</span> 实时监控</li>
+            <!-- 新增 -->
+            <li class="nav-item" data-tab="jstats"><span class="icon">🧬</span> JVM 监控</li>
+            <li class="nav-item" data-tab="configurable"><span class="icon">⚙️</span> 配置化场景</li>
+            <!-- ★ 新增：系统监控 -->
+            <li class="nav-item" data-tab="systemmonitor"><span class="icon">🖥️</span> 系统监控</li>
+            <!-- ★ 新增 -->
+            <li class="nav-item" data-tab="methodchain"><span class="icon">🔬</span> 方法级调用链</li>
+        </ul>
+    </aside>
+    <main class="content">
+        <div class="iframe-wrapper">
+            <iframe id="sceneFrame" src="../modules/modules.html" frameborder="0"></iframe>
+        </div>
+    </main>
+</div>
+<script type="module" src="3d-scene.js"></script>
+</body>
+</html>

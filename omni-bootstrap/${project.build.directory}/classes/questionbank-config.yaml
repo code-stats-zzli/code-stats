@@ -1,0 +1,6 @@
+questionbank:
+  default:
+    rootDir: "D:/题库"
+    outputFile: "${java.io.tmpdir}/merged_questionbank.txt"
+    keyword: ""
+    namePrefixes: ""

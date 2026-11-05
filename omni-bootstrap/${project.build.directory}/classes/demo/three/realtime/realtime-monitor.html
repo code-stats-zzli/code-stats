@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D 实时监控 · 系统时空穿梭机</title>
+    <link rel="stylesheet" href="realtime-monitor.css" />
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+<div id="app">
+    <header class="header">
+        <h1>🚀 3D 实时监控 · 系统时空穿梭机</h1>
+        <div class="controls">
+            <button id="toggleAutoRotate" class="btn">⏸️ 暂停旋转</button>
+            <button id="sendBtn" class="btn" style="background:#0066ff;color:white;">🧪 测试调用链</button>
+            <span id="status" class="status">🟢 运行中</span>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        <div id="canvas-container">
+            <div id="loading-overlay">
+                <div class="spinner"></div>
+                <div id="loading-text">正在初始化 3D 场景...</div>
+            </div>
+            <div class="legend">
+                <div class="legend-group">
+                    <div class="legend-item"><span class="color-dot thread-running"></span> 运行</div>
+                    <div class="legend-item"><span class="color-dot thread-waiting"></span> 等待</div>
+                    <div class="legend-item"><span class="color-dot thread-blocked"></span> 阻塞</div>
+                </div>
+                <div class="legend-group">
+                    <div class="legend-item"><span class="color-dot memory-heap"></span> 堆内存</div>
+                    <div class="legend-item"><span class="color-dot memory-nonheap"></span> 非堆</div>
+                </div>
+                <div class="legend-group">
+                    <div class="legend-item"><span class="color-dot pool-active"></span> 活跃连接</div>
+                    <div class="legend-item"><span class="color-dot pool-idle"></span> 空闲连接</div>
+                </div>
+            </div>
+            <div class="hint">🖱 拖拽旋转 · 滚轮缩放 · 实时数据每 1s 刷新</div>
+        </div>
+
+        <div id="right-panel">
+            <div id="thread-list-panel">
+                <span class="panel-title">🧵 实时线程列表</span>
+                <div id="thread-list-container" style="overflow-x: auto;">
+                    <table class="thread-table" id="threadTable">
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>名称</th>
+                            <th>状态</th>
+                            <th>调用链</th>
+                        </tr>
+                        </thead>
+                        <tbody id="threadTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="thread-flow-panel">
+                <span class="panel-title" style="position:absolute; top:12px; left:16px; z-index:10; pointer-events:none;">🌀 粒子流</span>
+                <div class="legend-inner">
+                    <span class="item"><span class="dot running"></span> 运行中</span>
+                    <span class="item"><span class="dot blocked"></span> 阻塞</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="realtime-monitor.js"></script>
+</body>
+</html>

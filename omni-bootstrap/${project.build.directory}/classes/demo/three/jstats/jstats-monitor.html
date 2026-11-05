@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JVM 实时监控 · 3D堆内存</title>
+    <link rel="stylesheet" href="jstats-monitor.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS2DRenderer.js"></script>
+</head>
+<body>
+<div id="app">
+    <header class="header">
+        <h1>📡 JVM 实时监控 · 3D 堆内存</h1>
+        <div class="controls">
+            <span id="status" class="status">🟢 运行中</span>
+            <button id="refreshBtn" class="btn">🔄 刷新</button>
+            <button id="autoBtn" class="btn">⏸️ 暂停</button>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        <aside class="left-panel" id="leftPanel">
+            <div class="panel-section">
+                <span class="panel-title">🧵 线程列表</span>
+                <div class="scrollable" id="threadListContainer">
+                    <table class="thread-table" id="threadTable">
+                        <thead><tr><th>ID</th><th>名称</th><th>状态</th></tr></thead>
+                        <tbody id="threadTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="panel-section">
+                <span class="panel-title">📊 类加载</span>
+                <div id="classLoadingDisplay" class="stats-grid"></div>
+            </div>
+            <div class="panel-section">
+                <span class="panel-title">💻 CPU / 内存</span>
+                <div id="cpuMemDisplay" class="cpu-mem-grid"></div>
+            </div>
+            <div class="panel-section">
+                <span class="panel-title">⚙️ JVM 参数</span>
+                <div id="jvmOptionsDisplay" class="jvm-options"></div>
+            </div>
+        </aside>
+
+        <main class="right-panel">
+            <div class="chart-row">
+                <div class="chart-box"><h4>GC 耗时 (ms)</h4><div id="gcChart" class="chart-container"></div></div>
+                <div class="chart-box"><h4>堆内存使用 (MB)</h4><div id="heapChart" class="chart-container"></div></div>
+            </div>
+            <div class="chart-row">
+                <div class="chart-box"><h4>类加载数量</h4><div id="classChart" class="chart-container"></div></div>
+                <div class="chart-box"><h4>各区域使用率</h4><div id="regionChart" class="chart-container"></div></div>
+            </div>
+        </main>
+    </div>
+
+    <div class="bottom-3d">
+        <div id="three-container"></div>
+        <div class="hint">🖱 拖拽旋转 · 滚轮缩放 · 柱体高度=使用量</div>
+    </div>
+</div>
+
+<script src="jstats-monitor.js"></script>
+</body>
+</html>

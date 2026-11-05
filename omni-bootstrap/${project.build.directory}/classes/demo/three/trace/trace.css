@@ -1,0 +1,180 @@
+/* ---------- 全局重置 ---------- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+html, body {
+    height: 100%;
+    overflow: hidden;
+    background: #0a0f1a;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    color: #e2e8f0;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* ---------- 头部 ---------- */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 24px;
+    background: rgba(20, 30, 50, 0.85);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0, 102, 255, 0.3);
+    flex-shrink: 0;
+    z-index: 10;
+}
+.header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #4da6ff;
+}
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.btn-primary {
+    background: #0066ff;
+    color: white;
+    border: none;
+    padding: 8px 24px;
+    border-radius: 40px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-primary:hover {
+    background: #0050cc;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,102,255,0.4);
+}
+.btn-primary:active {
+    transform: translateY(0);
+}
+.status {
+    font-size: 14px;
+    color: #94a3b8;
+    min-width: 80px;
+    text-align: right;
+}
+
+/* ---------- 画布容器 ---------- */
+#canvas-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+
+/* ---------- 加载遮罩 ---------- */
+#loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(10, 15, 26, 0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    transition: opacity 0.5s;
+}
+#loading-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+.spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid rgba(255,255,255,0.1);
+    border-top: 4px solid #4da6ff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.error-msg {
+    color: #ff6b6b;
+    font-size: 16px;
+    margin-top: 12px;
+    text-align: center;
+    max-width: 600px;
+    padding: 0 20px;
+}
+
+/* ---------- 图例 ---------- */
+.legend {
+    position: absolute;
+    bottom: 30px;
+    left: 30px;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    padding: 12px 18px;
+    border-radius: 16px;
+    border: 1px solid rgba(0, 102, 255, 0.3);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    z-index: 5;
+    font-size: 13px;
+    pointer-events: none;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.color-dot {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+}
+.color-dot.controller { background: #4da6ff; }
+.color-dot.service   { background: #22c55e; }
+.color-dot.mapper    { background: #f59e0b; }
+.color-dot.particle  {
+    background: #ff6b6b;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: pulse-dot 1s infinite;
+}
+@keyframes pulse-dot {
+    0% { opacity: 0.4; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+    100% { opacity: 0.4; transform: scale(0.8); }
+}
+
+/* ---------- 操作提示 ---------- */
+.hint {
+    position: absolute;
+    bottom: 30px;
+    right: 30px;
+    color: rgba(255,255,255,0.3);
+    font-size: 12px;
+    background: rgba(0,0,0,0.4);
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.05);
+    pointer-events: none;
+    z-index: 5;
+}
+
+/* Three.js 画布自动填满容器 */
+#canvas-container canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}

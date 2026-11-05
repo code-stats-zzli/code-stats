@@ -70,18 +70,19 @@
                         <input type="checkbox" id="useGitIgnore">
                     </div>
 
-                    <!-- ★ 新增：模块过滤（按模块合并代码） -->
+                    <!-- 模块过滤（按模块合并代码） -->
                     <div class="form-row full-width">
                         <label>模块过滤:</label>
                         <div id="moduleSelector" class="module-selector">
                             <div class="module-selector-header">
                                 <button id="moduleLoadBtn" class="btn-secondary btn-sm" type="button">🔄 扫描模块</button>
+                                <button id="moduleRestoreDefaultBtn" class="btn-secondary btn-sm" type="button" title="恢复默认选中所有 omni* 模块">🔄 默认omni</button>
                                 <button id="moduleSelectAllBtn" class="btn-secondary btn-sm" type="button">全选</button>
                                 <button id="moduleSelectNoneBtn" class="btn-secondary btn-sm" type="button">全不选</button>
-                                <span id="moduleHint" class="module-hint">未选择 = 分析全部</span>
+                                <span id="moduleHint" class="module-hint">页面加载后自动扫描...</span>
                             </div>
                             <div id="moduleList" class="module-list">
-                                <div class="empty-tip">点击「扫描模块」列出 rootDir 下的子模块</div>
+                                <div class="empty-tip">页面加载后自动扫描 rootDir 下的模块，并默认选中 omni* 模块</div>
                             </div>
                         </div>
                     </div>

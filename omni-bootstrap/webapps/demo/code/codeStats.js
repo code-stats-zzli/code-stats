@@ -11,10 +11,14 @@
     let localInited = false;
     let activePicker = null;
 
-    // ★ 新增：模块过滤状态
+    // ==================== 模块过滤状态 ====================
     let availableModules = [];
     let selectedModules = new Set();
     let modulesLoaded = false;
+    /** ★ 首次自动选择是否已应用（防止用户手动改动后又被覆盖） */
+    let autoSelectedApplied = false;
+    /** ★ 当前选中状态是否为"自动选中 omni*"，用于 moduleHint 文案区分 */
+    let autoSelectedIndicator = false;
 
     // ==================== DOM ====================
     const modeList = document.getElementById('modeList');
@@ -55,10 +59,11 @@
     const exportCsvBtn = document.getElementById('exportCsvBtn');
     const downloadMergeBtn = document.getElementById('downloadMergeBtn');
 
-    // ★ 新增：模块过滤 DOM
+    // 模块过滤 DOM
     const moduleLoadBtn = document.getElementById('moduleLoadBtn');
     const moduleSelectAllBtn = document.getElementById('moduleSelectAllBtn');
     const moduleSelectNoneBtn = document.getElementById('moduleSelectNoneBtn');
+    const moduleRestoreDefaultBtn = document.getElementById('moduleRestoreDefaultBtn');
     const moduleList = document.getElementById('moduleList');
     const moduleHint = document.getElementById('moduleHint');
 
@@ -91,6 +96,11 @@
     }
     function normalizePath(p) { return (p || '').replace(/\\/g, '/'); }
     function showMsg(msg) { if (progressText) progressText.textContent = msg; }
+
+    /** ★ 判断模块名是否符合默认选中规则（omni 前缀，大小写不敏感） */
+    function isDefaultOmniModule(name) {
+        return !!name && name.toLowerCase().startsWith('omni');
+    }
 
     // ==================== 模式切换 ====================
     function switchMode(mode) {
@@ -252,6 +262,16 @@
         if (activePicker === 'rootDir') {
             rootDirInput.value = fullPath;
             setPickerTarget(null);
+            // 根目录变化后，模块列表失效，需重新扫描
+            modulesLoaded = false;
+            availableModules = [];
+            selectedModules.clear();
+            autoSelectedApplied = false;
+            autoSelectedIndicator = false;
+            if (moduleList) {
+                moduleList.innerHTML = '<div class="empty-tip">rootDir 已变更，请点击「扫描模块」或等待自动扫描</div>';
+            }
+            updateModuleHint();
         } else if (activePicker === 'extraPaths') {
             const current = extraPathsInput.value.trim();
             const items = current ? current.split(',').map(s => s.trim()).filter(s => s) : [];
@@ -278,7 +298,7 @@
         }
     }
 
-    // ==================== ★ 新增：模块过滤器 ====================
+    // ==================== 模块过滤器 ====================
 
     function updateModuleHint() {
         if (!moduleHint) return;
@@ -286,7 +306,8 @@
             moduleHint.textContent = '未选择 = 分析全部';
             moduleHint.classList.remove('has-selection');
         } else {
-            moduleHint.textContent = `已选 ${selectedModules.size} 个模块（仅合并这些）`;
+            const suffix = autoSelectedIndicator ? '（默认 omni*）' : '（仅合并这些）';
+            moduleHint.textContent = `已选 ${selectedModules.size} 个模块${suffix}`;
             moduleHint.classList.add('has-selection');
         }
     }
@@ -302,11 +323,13 @@
             const checked = selectedModules.has(name) ? 'checked' : '';
             const selected = selectedModules.has(name) ? 'selected' : '';
             const size = formatSize(m.totalBytes || 0);
-            const isRoot = m.isRootFiles === true;
+            const isDefault = isDefaultOmniModule(name);
+            // ★ 默认 omni 模块加一个小标记，帮助识别
+            const badge = isDefault ? '<span class="mod-badge-omni">omni</span>' : '';
             return `
                 <label class="module-item ${selected}" title="${escapeHtml(m.path || '')}">
                     <input type="checkbox" data-name="${escapeHtml(name)}" ${checked}>
-                    <span class="mod-name">${escapeHtml(name)}</span>
+                    <span class="mod-name">${escapeHtml(name)}${badge}</span>
                     <span class="mod-meta">${m.fileCount} · ${size}</span>
                 </label>
             `;
@@ -314,10 +337,11 @@
 
         moduleList.querySelectorAll('.module-item input[type="checkbox"]').forEach(cb => {
             cb.addEventListener('change', () => {
+                // 用户手动操作，取消自动标识
+                autoSelectedIndicator = false;
                 const name = cb.dataset.name;
                 if (cb.checked) selectedModules.add(name);
                 else selectedModules.delete(name);
-                // 更新卡片高亮
                 const label = cb.closest('.module-item');
                 if (label) label.classList.toggle('selected', cb.checked);
                 updateModuleHint();
@@ -326,11 +350,32 @@
         updateModuleHint();
     }
 
+    /**
+     * 自动选中所有 omni* 模块
+     * @param {boolean} force 是否强制重新选择（即使之前已自动选择过）
+     */
+    function applyDefaultOmniSelection(force) {
+        if (autoSelectedApplied && !force) return 0;
+        autoSelectedApplied = true;
+        selectedModules.clear();
+        let count = 0;
+        availableModules.forEach(m => {
+            if (isDefaultOmniModule(m.name)) {
+                selectedModules.add(m.name);
+                count++;
+            }
+        });
+        autoSelectedIndicator = count > 0;
+        return count;
+    }
+
     async function loadModules() {
         if (!moduleList) return;
         moduleList.innerHTML = '<div class="loading">扫描中...</div>';
-        moduleLoadBtn.disabled = true;
-        moduleLoadBtn.textContent = '⏳ 扫描中...';
+        if (moduleLoadBtn) {
+            moduleLoadBtn.disabled = true;
+            moduleLoadBtn.textContent = '⏳ 扫描中...';
+        }
 
         try {
             const params = new URLSearchParams();
@@ -346,16 +391,48 @@
                 return;
             }
             availableModules = data.modules || [];
+
             // 清理已选模块中不存在的项
             const validNames = new Set(availableModules.map(m => m.name));
             selectedModules.forEach(n => { if (!validNames.has(n)) selectedModules.delete(n); });
+
+            // ★ 首次扫描后自动选中 omni* 模块
+            if (!autoSelectedApplied) {
+                const autoCount = applyDefaultOmniSelection(false);
+                if (autoCount === 0 && availableModules.length > 0) {
+                    // 没有 omni 模块，提示但不强制选择
+                    autoSelectedIndicator = false;
+                }
+            } else if (autoSelectedIndicator) {
+                // 之前是自动选择的，重新校验是否仍有对应模块
+                const stillHas = availableModules.some(m => isDefaultOmniModule(m.name));
+                if (!stillHas) autoSelectedIndicator = false;
+            }
+
             modulesLoaded = true;
             renderModuleList();
         } catch (err) {
             moduleList.innerHTML = `<div class="error-tip">❌ ${escapeHtml(err.message)}</div>`;
         } finally {
-            moduleLoadBtn.disabled = false;
-            moduleLoadBtn.textContent = '🔄 扫描模块';
+            if (moduleLoadBtn) {
+                moduleLoadBtn.disabled = false;
+                moduleLoadBtn.textContent = '🔄 扫描模块';
+            }
+        }
+    }
+
+    /** ★ 手动恢复默认选择（清空当前选择后重选 omni*） */
+    function restoreDefaultModules() {
+        if (!availableModules.length) {
+            // 还没扫描过，先扫描（扫描内部会自动选）
+            loadModules();
+            return;
+        }
+        const count = applyDefaultOmniSelection(true);
+        renderModuleList();
+        if (count === 0 && moduleHint) {
+            moduleHint.textContent = '未发现 omni* 模块';
+            moduleHint.classList.remove('has-selection');
         }
     }
 
@@ -364,15 +441,20 @@
     }
     if (moduleSelectAllBtn) {
         moduleSelectAllBtn.addEventListener('click', () => {
+            autoSelectedIndicator = false;
             availableModules.forEach(m => selectedModules.add(m.name));
             renderModuleList();
         });
     }
     if (moduleSelectNoneBtn) {
         moduleSelectNoneBtn.addEventListener('click', () => {
+            autoSelectedIndicator = false;
             selectedModules.clear();
             renderModuleList();
         });
+    }
+    if (moduleRestoreDefaultBtn) {
+        moduleRestoreDefaultBtn.addEventListener('click', restoreDefaultModules);
     }
 
     // ==================== 服务器分析 ====================
@@ -407,11 +489,13 @@
         mergeEnabledCheck.checked = false;
         mergeOutputFileInput.value = '';
         useGitIgnoreCheck.checked = false;
-        // ★ 清空模块选择
+        // 清空模块选择，并允许下次扫描重新自动选
         selectedModules.clear();
         availableModules = [];
         modulesLoaded = false;
-        if (moduleList) moduleList.innerHTML = '<div class="empty-tip">点击「扫描模块」列出 rootDir 下的子模块</div>';
+        autoSelectedApplied = false;
+        autoSelectedIndicator = false;
+        if (moduleList) moduleList.innerHTML = '<div class="empty-tip">点击「扫描模块」或刷新页面自动扫描</div>';
         updateModuleHint();
         toggleMergeRow();
         setPickerTarget(null);
@@ -445,7 +529,7 @@
         params.append('mergeOutputFile', mergeOutputFileInput.value);
         params.append('useGitIgnore', useGitIgnoreCheck.checked);
 
-        // ★ 新增：携带模块过滤参数
+        // 携带模块过滤参数
         if (selectedModules.size > 0) {
             params.append('modules', Array.from(selectedModules).join(','));
         }
@@ -976,8 +1060,21 @@
     });
     localSaveFileBtn.addEventListener('click', saveLocalFile);
 
-    // ==================== 启动 ====================
-    loadDefaultConfig();
-    initServerDirectoryTree();
-    switchMode('server');
+    // ==================== ★ 启动引导（页面加载后自动扫描 + 默认选 omni*） ====================
+    async function bootstrap() {
+        // 1. 先拿默认配置（填 rootDir / extensions / 等）——必须 await，因为 loadModules 依赖 rootDir
+        await loadDefaultConfig();
+        // 2. 目录树并行加载，不阻塞模块扫描
+        initServerDirectoryTree();
+        // 3. 自动扫描模块（内部会在首次扫描后自动勾选 omni*）
+        try {
+            await loadModules();
+        } catch (e) {
+            console.warn('[bootstrap] 自动扫描模块失败:', e);
+        }
+        // 4. 切到服务器分析视图
+        switchMode('server');
+    }
+
+    bootstrap();
 })();

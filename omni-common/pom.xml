@@ -13,7 +13,7 @@
     </parent>
 
     <artifactId>omni-common</artifactId>
-    <packaging>pom</packaging>
+    <packaging>jar</packaging>
     <name>omni-common</name>
     <description>基础工具层：不依赖任何自研框架</description>
 

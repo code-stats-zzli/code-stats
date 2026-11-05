@@ -41,113 +41,18 @@
             <!-- common -->
             <dependency>
                 <groupId>com.omni</groupId>
-                <artifactId>omni-common-log</artifactId>
+                <artifactId>omni-common</artifactId>
                 <version>${omni.version}</version>
             </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-common-core</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-common-config</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-common-cache</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-common-excel</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
+
 
             <!-- framework -->
             <dependency>
                 <groupId>com.omni</groupId>
-                <artifactId>omni-framework-jdbc</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-framework-mybatis</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-framework-web</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-framework-expression</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-framework-codestats</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-framework-spider</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-framework-scriptexec</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-framework-jstats</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-framework-v4j</artifactId>
+                <artifactId>omni-framework</artifactId>
                 <version>${omni.version}</version>
             </dependency>
 
-            <!-- business -->
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-business-common</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-business-ai</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-business-data</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-business-devtool</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-business-analysis</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-business-file</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.omni</groupId>
-                <artifactId>omni-business-system</artifactId>
-                <version>${omni.version}</version>
-            </dependency>
 
             <!-- ==================== 第三方 ==================== -->
             <dependency>
@@ -159,6 +64,11 @@
                 <groupId>org.yaml</groupId>
                 <artifactId>snakeyaml</artifactId>
                 <version>${snakeyaml.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi</artifactId>
+                <version>${poi.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.poi</groupId>
@@ -190,20 +100,31 @@
                 <artifactId>caffeine</artifactId>
                 <version>${caffeine.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.github.mwiede</groupId>
+                <artifactId>jsch</artifactId>
+                <version>0.2.20</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
     <build>
         <pluginManagement>
             <plugins>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.11.0</version>
+                    <version>3.14.0</version>
                     <configuration>
-                        <source>17</source>
-                        <target>17</target>
+                        <!-- ★ 关键：不要用 <release>，改用 source/target 才能访问 com.sun.management / sun.misc -->
+                        <source>${java.version}</source>
+                        <target>${java.version}</target>
                         <encoding>UTF-8</encoding>
+                        <!-- 可选：抑制内部 API 的 deprecation 警告（访问 com.sun.* 时） -->
+                        <compilerArgs>
+                            <arg>-Xlint:-options</arg>
+                        </compilerArgs>
                     </configuration>
                 </plugin>
                 <plugin>

@@ -31,10 +31,11 @@
         <option value="$PROJECT_DIR$/omni-framework/omni-framework-spider/pom.xml" />
         <option value="$PROJECT_DIR$/omni-framework/omni-framework-v4j/pom.xml" />
         <option value="$PROJECT_DIR$/omni-framework/omni-framework-web/pom.xml" />
+        <option value="$PROJECT_DIR$/omni-web/pom.xml" />
       </set>
     </option>
   </component>
-  <component name="ProjectRootManager" version="2" languageLevel="JDK_1_8" project-jdk-name="1.8" project-jdk-type="JavaSDK">
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_17" project-jdk-name="openjdk-26" project-jdk-type="JavaSDK">
     <output url="file://$PROJECT_DIR$/out" />
   </component>
 </project>

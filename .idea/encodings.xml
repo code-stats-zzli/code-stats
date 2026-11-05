@@ -51,7 +51,11 @@
     <file url="file://$PROJECT_DIR$/omni-framework/omni-framework-web/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/omni-framework/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/omni-framework/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-web/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/omni-web/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
+    <file url="file://$APPLICATION_HOME_DIR$/bin/src/main/java" charset="UTF-8" />
+    <file url="file://$APPLICATION_HOME_DIR$/bin/src/main/resources" charset="UTF-8" />
   </component>
 </project>

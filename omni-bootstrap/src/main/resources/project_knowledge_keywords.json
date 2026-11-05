@@ -1,0 +1,74 @@
+[
+  {
+    "keywords": ["IoC", "控制反转", "依赖注入", "DI", "IoC容器"],
+    "answer": "IoC（控制反转）是 Spring 框架的核心思想。在 CodeStats 自研框架中，通过 @Component、@Service、@Controller、@Repository 注解标记类，框架自动扫描包并实例化 Bean，使用 @Autowired 实现依赖注入。IoC 容器管理 Bean 的完整生命周期（实例化、依赖注入、初始化、销毁），支持 singleton 和 prototype 作用域。"
+  },
+  {
+    "keywords": ["@Autowired", "自动装配", "依赖注入注解"],
+    "answer": "@Autowired 是自研框架中的依赖注入注解。当容器创建一个 Bean 时，会扫描所有字段，如果字段被 @Autowired 标记，则从 IoC 容器中查找匹配类型的 Bean 并通过反射注入。如果有多实现，可以配合 @Qualifier 使用。"
+  },
+  {
+    "keywords": ["Connector", "连接器", "Tomcat Connector"],
+    "answer": "Connector 是自研 Tomcat 的核心组件，负责监听指定端口（默认 28080），接受 HTTP 请求，解析请求行和头部，创建 Request 和 Response 对象，然后通过 Service 的 Pipeline 将请求传递给 Engine 处理。Connector 使用线程池处理并发请求。"
+  },
+  {
+    "keywords": ["Pipeline", "Valve", "责任链", "阀门"],
+    "answer": "Pipeline 是自研 Tomcat 中的责任链模式实现。每个容器（Engine、Host、Context、Wrapper）都有一个 Pipeline，内部包含多个 Valve（阀门）。请求依次经过每个 Valve 的 invoke 方法，最终由 Basic Valve 处理。这种设计允许灵活地插入过滤器、日志、权限校验等功能。"
+  },
+  {
+    "keywords": ["JdbcTemplate", "JDBC模板", "RowMapper"],
+    "answer": "JdbcTemplate 是自研的数据访问工具类，简化了 JDBC 操作。提供 query、queryOne 等方法，支持 PreparedStatement 占位符参数、查询超时设置。配合 RowMapper 函数式接口将 ResultSet 转换为 Java 对象。"
+  },
+  {
+    "keywords": ["@Select", "Mapper代理", "MyBatis风格"],
+    "answer": "@Select 注解用于 Mapper 接口的方法上，值为 SQL 语句。自研框架通过 MapperProxy 动态代理执行 SQL，自动从配置的数据源获取连接，使用 JdbcTemplate 执行查询并返回结果。支持将查询结果映射为 List<String> 或单个对象。"
+  },
+  {
+    "keywords": ["SimpleDataSource", "连接池", "maxActive", "连接池参数"],
+    "answer": "SimpleDataSource 是自研的连接池实现。核心参数：maxActive（最大活跃连接，默认10）、maxIdle（最大空闲连接，默认5）、minIdle（最小空闲连接，默认2）、maxWaitMillis（获取连接超时时间，默认30000ms）。使用 Semaphore 控制并发数，支持连接有效性验证（validationQuery 默认为 SELECT 1）。"
+  },
+  {
+    "keywords": ["代码分析", "代码统计", "Pipeline模式", "多线程分析"],
+    "answer": "代码分析模块采用 Pipeline 模式：CollectStage 收集文件（支持扩展名过滤、排除路径、.gitignore），ParallelAnalyzeStage 使用线程池并行分析每个文件的行数、代码行、注释行、空行和复杂度，AggregateStage 排序聚合，OutputStage 输出 JSON/CSV 报告。支持将扫描的文件合并为一个文本文件。"
+  },
+  {
+    "keywords": ["目录管理", "文件上传", "路径安全校验", "根类型"],
+    "answer": "目录管理模块提供 local 和 server 两种根类型。所有文件操作都通过 FileUtils.resolveSafePath 校验，防止路径遍历攻击。支持文件/目录的浏览、创建、重命名、删除、上传、下载，目录下载自动打包为 ZIP。"
+  },
+  {
+    "keywords": ["Ollama", "DeepSeek", "自定义API", "项目助手"],
+    "answer": "AI Agent 模块支持四种后端：Ollama（本地模型）、DeepSeek 官方 API、自定义 API（兼容 OpenAI 格式）、项目助手（内置知识库 + n-gram 降级）。通过 /agent/api/chat 接口统一调用，支持会话管理、温度调节、模型选择。"
+  },
+  {
+    "keywords": ["CharNgramLM", "ngram", "语言模型", "项目助手降级"],
+    "answer": "CharNgramLM 是一个基于字符 3-gram 的简单语言模型，用于项目助手在知识库未命中时的降级生成。它根据前两个字符的概率分布采样下一个字符，可以生成简单的技术描述。训练语料来自项目源码和文档。"
+  },
+  {
+    "keywords": ["DataModel", "DatabaseMetadataService", "元数据"],
+    "answer": "DataModel 是统一的数据模型，封装列定义（ColumnDef）和数据行（Row），支持通过列名或索引访问单元格。DatabaseMetadataService 基于 JDBC DatabaseMetaData 获取数据库、表、列信息，并转换为 DataModel 输出，可以渲染为 JSON、CSV、HTML 表格或 Markdown。"
+  },
+  {
+    "keywords": ["PatternLayout", "日志级别", "RollingFileAppender", "AsyncAppender"],
+    "answer": "自研日志框架支持 TRACE/DEBUG/INFO/WARN/ERROR 级别。PatternLayout 支持 %d（日期）、%level、%logger、%msg、%n、%ex 等占位符。RollingFileAppender 按文件大小滚动（如 10MB），保留 maxBackupIndex 个备份。AsyncAppender 使用阻塞队列异步写日志，避免阻塞业务线程。"
+  },
+  {
+    "keywords": ["缓存", "Caffeine", "CacheManager", "TTL", "LocalCache"],
+    "answer": "缓存模块支持 LOCAL（基于 ConcurrentHashMap + TTL）和 CAFFEINE（高性能）两种实现。CacheManager 统一管理多个命名缓存。支持 put 时指定 TTL、computeIfAbsent 懒加载、定期清理过期条目。默认 TTL 为 1 天。"
+  },
+  {
+    "keywords": ["DispatcherServlet", "HandlerMapping", "ModelAndView"],
+    "answer": "DispatcherServlet 是 MVC 的核心前端控制器。启动时扫描所有 @Controller 和 @RequestMapping，构建 HandlerMapping（路径 → 控制器+方法的映射）。请求到达时匹配 Handler，通过 ParamBinder 绑定参数（@RequestParam、@PathVariable、Request/Response 自动注入），调用方法，若方法有 @ResponseBody 则返回 JSON，否则返回 ModelAndView 交给 ViewResolver 渲染。"
+  },
+  {
+    "keywords": ["Playwright", "Stealth", "反爬虫"],
+    "answer": "PlaywrightStealthUtil 封装了 Playwright 浏览器自动化，并配置了反检测参数：禁用自动化控制标记、设置真实 User-Agent、添加常见请求头、绕过 CSP。支持创建隐蔽的浏览器上下文，用于抓取需要反爬虫的页面。可通过配置 playwright.enabled=true 启用。"
+  },
+  {
+    "keywords": ["SimpleVue", "V4J", "响应式", "Watcher", "Dep"],
+    "answer": "SimpleVue 是一个轻量级前端响应式框架，模仿 Vue 的核心机制。通过 Observer 递归代理 data 对象，使用 Dep 收集依赖，Watcher 执行渲染更新。支持 v-bind、v-model、v-if、v-show、@事件、{{}} 插值表达式。组件支持样式作用域。"
+  },
+  {
+    "keywords": ["启动流程", "Bootstrap", "Catalina", "AnnotationConfigApplicationContext"],
+    "answer": "启动类 Bootstrap 调用 SpringApplication.run，创建 AnnotationConfigApplicationContext 扫描指定包，初始化 IoC 容器，然后创建 Catalina 实例，加载配置（端口、Context Path、Servlet 映射），启动 Connector 监听端口。"
+  }
+]

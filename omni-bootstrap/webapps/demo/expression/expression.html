@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>表达式引擎 - CodeStats</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="expression.css">
+    <script src="../global.js"></script>
+</head>
+<body>
+<div class="expr-layout">
+    <aside class="expr-var-panel">
+        <div class="panel-header">
+            <span>📦 变量树</span>
+            <span class="hint">以 $ 开头</span>
+        </div>
+        <div class="var-tree" id="varTree">
+            <div class="loading">加载中...</div>
+        </div>
+        <div class="panel-footer">
+            <button id="addGroupBtn" class="btn-secondary">+ 分组</button>
+            <button id="addVarBtn" class="btn-primary">+ 变量</button>
+        </div>
+    </aside>
+
+    <main class="expr-main">
+        <div class="editor-toolbar">
+            <div class="op-group" id="opGroup"></div>
+            <div class="toolbar-spacer"></div>
+            <button id="exampleBtn" class="btn-secondary">📝 示例</button>
+            <button id="clearBtn" class="btn-secondary">🗑 清空</button>
+            <button id="evaluateBtn" class="btn-primary">▶ 求值 (Ctrl+Enter)</button>
+        </div>
+        <textarea id="exprEditor" class="expr-editor" spellcheck="false"
+                  placeholder="输入表达式，如：&#10;  'Hello, ' + $name + '! 今年 ' + $age + ' 岁&#10;  substring($name, 0, 3)&#10;  year(today())&#10;支持运算符：+ - * / %  == != > < >= <=  && || !  ?:&#10;支持函数：点击右侧函数库插入&#10;支持变量：从左侧变量树点击插入"></textarea>
+        <div class="result-panel">
+            <div class="result-header">
+                <span>🎯 求值结果</span>
+                <span id="resultMeta" class="result-meta"></span>
+            </div>
+            <pre id="exprResult" class="result-content">尚未求值</pre>
+        </div>
+    </main>
+
+    <aside class="expr-fn-panel">
+        <div class="panel-header">
+            <span>📚 函数库</span>
+            <input id="fnSearch" class="fn-search" placeholder="搜索函数...">
+        </div>
+        <div class="fn-list" id="fnList">
+            <div class="loading">加载中...</div>
+        </div>
+    </aside>
+</div>
+<script src="expression.js"></script>
+</body>
+</html>

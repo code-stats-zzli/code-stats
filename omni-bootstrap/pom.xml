@@ -21,33 +21,18 @@
         <!-- 框架：由 business 传递，但显式声明便于阅读 -->
         <dependency>
             <groupId>com.omni</groupId>
-            <artifactId>omni-framework-web</artifactId>
-        </dependency>
-
-        <!-- 业务模块：全部聚合，保证包扫描能扫到所有 Controller/Service -->
-        <dependency>
-            <groupId>com.omni</groupId>
-            <artifactId>omni-business-ai</artifactId>
+            <artifactId>omni-framework</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.omni</groupId>
-            <artifactId>omni-business-data</artifactId>
+            <artifactId>omni-common</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.omni</groupId>
-            <artifactId>omni-business-devtool</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.omni</groupId>
-            <artifactId>omni-business-analysis</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.omni</groupId>
-            <artifactId>omni-business-file</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.omni</groupId>
-            <artifactId>omni-business-system</artifactId>
+            <artifactId>omni-business</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
         </dependency>
     </dependencies>
 

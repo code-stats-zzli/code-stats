@@ -1,0 +1,68 @@
+package com.omni.business.assistance.table.mysql.service;
+
+import com.omni.framework.jdbc.DynamicSqlExecutor;
+import com.omni.framework.jdbc.JdbcTemplate;
+import com.omni.framework.pool.SimpleDataSource;
+
+import java.sql.Connection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class DynamicTableDataService {
+
+    private final JdbcTemplate jdbcTemplate;
+    private final DynamicSqlExecutor sqlExecutor;
+
+    public DynamicTableDataService(SimpleDataSource dataSource) {
+        // 自定义 JdbcTemplate，重写 getConnection 方法
+        this.jdbcTemplate = new JdbcTemplate() {
+            @Override
+            public Connection getConnection() throws java.sql.SQLException {
+                return dataSource.getConnection();
+            }
+        };
+        this.sqlExecutor = new DynamicSqlExecutor(this.jdbcTemplate);
+    }
+
+    /**
+     * 分页查询表数据
+     */
+    public Map<String, Object> getTableData(String database, String tableName, int page, int pageSize) {
+        // 切换数据库
+        try (Connection conn = jdbcTemplate.getConnection()) {
+            conn.setCatalog(database);
+        } catch (Exception e) {
+            throw new RuntimeException("切换数据库失败: " + database, e);
+        }
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("tableName", tableName);
+        String sql = "SELECT * FROM #{tableName}";
+        try {
+            return sqlExecutor.executePageQuery(sql, params, page, pageSize);
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 执行自定义 SQL（仅限 SELECT/SHOW/DESCRIBE）
+     */
+    public List<Map<String, Object>> executeCustomSql(String database, String sql) {
+        try (Connection conn = jdbcTemplate.getConnection()) {
+            conn.setCatalog(database);
+        } catch (Exception e) {
+            throw new RuntimeException("切换数据库失败: " + database, e);
+        }
+        String trimmed = sql.trim().toLowerCase();
+        if (!trimmed.startsWith("select") && !trimmed.startsWith("show") && !trimmed.startsWith("describe")) {
+            throw new RuntimeException("仅支持SELECT/SHOW/DESCRIBE查询语句");
+        }
+        try {
+            return jdbcTemplate.queryForMapList(sql);
+        } catch (Exception e) {
+            throw new RuntimeException("SQL执行失败: " + e.getMessage(), e);
+        }
+    }
+}

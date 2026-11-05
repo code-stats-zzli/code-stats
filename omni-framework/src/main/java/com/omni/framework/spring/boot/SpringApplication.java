@@ -1,0 +1,124 @@
+package com.omni.framework.spring.boot;
+
+import com.omni.framework.jdbc.DataSourceUtils;
+import com.omni.framework.log.LoggerFactory;
+import com.omni.framework.log.core.Logger;
+import com.omni.framework.spring.boot.runner.ApplicationRunner;
+import com.omni.framework.spring.config.ConfigLoader;
+import com.omni.framework.spring.context.AbstractApplicationContext;
+import com.omni.framework.spring.context.SpringContextHolder;
+import com.omni.framework.spring.context.support.AnnotationConfigApplicationContext;
+import com.omni.framework.tomcat.Catalina;
+
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+
+public class SpringApplication {
+    private static final Logger log = LoggerFactory.getLogger(SpringApplication.class);
+
+    public static void run(Class<?> primarySource, String[] args) {
+        long startTime = System.currentTimeMillis();
+
+        String packageToScan = primarySource.getPackage().getName();
+        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(packageToScan);
+        SpringContextHolder.setApplicationContext(context);
+        log.info("ApplicationContext initialized in {} ms", System.currentTimeMillis() - startTime);
+
+        Catalina catalina = new Catalina();
+        catalina.load();
+        catalina.start();
+
+        int port = Integer.parseInt(ConfigLoader.getProperty("server.port", "8080"));
+        String contextPath = ConfigLoader.getProperty("context.path", "/omni");
+        log.info("Access http://localhost:{}{}/demo/index.html", port, contextPath);
+        printBanner();
+        log.info("Omni startup time: {} ms", System.currentTimeMillis() - startTime);
+
+        executeApplicationRunners(context, args);
+
+        // ★★★ 关键：这个 latch 只在 shutdown hook 完成后才会 countDown ★★★
+        final CountDownLatch shutdownDone = new CountDownLatch(1);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            log.info("Shutdown hook triggered, stopping Tomcat...");
+
+            // ★ 看门狗：只在 hook 真正开始时才启动，15 秒后 hook 还没完成就强杀
+            //   （正常运行时不会触发，所以不会误杀应用）
+            Thread watchdog = new Thread(() -> {
+                try {
+                    Thread.sleep(15_000);
+                    log.warn("Shutdown hook 执行超过 15 秒，强制退出 (halt(0))");
+                    Runtime.getRuntime().halt(0);
+                } catch (InterruptedException ignored) {
+                    // hook 按时完成，watchdog 被 interrupt，什么都不做
+                }
+            }, "shutdown-watchdog");
+            watchdog.setDaemon(true);
+            watchdog.start();
+
+            try {
+                try { catalina.stop(); } catch (Throwable e) { log.error("stop catalina 失败", e); }
+                try { context.getBeanFactory().destroySingletons(); } catch (Throwable e) { log.error("destroySingletons 失败", e); }
+                try { DataSourceUtils.closePool(); } catch (Throwable e) { log.error("closePool 失败", e); }
+
+                log.info("Catalina stopped and resources released.");
+            } finally {
+                watchdog.interrupt();          // 通知看门狗"我完成了，别开枪"
+                shutdownDone.countDown();      // 唤醒主线程
+            }
+        }, "spring-shutdown"));
+
+        // ★ 主线程无限等待，正常运行时永远不会走到下面
+        //   只有 shutdown hook 完成后 countDown 才会唤醒
+        try {
+            shutdownDone.await();   // ← 无超时！这才是正确的
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Main thread interrupted");
+        }
+
+        log.info("Application shutdown complete.");
+        // 兜底：如果 hook 里还有其他非守护线程残留，halt(0) 直接干净退出
+        Runtime.getRuntime().halt(0);
+    }
+
+    private static void executeApplicationRunners(AbstractApplicationContext context, String[] args) {
+        try {
+            Map<String, ApplicationRunner> runners =
+                    context.getBeanFactory().getBeansOfType(ApplicationRunner.class);
+            if (runners.isEmpty()) {
+                log.info("未发现 ApplicationRunner 扩展点");
+                return;
+            }
+            log.info("发现 {} 个 ApplicationRunner，依次执行...", runners.size());
+            for (Map.Entry<String, ApplicationRunner> entry : runners.entrySet()) {
+                String beanName = entry.getKey();
+                ApplicationRunner runner = entry.getValue();
+                long t0 = System.currentTimeMillis();
+                try {
+                    runner.run(args);
+                    log.info("ApplicationRunner [{}] 执行完成，耗时 {} ms",
+                            beanName, System.currentTimeMillis() - t0);
+                } catch (Exception e) {
+                    log.error("ApplicationRunner [{}] 执行失败", beanName, e);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("收集 ApplicationRunner 失败，跳过所有扩展点", e);
+        }
+    }
+
+    private static void printBanner() {
+        String banner = "\n" +
+                "   ____  _     _     _     \n" +
+                "  / __ \\| |   (_)   | |    \n" +
+                " | |  | | |__  _  __| | __ \n" +
+                " | |  | | '_ \\| |/ _` |/ _ \\\n" +
+                " | |__| | |_) | | (_| |  __/\n" +
+                "  \\____/|_.__/| |\\__,_|\\___|\n" +
+                "               _/ |        \n" +
+                "              |__/         \n" +
+                ":: Omni Framework :: (v1.0)\n";
+        System.out.println(banner);
+    }
+}

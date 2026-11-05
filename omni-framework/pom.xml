@@ -13,19 +13,36 @@
     </parent>
 
     <artifactId>omni-framework</artifactId>
-    <packaging>pom</packaging>
+    <packaging>jar</packaging>
     <name>omni-framework</name>
     <description>自研框架层</description>
+    <dependencies>
 
-    <modules>
-        <module>omni-framework-jdbc</module>
-        <module>omni-framework-mybatis</module>
-        <module>omni-framework-web</module>
-        <module>omni-framework-expression</module>
-        <module>omni-framework-codestats</module>
-        <module>omni-framework-spider</module>
-        <module>omni-framework-scriptexec</module>
-        <module>omni-framework-jstats</module>
-        <module>omni-framework-v4j</module>
-    </modules>
+        <dependency>
+            <groupId>com.omni</groupId>
+            <artifactId>omni-common</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+        </dependency>
+
+    </dependencies>
 </project>

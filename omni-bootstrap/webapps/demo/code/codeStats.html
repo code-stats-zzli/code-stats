@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代码分析与文件管理 - CodeStats</title>
+    <link rel="stylesheet" href="../global-tech.css">
+    <link rel="stylesheet" href="codeStats.css">
+    <script src="../global.js"></script>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <h3 class="sidebar-title">分析模式</h3>
+        <ul class="mode-list" id="modeList">
+            <li class="mode-item active" data-mode="server">🖥️ 服务器分析</li>
+            <li class="mode-item" data-mode="local">💻 本地分析</li>
+            <li class="mode-item" data-mode="webspider">🕷️ 网页爬虫</li>
+            <li class="mode-item" data-mode="questionbank">📚 题库分析</li>
+            <li class="mode-item" data-mode="systemcheck">🛡️ 系统检查</li>
+            <li class="mode-item" data-mode="import">📥 代码导入</li>
+        </ul>
+    </aside>
+
+    <main class="workspace" id="serverWorkspace">
+        <aside class="dir-tree-panel">
+            <div class="dir-panel-header">
+                <span>📂 服务器目录</span>
+                <button id="serverRefreshTreeBtn" class="mini-btn" title="刷新">🔄</button>
+            </div>
+            <div class="dir-tree-wrapper" id="serverDirTree">
+                <div class="loading">加载中...</div>
+            </div>
+            <div class="dir-panel-footer">
+                <div class="dir-current-tip" id="serverDirTip">点击目录填充分析根路径</div>
+            </div>
+        </aside>
+        <div class="analysis-panel">
+            <section class="config-panel" id="codeStatsConfig">
+                <h2>代码统计配置</h2>
+                <div class="config-form">
+                    <div class="form-row full-width">
+                        <label>根目录:</label>
+                        <input type="text" id="rootDir" placeholder="点击右侧 📁 从目录树选择，或手动输入">
+                        <button class="dir-picker-btn" data-target="rootDir">📁</button>
+                    </div>
+                    <div class="form-row"><label>扩展名:</label><input type="text" id="extensions" value="java"></div>
+                    <div class="form-row"><label>排除路径:</label><input type="text" id="excludePaths" placeholder="test, target"></div>
+                    <div class="form-row"><label>排除注释:</label><input type="checkbox" id="excludeComments" checked></div>
+                    <div class="form-row"><label>线程数:</label><input type="number" id="threadCount" min="1" max="32" value="4"></div>
+                    <div class="form-row"><label>排序方式:</label>
+                        <select id="sortBy">
+                            <option value="lines">行数</option>
+                            <option value="name">文件名</option>
+                            <option value="language">语言</option>
+                            <option value="complexity">复杂度</option>
+                        </select>
+                    </div>
+                    <div class="form-row"><label>启用合并:</label><input type="checkbox" id="mergeEnabled"></div>
+                    <div class="form-row full-width" id="mergeRow" style="display:none;">
+                        <label>合并输出:</label><input type="text" id="mergeOutputFile" placeholder="D:/output/merged.txt">
+                    </div>
+                    <div class="form-row full-width">
+                        <label>额外路径:</label>
+                        <input type="text" id="extraPaths" placeholder="追加目录，逗号分隔">
+                        <button class="dir-picker-btn" data-target="extraPaths">📁</button>
+                    </div>
+                    <div class="form-row full-width">
+                        <label>.gitignore 过滤:</label>
+                        <input type="checkbox" id="useGitIgnore">
+                    </div>
+                </div>
+                <div class="action-bar">
+                    <button id="analyzeBtn" class="btn-primary">🚀 开始分析</button>
+                    <button id="defaultConfigBtn" class="btn-secondary">📋 默认配置</button>
+                    <button id="clearConfigBtn" class="btn-secondary">🗑️ 清空</button>
+                </div>
+            </section>
+            <section class="result-section" id="codeStatsResult">
+                <div class="progress-bar" id="progressBar" style="display:none;">
+                    <div class="progress-fill" id="progressFill"></div>
+                    <span id="progressText">分析中...</span>
+                </div>
+                <div class="result-tabs">
+                    <button class="tab active" data-tab="files">文件列表</button>
+                    <button class="tab" data-tab="summary">摘要统计</button>
+                    <button class="tab" data-tab="dependency">依赖关系</button>
+                </div>
+                <div style="margin:12px 0;display:flex;gap:12px;">
+                    <button id="exportCsvBtn" class="btn-secondary" style="background:#10b981;color:white;">📎 导出CSV</button>
+                    <button id="downloadMergeBtn" class="btn-secondary" style="background:#3b82f6;color:white;" disabled>📥 下载合并文件</button>
+                </div>
+                <div class="tab-content" id="codeStatsContent">
+                    <div class="table-wrapper" id="filesTable">
+                        <table><thead><tr>
+                            <th>文件路径</th><th>总行数</th><th>代码行</th><th>注释行</th><th>空行</th><th>语言</th><th>复杂度</th>
+                        </tr></thead><tbody id="fileTableBody"></tbody></table>
+                    </div>
+                    <div class="summary-content" id="summaryContent" style="display:none;">
+                        <div id="summaryInfo"></div><div id="languageInfo"></div>
+                    </div>
+                    <div class="dependency-content" id="dependencyContent" style="display:none;">
+                        <div class="dependency-stats" id="depStats"></div>
+                        <div class="class-selector" style="margin:20px 0;">
+                            <label>选择类：</label><select id="classSelect" style="min-width:300px;"></select>
+                        </div>
+                        <div style="display:flex;gap:30px;">
+                            <div style="flex:1;"><h4>📤 出向依赖</h4><ul id="outgoingList" class="dependency-list"></ul></div>
+                            <div style="flex:1;"><h4>📥 入向依赖</h4><ul id="incomingList" class="dependency-list"></ul></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <main class="workspace" id="localWorkspace" style="display:none;">
+        <aside class="dir-tree-panel">
+            <div class="dir-panel-header">
+                <span>📁 本地目录</span>
+                <button id="localRefreshTreeBtn" class="mini-btn">🔄</button>
+            </div>
+            <div class="dir-tree-wrapper" id="localDirTree"><div class="loading">加载中...</div></div>
+        </aside>
+        <div class="local-file-manager">
+            <div id="localPathBar" class="path-bar">
+                <span class="path-label">当前路径：</span><span id="localCurrentPath" class="path-value">/</span>
+            </div>
+            <div id="localFileListPanel" class="file-list-panel">
+                <div class="toolbar">
+                    <button id="localNewFolderBtn" class="btn-icon">📁 新建目录</button>
+                    <button id="localNewFileBtn" class="btn-icon">📄 新建文件</button>
+                    <button id="localUploadBtn" class="btn-icon">📤 上传文件</button>
+                    <button id="localRefreshBtn" class="btn-icon">🔄 刷新</button>
+                </div>
+                <table class="local-file-table">
+                    <thead><tr><th>名称</th><th>类型</th><th>大小</th><th>修改时间</th><th>操作</th></tr></thead>
+                    <tbody id="localFileTableBody"></tbody>
+                </table>
+            </div>
+            <div id="localEditorPanel" class="editor-panel" style="display:none;">
+                <div class="editor-header">
+                    <span id="localEditFileName"></span>
+                    <button id="localCloseEditorBtn" class="btn-icon">✖ 关闭</button>
+                </div>
+                <textarea id="localFileEditor" rows="20"></textarea>
+                <div class="editor-actions"><button id="localSaveFileBtn" class="btn-primary">💾 保存</button></div>
+            </div>
+        </div>
+    </main>
+
+    <main class="workspace fullscreen" id="spiderWorkspace" style="display:none;">
+        <iframe id="spiderFrame" src="../spider/spider.html" title="网页爬虫"></iframe>
+    </main>
+    <main class="workspace fullscreen" id="qbWorkspace" style="display:none;">
+        <iframe id="qbFrame" src="../questionbank/questionbank.html" title="题库分析"></iframe>
+    </main>
+    <main class="workspace fullscreen" id="systemcheckWorkspace" style="display:none;">
+        <iframe id="systemcheckFrame" src="../systemcheck/systemcheck.html" title="系统检查"></iframe>
+    </main>
+
+    <!-- ============ 代码导入工作区 ============ -->
+    <main class="workspace" id="importWorkspace" style="display:none;">
+        <!-- 左侧目录树（可折叠） -->
+        <aside class="dir-tree-panel import-dir-panel" id="importDirPanel">
+            <div class="dir-panel-header">
+                <span>📂 目标根目录</span>
+                <button id="importRefreshTreeBtn" class="mini-btn" title="刷新">🔄</button>
+                <!-- ★ 折叠按钮独立在 header 最右侧，任何状态都可见 -->
+                <button id="importToggleTreeBtn" class="btn-toggle" title="折叠目录树">◀</button>
+            </div>
+            <div class="dir-tree-wrapper" id="importDirTree">
+                <div class="loading">加载中...</div>
+            </div>
+            <div class="dir-panel-footer">
+                <div class="dir-current-tip" id="importDirTip">点击目录作为导入目标根</div>
+            </div>
+        </aside>
+
+        <div class="import-panel" id="importPanel">
+            <!-- 1. 内容输入（可折叠） -->
+            <section class="import-card import-input-card" id="importInputCard">
+                <div class="import-card-header">
+                    <span class="card-title">📥 内容输入</span>
+                    <div class="import-toolbar">
+                        <button id="importPasteBtn" class="btn-secondary btn-sm">📋 粘贴</button>
+                        <button id="importUploadBtn" class="btn-secondary btn-sm">📂 上传</button>
+                        <input type="file" id="importFileInput" accept=".md,.txt,.markdown,.log" style="display:none;">
+                        <button id="importClearBtn" class="btn-secondary btn-sm">🗑️ 清空</button>
+                        <button id="importCopyFormatBtn" class="btn-secondary btn-sm">📋 复制格式</button>
+                        <button id="importDownloadFormatBtn" class="btn-secondary btn-sm">⬇️ 下载格式</button>
+                        <button id="importSampleBtn" type="button" class="btn-secondary btn-sm">🎬 生成示例</button>
+                        <select id="importFormatSelect" class="btn-sm" style="padding:4px 10px;">
+                            <option value="auto">自动识别</option>
+                        </select>
+                        <button id="importParseBtn" class="btn-primary btn-sm">🔍 解析</button>
+                    </div>
+                    <!-- ★ 折叠按钮独立于 toolbar，固定右侧 -->
+                    <button id="importToggleInputBtn" class="btn-toggle" title="折叠输入区">▲</button>
+                </div>
+                <textarea id="importMdInput" class="import-md-input"
+                          placeholder="粘贴 AI 输出的 Markdown（```file:path / ```omni-pack）或合并文件内容（// ======== path ========）"></textarea>
+                <div id="importParseStatus" class="import-status"></div>
+            </section>
+
+            <!-- 2. 结构树 + 预览（可折叠） -->
+            <section class="import-card import-main-card" id="importMainCard">
+                <div class="import-card-header">
+                    <span class="card-title">📂 解析结果</span>
+                    <div class="import-toolbar">
+                        <button id="importExpandAllBtn" class="btn-secondary btn-sm">展开全部</button>
+                        <button id="importCollapseAllBtn" class="btn-secondary btn-sm">折叠全部</button>
+                        <button id="importSelectAllBtn" class="btn-secondary btn-sm">全选</button>
+                        <button id="importSelectNoneBtn" class="btn-secondary btn-sm">全不选</button>
+                    </div>
+                    <!-- ★ 折叠按钮独立于 toolbar，固定右侧 -->
+                    <button id="importToggleMainBtn" class="btn-toggle" title="折叠主卡">▲</button>
+                </div>
+                <div class="import-main-body" id="importMainBody">
+                    <div class="import-main-tree" id="importFileTreePanel">
+                        <div class="import-tree-header">
+                            <span>📄 文件树</span>
+                            <span id="importTreeSummary" class="summary-text">0 个文件</span>
+                        </div>
+                        <div id="importFileTree" class="import-file-tree">
+                            <div class="empty-tip">尚未解析</div>
+                        </div>
+                    </div>
+                    <div class="import-main-preview">
+                        <div class="import-preview-header">
+                            <span id="importPreviewTitle">📄 文件预览</span>
+                            <div class="import-toolbar">
+                                <span id="importPreviewMeta" class="meta-text"></span>
+                                <button id="importCopyFileBtn" class="btn-secondary btn-sm">📋 复制</button>
+                            </div>
+                        </div>
+                        <pre id="importPreviewContent" class="import-preview-content"><div class="empty-tip">从左侧选择文件预览</div></pre>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. 操作区（固定，不折叠） -->
+            <section class="import-card import-action-card">
+                <div class="import-action-row">
+                    <label class="field-label">目标根目录:</label>
+                    <input type="text" id="importTargetRoot" class="field-input" placeholder="从左侧目录树选择，或手动输入绝对路径">
+                    <label class="field-label">冲突处理:</label>
+                    <select id="importConflictSelect" class="field-input" style="width:140px;">
+                        <option value="OVERWRITE" selected>覆盖（默认）</option>
+                        <option value="SKIP">跳过</option>
+                        <option value="RENAME">重命名</option>
+                    </select>
+                    <button id="importExecBtn" class="btn-primary" disabled>🚀 执行导入</button>
+                </div>
+                <div id="importResult" class="import-result" style="display:none;"></div>
+            </section>
+        </div>
+    </main>
+</div>
+
+<script src="codeStats.js"></script>
+<script src="codeImport.js"></script>
+
+<!-- ★ 生成示例：内联，避免外部文件 404 / 时序问题 -->
+<script>
+    (function () {
+        'use strict';
+        console.log('[codeSample] ✅ 加载');
+
+        var SAMPLE = [
+            '// ======== Hello.java ========',
+            'public class Hello {',
+            '    public static void main(String[] args) {',
+            '        System.out.println("Hello, CodeStats!");',
+            '    }',
+            '}',
+            '',
+            '// ======== Calculator.java ========',
+            'public class Calculator {',
+            '    public int add(int a, int b) { return a + b; }',
+            '    public int sub(int a, int b) { return a - b; }',
+            '    public int mul(int a, int b) { return a * b; }',
+            '    public int div(int a, int b) {',
+            '        if (b == 0) throw new IllegalArgumentException("除数不能为 0");',
+            '        return a / b;',
+            '    }',
+            '}',
+            '',
+            '// ======== README.md ========',
+            '# 简单示例项目',
+            '',
+            '包含 4 个文件：',
+            '- Hello.java',
+            '- Calculator.java',
+            '- README.md',
+            '- pom.xml',
+            '',
+            '// ======== pom.xml ========',
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<project>',
+            '    <modelVersion>4.0.0</modelVersion>',
+            '    <groupId>com.demo</groupId>',
+            '    <artifactId>hello</artifactId>',
+            '    <version>1.0</version>',
+            '</project>',
+            ''
+        ].join('\n');
+
+        function fill() {
+            console.log('[codeSample] 🎬 点击');
+            var input = document.getElementById('importMdInput');
+            if (!input) { alert('找不到 #importMdInput，请先切换到「代码导入」页签'); return; }
+            input.value = SAMPLE;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            var parseBtn = document.getElementById('importParseBtn');
+            if (parseBtn) setTimeout(function () { try { parseBtn.click(); } catch (e) { console.warn(e); } }, 50);
+        }
+
+        function bind() {
+            var btn = document.getElementById('importSampleBtn');
+            if (!btn) return false;
+            if (btn.dataset.bound === '1') return true;
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', fill);
+            console.log('[codeSample] ✅ 按钮已绑定');
+            return true;
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bind);
+        } else {
+            bind();
+        }
+        if (!bind()) {
+            var n = 0, t = setInterval(function () {
+                n++;
+                if (bind() || n > 50) clearInterval(t);
+            }, 100);
+        }
+
+        window.__codeSample = { content: SAMPLE, fill: fill, bind: bind };
+    })();
+</script>
+</body>
+</html>

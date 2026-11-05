@@ -5,12 +5,12 @@
         id: 'ssh',
         name: '远程 SSH',
         icon: '🖥️',
-        desc: 'SSH 远程服务器管理：连接测试 / 命令执行 / 目录浏览 / 文件上传下载与编辑 / 常用命令文档（密码不入库，仅内存缓存）',
+        desc: 'SSH 远程服务器管理：连接测试 / 命令执行 / 目录浏览 / 文件上传下载与编辑 / 服务探测 / 常用命令文档（密码不入库，仅内存缓存）',
         mount: mountSsh
     });
 
     // ============================================================
-    // 文档步骤数据（模块级常量，避免在 mountSsh 内重复构造）
+    // 文档步骤数据
     // ============================================================
     const DOC_STEPS = [
         {
@@ -21,26 +21,26 @@
                     title: 'Windows · 打开 PowerShell',
                     desc: '任选一种方式',
                     commands: [
-                        { label: '直接启动',        cmd: 'powershell' },
+                        { label: '直接启动',              cmd: 'powershell' },
                         { label: '推荐（跳过配置文件加载）', cmd: 'powershell -NoProfile' },
-                        { label: '快捷键',          cmd: 'Win + X → Windows PowerShell，或 Win + R 输入 powershell' }
+                        { label: '快捷键',                cmd: 'Win + X → Windows PowerShell，或 Win + R 输入 powershell' }
                     ]
                 },
                 {
                     title: 'Linux / macOS · 打开 Shell',
                     desc: '',
                     commands: [
-                        { label: 'Bash',  cmd: 'bash' },
-                        { label: 'sh',    cmd: 'sh' }
+                        { label: 'Bash', cmd: 'bash' },
+                        { label: 'sh',   cmd: 'sh' }
                     ]
                 },
                 {
                     title: 'SSH 连接目标主机',
                     desc: '默认端口 22；非标准端口用 -p 指定',
                     commands: [
-                        { label: '默认端口',    cmd: 'ssh user@host' },
-                        { label: '自定义端口',  cmd: 'ssh user@host -p 2222' },
-                        { label: '指定私钥',    cmd: 'ssh -i /path/to/private_key user@host' }
+                        { label: '默认端口',   cmd: 'ssh user@host' },
+                        { label: '自定义端口', cmd: 'ssh user@host -p 2222' },
+                        { label: '指定私钥',   cmd: 'ssh -i /path/to/private_key user@host' }
                     ]
                 }
             ]
@@ -50,10 +50,19 @@
             icon: '🔌',
             blocks: [
                 {
+                    title: '先判断目标机有没有 SSH Server',
+                    desc: '没有 sshd / OpenSSH Server 时后续探测命令都会失败，请先按第 3 步安装或改用其他通道',
+                    commands: [
+                        { label: 'Windows 查服务', cmd: 'Get-Service sshd -ErrorAction SilentlyContinue' },
+                        { label: 'Linux 查 sshd', cmd: 'command -v sshd || ls /usr/sbin/sshd 2>/dev/null' },
+                        { label: '通用',          cmd: 'ssh -V   # 仅确认客户端存在，不代表服务端已装' }
+                    ]
+                },
+                {
                     title: 'Windows · PowerShell（推荐）',
                     desc: 'Test-NetConnection 是 PowerShell 内置能力，不依赖 telnet',
                     commands: [
-                        { label: '探测 22 端口',            cmd: 'Test-NetConnection -ComputerName <host> -Port 22' },
+                        { label: '探测 22 端口',              cmd: 'Test-NetConnection -ComputerName <host> -Port 22' },
                         { label: '静默模式（只返回 True/False）', cmd: 'Test-NetConnection -ComputerName 192.168.1.10 -Port 22 -InformationLevel Quiet' }
                     ]
                 },
@@ -69,17 +78,17 @@
                     title: 'Linux / macOS',
                     desc: '',
                     commands: [
-                        { label: 'nc 探测',                cmd: 'nc -zv <host> 22' },
-                        { label: 'bash /dev/tcp 探测',      cmd: 'timeout 3 bash -c "</dev/tcp/<host>/22" && echo OK' },
-                        { label: 'ssh 详细日志',           cmd: 'ssh -v user@host' }
+                        { label: 'nc 探测',              cmd: 'nc -zv <host> 22' },
+                        { label: 'bash /dev/tcp 探测',   cmd: 'timeout 3 bash -c "</dev/tcp/<host>/22" && echo OK' },
+                        { label: 'ssh 详细日志',         cmd: 'ssh -v user@host' }
                     ]
                 },
                 {
                     title: '查看本机 SSH 端口监听状态',
                     desc: '确认目标机 sshd 是否正在监听',
                     commands: [
-                        { label: 'Windows', cmd: 'netstat -ano | findstr :22' },
-                        { label: 'Linux',   cmd: 'ss -tlnp | grep :22' },
+                        { label: 'Windows',      cmd: 'netstat -ano | findstr :22' },
+                        { label: 'Linux',        cmd: 'ss -tlnp | grep :22' },
                         { label: 'Linux（旧版）', cmd: 'netstat -tlnp | grep :22' }
                     ]
                 }
@@ -93,22 +102,22 @@
                     title: 'Windows · PowerShell（示例服务 MySQL80）',
                     desc: '用 Get-Service 确认服务名，再 Start/Stop',
                     commands: [
-                        { label: '查看状态',    cmd: 'Get-Service MySQL80' },
-                        { label: '启动',        cmd: 'Start-Service MySQL80' },
-                        { label: '停止',        cmd: 'Stop-Service MySQL80' },
-                        { label: '重启',        cmd: 'Restart-Service MySQL80' },
-                        { label: '设为自动启动', cmd: 'Set-Service MySQL80 -StartupType Automatic' }
+                        { label: '查看状态',      cmd: 'Get-Service MySQL80' },
+                        { label: '启动',          cmd: 'Start-Service MySQL80' },
+                        { label: '停止',          cmd: 'Stop-Service MySQL80' },
+                        { label: '重启',          cmd: 'Restart-Service MySQL80' },
+                        { label: '设为自动启动',  cmd: 'Set-Service MySQL80 -StartupType Automatic' }
                     ]
                 },
                 {
                     title: 'Windows · CMD',
                     desc: 'sc 与 net 命令在旧系统上更通用',
                     commands: [
-                        { label: '查询状态', cmd: 'sc query MySQL80' },
-                        { label: '启动',    cmd: 'sc start MySQL80' },
-                        { label: '停止',    cmd: 'sc stop MySQL80' },
-                        { label: '启动（net）', cmd: 'net start MySQL80' },
-                        { label: '停止（net）', cmd: 'net stop MySQL80' }
+                        { label: '查询状态',      cmd: 'sc query MySQL80' },
+                        { label: '启动',          cmd: 'sc start MySQL80' },
+                        { label: '停止',          cmd: 'sc stop MySQL80' },
+                        { label: '启动（net）',   cmd: 'net start MySQL80' },
+                        { label: '停止（net）',   cmd: 'net stop MySQL80' }
                     ]
                 },
                 {
@@ -116,9 +125,9 @@
                     desc: '示例服务 nginx',
                     commands: [
                         { label: '查看状态', cmd: 'systemctl status nginx' },
-                        { label: '启动',    cmd: 'systemctl start nginx' },
-                        { label: '停止',    cmd: 'systemctl stop nginx' },
-                        { label: '重启',    cmd: 'systemctl restart nginx' },
+                        { label: '启动',     cmd: 'systemctl start nginx' },
+                        { label: '停止',     cmd: 'systemctl stop nginx' },
+                        { label: '重启',     cmd: 'systemctl restart nginx' },
                         { label: '开机自启', cmd: 'systemctl enable nginx' }
                     ]
                 },
@@ -127,18 +136,24 @@
                     desc: '',
                     commands: [
                         { label: '查看状态', cmd: 'service nginx status' },
-                        { label: '启动',    cmd: 'service nginx start' },
-                        { label: '停止',    cmd: 'service nginx stop' }
+                        { label: '启动',     cmd: 'service nginx start' },
+                        { label: '停止',     cmd: 'service nginx stop' }
                     ]
                 },
                 {
-                    title: 'sshd 服务本身',
-                    desc: '如果 SSH 不通，优先确认 sshd 状态',
+                    title: '没有 sshd 时：确认 / 安装 / 兜底',
+                    desc: '如果目标机没有 SSH Server，SSH 推送通道不可用，需要装服务或改用其他通道',
                     commands: [
-                        { label: 'Windows OpenSSH', cmd: 'Get-Service sshd' },
-                        { label: 'Windows 启动',   cmd: 'Start-Service sshd' },
-                        { label: 'Linux 状态',     cmd: 'systemctl status sshd' },
-                        { label: 'Linux 启动',     cmd: 'systemctl start sshd' }
+                        { label: 'Windows 查服务',     cmd: 'Get-Service sshd -ErrorAction SilentlyContinue' },
+                        { label: 'Windows 查端口',     cmd: 'Test-NetConnection -ComputerName localhost -Port 22' },
+                        { label: 'Linux 查服务',       cmd: 'systemctl status sshd 2>/dev/null || systemctl status ssh 2>/dev/null' },
+                        { label: 'Linux 查包',         cmd: 'dpkg -l | grep openssh-server || rpm -qa | grep openssh-server' },
+                        { label: 'Windows 装 OpenSSH', cmd: 'Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0' },
+                        { label: 'Windows 启动+自启',  cmd: 'Start-Service sshd; Set-Service sshd -StartupType Automatic' },
+                        { label: 'Debian/Ubuntu',     cmd: 'sudo apt-get install -y openssh-server && sudo systemctl enable --now ssh' },
+                        { label: 'CentOS/RHEL',       cmd: 'sudo yum install -y openssh-server && sudo systemctl enable --now sshd' },
+                        { label: '兜底：用本机通道',   cmd: '集群管理 → 通道选择「💻 本机」，部署到主服务所在机器，无需 sshd' },
+                        { label: '兜底：用手动通道',   cmd: '集群管理 → 通道选择「📥 手动下载」，生成下载地址+启动命令，用户自行拷贝执行' }
                     ]
                 }
             ]
@@ -151,8 +166,8 @@
                     title: 'Windows · PowerShell',
                     desc: '',
                     commands: [
-                        { label: '探测端口',           cmd: 'Test-NetConnection -ComputerName <host> -Port <port>' },
-                        { label: '静默模式',           cmd: 'Test-NetConnection -ComputerName 192.168.1.10 -Port 8080 -InformationLevel Quiet' }
+                        { label: '探测端口', cmd: 'Test-NetConnection -ComputerName <host> -Port <port>' },
+                        { label: '静默模式', cmd: 'Test-NetConnection -ComputerName 192.168.1.10 -Port 8080 -InformationLevel Quiet' }
                     ]
                 },
                 {
@@ -201,6 +216,7 @@
                             <button class="ssh-tab active" data-tab="files">📁 目录浏览</button>
                             <button class="ssh-tab" data-tab="cmd">⌨️ 命令行</button>
                             <button class="ssh-tab" data-tab="editor">📝 文件编辑</button>
+                            <button class="ssh-tab" data-tab="portscan">🔍 服务探测</button>
                             <button class="ssh-tab" data-tab="commands">📖 常用命令</button>
                         </div>
 
@@ -243,12 +259,21 @@
                                       placeholder="双击左侧目录中的文件以加载内容进行编辑"></textarea>
                         </div>
 
-                        <!-- ============ Tab 4: 常用命令文档（原「服务/端口」） ============ -->
+                        <!-- ============ Tab 4: 服务探测（新增） ============ -->
+                        <div class="ssh-pane" id="sshPanePortScan">
+                            <div class="empty-tip" style="padding:40px;text-align:center;">
+                                选择左侧服务器后，点击「开始扫描」探测端口与服务
+                            </div>
+                        </div>
+
+                        <!-- ============ Tab 5: 常用命令文档 ============ -->
                         <div class="ssh-pane" id="sshPaneCommands">
                             <div class="ssh-doc-wrap">
                                 <div class="ssh-doc-intro">
                                     📖 本页为只读文档，提供打开终端、探测 SSH 服务、启停服务、端口探测的常见命令。
                                     点击每条命令右侧的 📋 按钮即可复制。
+                                    ⚠️ 若目标机<b>没有 sshd / OpenSSH Server</b>，请先按第 3 步安装；装不了的，
+                                    在「集群管理 → 部署新 Worker」里改用「💻 本机」或「📥 手动下载」通道。
                                 </div>
                                 ${renderDocSteps()}
                             </div>
@@ -257,7 +282,7 @@
                 </main>
             </div>
 
-            <!-- ============ 连接弹窗（保持不变） ============ -->
+            <!-- ============ 连接弹窗 ============ -->
             <div id="sshConnModal" class="ssh-modal" style="display:none;">
                 <div class="ssh-modal-content">
                     <div class="ssh-modal-header">
@@ -306,9 +331,6 @@
             </div>
         `;
 
-        // ============================================================
-        // 引用
-        // ============================================================
         const $ = id => container.querySelector('#' + id);
         const API = (typeof window.apiUrl === 'function')
             ? window.apiUrl('/sys/api/ssh')
@@ -344,7 +366,35 @@
         }
 
         // ============================================================
-        // 文档复制按钮（事件委托，一次绑定）
+        // ★ 新增：动态加载 port-scan.js（如 sys.html 已引用则跳过）
+        // ============================================================
+        function ensurePortScanLoaded(callback) {
+            if (window.PortScanTab) { callback(); return; }
+            const existing = document.querySelector('script[src*="port-scan.js"]');
+            if (existing) {
+                let n = 0;
+                const timer = setInterval(() => {
+                    n++;
+                    if (window.PortScanTab) { clearInterval(timer); callback(); }
+                    else if (n > 50) { clearInterval(timer); console.warn('[ssh] port-scan.js 加载超时'); }
+                }, 100);
+                return;
+            }
+            const script = document.createElement('script');
+            const url = (typeof window.apiUrl === 'function')
+                ? window.apiUrl('/demo/sys/modules/ssh/port-scan.js')
+                : (window.CONTEXT_PATH || '') + '/demo/sys/modules/ssh/port-scan.js';
+            script.src = url;
+            script.onload = () => {
+                if (window.PortScanTab) callback();
+                else console.warn('[ssh] port-scan.js 已加载但 PortScanTab 未定义');
+            };
+            script.onerror = () => console.error('[ssh] port-scan.js 加载失败: ' + url);
+            document.body.appendChild(script);
+        }
+
+        // ============================================================
+        // 文档复制按钮事件委托
         // ============================================================
         container.addEventListener('click', (e) => {
             const btn = e.target.closest('.ssh-doc-copy');
@@ -533,6 +583,7 @@
             $('sshCmdMeta').textContent = '';
             $('sshEditorPath').value = '';
             $('sshEditorContent').value = '';
+            if (window.PortScanTab) { try { window.PortScanTab.clear(); } catch (e) { /* ignore */ } }
             switchTab('files');
             refreshFileList();
         }
@@ -547,6 +598,7 @@
                 files:    'sshPaneFiles',
                 cmd:      'sshPaneCmd',
                 editor:   'sshPaneEditor',
+                portscan: 'sshPanePortScan',
                 commands: 'sshPaneCommands'
             };
             Object.keys(map).forEach(k => {
@@ -797,8 +849,14 @@
         $('sshSaveBtn').addEventListener('click', saveEditor);
 
         // ============================================================
-        // 启动
+        // ★ 启动：动态加载 port-scan.js 并挂载到 sshPanePortScan
         // ============================================================
+        ensurePortScanLoaded(() => {
+            if (!window.PortScanTab) return;
+            const el = container.querySelector('#sshPanePortScan');
+            if (el) window.PortScanTab.mount(el, () => currentId);
+        });
+
         loadConnections();
     }
 
@@ -839,7 +897,7 @@
     function escapeAttrGlobal(s) { return escapeHtmlGlobal(s); }
 
     // ============================================================
-    // 样式注入（只在第一次挂载时注入）
+    // 样式注入
     // ============================================================
     function injectDocStyle() {
         if (document.getElementById('ssh-doc-style')) return;

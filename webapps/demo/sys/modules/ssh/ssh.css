@@ -384,3 +384,53 @@
     background: rgba(0,102,255,0.3);
     border-radius: 4px;
 }
+/* ==================== 服务/端口 Tab ==================== */
+.ssh-service-section {
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    background: rgba(0, 102, 255, 0.03);
+    border: 1px solid rgba(0, 102, 255, 0.15);
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+.ssh-service-section .ssh-service-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.ssh-service-section label {
+    font-size: 12px;
+    color: var(--text-muted);
+    min-width: 50px;
+    flex-shrink: 0;
+}
+.ssh-service-section input {
+    padding: 6px 12px;
+    border: 1px solid rgba(0, 102, 255, 0.3);
+    border-radius: 8px;
+    background: white;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    outline: none;
+    box-sizing: border-box;
+}
+.ssh-service-section input:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+}
+.ssh-service-section .ssh-terminal {
+    margin-top: 8px;
+    min-height: 60px;
+    max-height: 240px;
+    flex: none;
+}
+.ssh-service-section .ssh-service-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}

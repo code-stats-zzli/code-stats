@@ -8,6 +8,10 @@ extensions:
   - md
   - py
   - service
+  - css
+  - js
+  - html
+  - yaml
 # 排除路径
 excludePaths:
   - target

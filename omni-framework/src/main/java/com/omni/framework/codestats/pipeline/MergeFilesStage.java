@@ -13,61 +13,27 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 
-/**
- * 合并文件生成阶段。
- *
- * <p>合并文件格式（与「代码导入」兼容）：</p>
- * <pre>
- * // ======== &lt;相对路径&gt; ========
- * &lt;原样文本内容&gt;
- *
- * // ======== &lt;二进制路径&gt; ========
- * [BASE64]
- * &lt;base64 编码，76 字符换行&gt;
- * </pre>
- *
- * <p><b>本轮改动</b>：当 {@link com.omni.business.assistance.codestat.service.CodeAnalysisService}
- * 勾选模块后会追加模块下的完整文件（含 .png / .jar / .xlsx 等），
- * 合并阶段对二进制文件改用 Base64 编码块写入，避免污染合并文件、
- * 保证仍能被「代码导入 → ImportFileService」完整还原。</p>
- */
 public class MergeFilesStage implements Stage<List<Path>, Void> {
     private static final Logger log = LoggerFactory.getLogger(MergeFilesStage.class);
 
-    /** 二进制文件标记，与 ImportFileService / MergeFileWriter 保持一致 */
     private static final String BASE64_TAG = "[BASE64]";
     private static final Base64.Encoder BASE64_ENCODER =
             Base64.getMimeEncoder(76, "\n".getBytes(StandardCharsets.US_ASCII));
 
     private final Path outputFile;
-    /** 项目根目录（相对路径基准）；null 表示沿用旧行为（写绝对路径） */
     private final Path rootDir;
-    /** extraPaths 中的目录列表（相对路径第二基准） */
     private final List<Path> extraPathDirs;
 
-    /**
-     * 旧构造器（不推荐）：header 写绝对路径 → 无法被「代码导入」还原。
-     * 保留仅为了兼容可能的旧调用点。
-     */
     public MergeFilesStage(Path outputFile) {
         this(null, null, outputFile);
     }
 
-    /**
-     * 推荐构造器：header 写相对 rootDir 的路径 → 可被「代码导入」还原。
-     *
-     * @param rootDir       代码分析的 rootDir
-     * @param extraPathDirs extraPaths 中实际存在的目录列表（用于给额外目录的文件算相对路径）
-     * @param outputFile    合并文件输出路径
-     */
     public MergeFilesStage(Path rootDir, List<Path> extraPathDirs, Path outputFile) {
         this.rootDir = rootDir != null ? rootDir.toAbsolutePath().normalize() : null;
         this.extraPathDirs = new ArrayList<>();
         if (extraPathDirs != null) {
             for (Path p : extraPathDirs) {
-                if (p != null) {
-                    this.extraPathDirs.add(p.toAbsolutePath().normalize());
-                }
+                if (p != null) this.extraPathDirs.add(p.toAbsolutePath().normalize());
             }
         }
         this.outputFile = outputFile;
@@ -103,7 +69,7 @@ public class MergeFilesStage implements Stage<List<Path>, Void> {
                 }
                 String header = "\n// ======== " + rel + " ========\n";
 
-                // ★ 二进制文件用 [BASE64] 块写入，保持合并文件可解析
+                // 白名单已排除二进制，这里 base64 分支仅作为最后兜底
                 if (isBinaryFile(rel)) {
                     out.write((header + BASE64_TAG + "\n").getBytes(StandardCharsets.UTF_8));
                     byte[] data = Files.readAllBytes(file);
@@ -125,10 +91,6 @@ public class MergeFilesStage implements Stage<List<Path>, Void> {
         return null;
     }
 
-    /**
-     * 判断合并文件中的路径是否为二进制类型。
-     * <p>与 {@code com.omni.framework.unzip.util.MergeFileWriter#isBinary} 保持一致。</p>
-     */
     private boolean isBinaryFile(String path) {
         if (path == null) return false;
         int dot = path.lastIndexOf('.');
@@ -146,13 +108,6 @@ public class MergeFilesStage implements Stage<List<Path>, Void> {
         }
     }
 
-    /**
-     * 计算文件的相对路径：
-     *   1) 在 rootDir 下       → rootDir.relativize(file)
-     *   2) 在某个 extraPathDir → extraPathDir.relativize(file)
-     *   3) 旧构造器（两者皆空）→ 保留绝对路径（向后兼容）
-     *   4) 新构造器找不到 base → 用文件名兜底（保证可导入）
-     */
     private String relativize(Path file) {
         Path abs = file.toAbsolutePath().normalize();
         if (rootDir != null && abs.startsWith(rootDir)) {
@@ -170,9 +125,6 @@ public class MergeFilesStage implements Stage<List<Path>, Void> {
         return name != null ? name.toString() : null;
     }
 
-    /**
-     * 合并文件末尾追加的 AI 上下文提示块。
-     */
     private String buildAiPrompt() {
         StringBuilder sb = new StringBuilder();
         sb.append('\n');
@@ -184,10 +136,8 @@ public class MergeFilesStage implements Stage<List<Path>, Void> {
         sb.append("// 【合并文件格式说明】\n");
         sb.append("//   每个源文件以如下分隔头开始：\n");
         sb.append("//       // ======== <相对路径> ========\n");
-        sb.append("//   相对路径相对本次代码分析的 rootDir，例如：\n");
-        sb.append("//       omni-common/src/main/java/com/omni/common/cache/Cache.java\n");
         sb.append("//   分隔头之后紧跟该文件的原始内容（原样保留，不转义、不缩进）。\n");
-        sb.append("//   二进制文件（.png/.jar/.xlsx 等）以 [BASE64] 标记，后面接 base64 内容（76 字符换行）。\n");
+        sb.append("//   二进制文件（.png/.jar/.xlsx 等）以 [BASE64] 标记，后接 base64 内容（76 字符换行）。\n");
         sb.append("//   系统解析时会读取分隔头中的路径，并恢复为 targetRoot 下对应目录结构。\n");
         sb.append("//\n");
         sb.append("// 【示例】\n");
@@ -199,18 +149,8 @@ public class MergeFilesStage implements Stage<List<Path>, Void> {
         sb.append("//   server.port=28080\n");
         sb.append("//   context.path=/omni\n");
         sb.append("//\n");
-        sb.append("//   // ======== omni-bootstrap/webapps/demo/index.html ========\n");
-        sb.append("//   <!DOCTYPE html>\n");
-        sb.append("//   ...\n");
-        sb.append("//\n");
-        sb.append("//   // ======== omni-bootstrap/webapps/demo/logo.png ========\n");
-        sb.append("//   [BASE64]\n");
-        sb.append("//   iVBORw0KGgoAAAANSUhEUgAA...\n");
-        sb.append("//\n");
         sb.append("// 【使用建议】\n");
-        sb.append("//   导入时 targetRoot 设为原项目根目录，即可完整还原多模块结构（含资源、webapps、二进制）。\n");
-        sb.append("// ============================================================\n");
-        sb.append("// （本提示块不参与代码导入解析，仅作为 AI 上下文说明）\n");
+        sb.append("//   导入时 targetRoot 设为原项目根目录，即可完整还原多模块结构。\n");
         sb.append("// ============================================================\n");
         return sb.toString();
     }

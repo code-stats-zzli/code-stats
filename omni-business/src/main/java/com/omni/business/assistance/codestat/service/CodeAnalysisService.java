@@ -41,16 +41,13 @@ import java.util.stream.Collectors;
 /**
  * 代码分析业务服务。
  *
- * <p>关键修复点汇总（历次迭代）：</p>
+ * <p>当前规则：</p>
  * <ul>
- *   <li>wrapper-dirs 自动下探（配置驱动），解决 rootDir 多一层包装目录问题</li>
- *   <li>合并文件相对路径基准 = effectiveRoot（下探后的项目根）</li>
- *   <li>默认扩展名从配置读取，覆盖 HTML/CSS/JS 等 Web 资源</li>
- *   <li>extraPaths 相对路径优先基于 effectiveRoot 解析；
- *       额外文件不再被模块过滤误伤；响应回显 effectiveRoot 供前端提示导入 targetRoot</li>
- *   <li><b>本轮新增</b>：勾选模块时，模块下的「完整文件」（含 src/main/resources、pom.xml、
- *       webapps 等非 java 文件）一并加入待合并列表，不受 extensions 限制。
- *       合并阶段对二进制文件（.png/.jar/.xlsx 等）自动 Base64 编码，合并文件仍可被「代码导入」完整还原。</li>
+ *   <li><b>分析统计</b>：严格按 {@code extensions} 过滤（默认 {@code css,js,html}）</li>
+ *   <li><b>合并文件</b>：{@code extensions} 过滤的文件 ＋ 选中模块下所有「文本文件」白名单
+ *       （pom.xml、application.properties、log-config.xml、webapps/**、.md/.yml/.json 等）</li>
+ *   <li>二进制（.png/.jpg/.jar/.xlsx 等）、隐藏文件（.gitignore/.env）、
+ *       编译产物（target/build/node_modules/.git 等）不会进入合并文件</li>
  * </ul>
  */
 @Service
@@ -69,6 +66,37 @@ public class CodeAnalysisService {
     ));
 
     private static final String ROOT_FILES_MODULE = "(根目录文件)";
+
+    // ==================== ★ 合并文件白名单 ====================
+
+    /**
+     * 合并文件白名单：源码 / 配置 / 文档 / 文本资源。
+     * <p>二进制（图片/音视频/字体/office/压缩包/jar/class 等）不在其中，不会被合并。</p>
+     */
+    private static final Set<String> MERGE_TEXT_EXTS = new HashSet<>(Arrays.asList(
+            // 代码
+            "java", "kt", "kts", "groovy", "scala",
+            "c", "cpp", "cc", "cxx", "h", "hpp", "hh", "hxx",
+            "py", "go", "rs", "rb", "php", "swift", "m", "mm", "cs", "lua",
+            "js", "jsx", "mjs", "cjs", "ts", "tsx", "vue", "svelte",
+            // 配置
+            "properties", "xml", "yml", "yaml", "json", "toml", "ini", "conf", "cnf",
+            "env", "cfg", "config",
+            // 文档 / 文本资源
+            "html", "htm", "xhtml", "css", "scss", "sass", "less", "styl",
+            "md", "markdown", "txt", "rst", "log", "csv", "tsv",
+            "sql", "sh", "bash", "zsh", "bat", "cmd", "ps1", "gradle",
+            // 模板
+            "ftl", "vm", "jsp", "jspx", "tpl", "thymeleaf", "ejs", "hbs"
+    ));
+
+    /**
+     * 无扩展名的项目文件白名单（按文件名精确匹配）。
+     */
+    private static final Set<String> MERGE_TEXT_FILENAMES = new HashSet<>(Arrays.asList(
+            "dockerfile", "makefile", "license", "readme", "mvnw", "mvnw.cmd",
+            "gradlew", "gradlew.bat", "procfile"
+    ));
 
     public static void registerDownloadable(Path file) {
         if (file == null) return;
@@ -169,17 +197,6 @@ public class CodeAnalysisService {
 
     // ==================== extraPaths 相对路径解析 ====================
 
-    /**
-     * 解析单个 extraPath 为绝对路径。
-     *
-     * <p>优先级：</p>
-     * <ol>
-     *   <li>绝对路径 → 原样使用</li>
-     *   <li>相对路径 → 优先基于 effectiveRoot 解析（已存在即采用）</li>
-     *   <li>回退 → 基于 user.dir 解析（已存在即采用）</li>
-     *   <li>都不存在 → 返回 effectiveRoot 版本（后续会被 isDirectory/isFile 过滤掉）</li>
-     * </ol>
-     */
     private Path resolveExtraPath(String pathStr, Path effectiveRoot) {
         if (pathStr == null || pathStr.trim().isEmpty()) return null;
         Path p;
@@ -205,7 +222,7 @@ public class CodeAnalysisService {
         Config config = ConfigLoader.load(new String[0]);
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("rootDir", config.getRootDir() != null ? config.getRootDir().toString() : System.getProperty("user.dir"));
-        map.put("extensions", config.getExtensions() != null ? String.join(",", config.getExtensions()) : "java");
+        map.put("extensions", config.getExtensions() != null ? String.join(",", config.getExtensions()) : "html,js,css");
         map.put("excludePaths", config.getExcludePaths() != null ? String.join(",", config.getExcludePaths()) : "");
         map.put("excludeComments", config.isExcludeComments());
         map.put("threadCount", config.getThreadCount());
@@ -296,7 +313,6 @@ public class CodeAnalysisService {
                     }
                     return FileVisitResult.CONTINUE;
                 }
-
                 @Override
                 public FileVisitResult visitFile(Path f, BasicFileAttributes attrs) {
                     if (Files.isRegularFile(f)) {
@@ -309,7 +325,6 @@ public class CodeAnalysisService {
                     }
                     return FileVisitResult.CONTINUE;
                 }
-
                 @Override
                 public FileVisitResult visitFileFailed(Path f, IOException e) {
                     return FileVisitResult.CONTINUE;
@@ -347,29 +362,35 @@ public class CodeAnalysisService {
             long startTime = System.currentTimeMillis();
 
             CompositeFilter filterChain = buildFilterChain(config, effectiveRoot);
-            List<Path> files = new CollectStage(filterChain).process(effectiveRoot);
+            List<Path> allFiles = new CollectStage(filterChain).process(effectiveRoot);
 
-            // ① 按模块过滤主文件（受用户勾选影响）
             String modulesParam = params.get("modules");
+            String extraPathsParam = params.get("extraPaths");
+
+            // ---------- ① 统计用文件：extensions 过滤 + 模块过滤 + extraPaths ----------
+            List<Path> filesForStats = new ArrayList<>(allFiles);
             if (modulesParam != null && !modulesParam.trim().isEmpty()) {
-                files = filterByModules(files, modulesParam, effectiveRoot);
-                // ★ 新增：选中模块时，把该模块下的「完整文件」也一并追加进来
-                files = appendModuleAllFiles(files, modulesParam, effectiveRoot);
+                filesForStats = filterByModules(filesForStats, modulesParam, effectiveRoot);
+            }
+            filesForStats = appendExtraFiles(filesForStats, extraPathsParam, effectiveRoot);
+
+            // ---------- ② 合并用文件：filesForStats + 模块下所有「文本文件」 ----------
+            List<Path> filesForMerge = new ArrayList<>(filesForStats);
+            if (modulesParam != null && !modulesParam.trim().isEmpty()) {
+                filesForMerge = appendModuleTextFiles(filesForMerge, modulesParam, effectiveRoot);
             }
 
-            // ② 追加额外文件（不受模块过滤影响；相对路径基于 effectiveRoot 解析）
-            String extraPathsParam = params.get("extraPaths");
-            files = appendExtraFiles(files, extraPathsParam, effectiveRoot);
-
+            // ---------- ③ 统计分析 ----------
             ParallelAnalyzeStage analyzeStage = new ParallelAnalyzeStage(
                     config.getThreadCount(), config.isExcludeComments(), null);
-            List<FileInfo> fileInfos = analyzeStage.process(files);
+            List<FileInfo> fileInfos = analyzeStage.process(filesForStats);
             fileInfos.sort(SorterRegistry.getComparator(config.getSortBy()));
 
             StatisticsResult result = new StatisticsResult();
             for (FileInfo info : fileInfos) result.addFileInfo(info);
             result.setDurationMs(System.currentTimeMillis() - startTime);
 
+            // ---------- ④ 合并 ----------
             boolean mergeEnabled = !"false".equalsIgnoreCase(params.get("mergeEnabled"));
             String mergeOutputFile = params.get("mergeOutputFile");
             if (mergeEnabled && (mergeOutputFile == null || mergeOutputFile.trim().isEmpty())) {
@@ -384,11 +405,11 @@ public class CodeAnalysisService {
                 try {
                     Path mergePath = Paths.get(mergeOutputFile).toAbsolutePath().normalize();
                     List<Path> extraDirs = collectExtraDirs(extraPathsParam, effectiveRoot);
-                    // ★ 合并阶段对二进制文件自动 Base64 编码
-                    new MergeFilesStage(effectiveRoot, extraDirs, mergePath).process(files);
+                    new MergeFilesStage(effectiveRoot, extraDirs, mergePath).process(filesForMerge);
                     registerDownloadable(mergePath);
                     mergeOutputFile = mergePath.toString();
-                    log.info("合并文件已生成（相对路径基准: {}）: {}", effectiveRoot, mergeOutputFile);
+                    log.info("合并文件已生成（相对路径基准: {}，文件数: {}）: {}",
+                            effectiveRoot, filesForMerge.size(), mergeOutputFile);
                 } catch (Exception e) {
                     log.error("合并文件失败: {}", mergeOutputFile, e);
                     mergeOutputFile = null;
@@ -402,17 +423,18 @@ public class CodeAnalysisService {
         }
     }
 
+    // ==================== ★ 追加模块下的完整文本文件 ====================
+
     /**
-     * ★ 新增：追加选中模块下的所有文件（不受 extensions 限制）。
+     * ★ 追加选中模块下的「完整文本文件」（不受 extensions 限制）。
      *
-     * <p>背景：当用户只配置 extensions=java 时，模块下的
-     * src/main/resources（.properties/.xml/.yml）、webapps（.html/.css/.js）、
-     * pom.xml 等会被 ExtensionFilter 过滤掉。但「合并文件导出」场景期望
-     * 选中模块的完整文件都被输出，便于完整还原项目。</p>
+     * <p>白名单 {@link #MERGE_TEXT_EXTS} 控制：源码 / 配置 / 文档 / 文本资源会被合并；
+     * 二进制（图片/音视频/字体/office/压缩包/jar/class 等）、
+     * 隐藏文件（{@code .gitignore/.env}）、编译产物被排除。</p>
      *
-     * <p>会跳过 EXTRA_SKIP_DIRS（target/node_modules/.git 等）与所有隐藏目录。</p>
+     * <p>会跳过 {@link #EXTRA_SKIP_DIRS} 与所有隐藏目录。</p>
      */
-    private List<Path> appendModuleAllFiles(List<Path> existing, String modulesParam, Path rootDir) {
+    private List<Path> appendModuleTextFiles(List<Path> existing, String modulesParam, Path rootDir) {
         if (modulesParam == null || modulesParam.trim().isEmpty()) return existing;
 
         Path rootAbs = rootDir.toAbsolutePath().normalize();
@@ -420,7 +442,21 @@ public class CodeAnalysisService {
 
         for (String raw : modulesParam.split(",")) {
             String name = raw.trim();
-            if (name.isEmpty() || ROOT_FILES_MODULE.equals(name)) continue;
+            if (name.isEmpty()) continue;
+
+            // 根目录文件
+            if (ROOT_FILES_MODULE.equals(name)) {
+                try (DirectoryStream<Path> ds = Files.newDirectoryStream(rootAbs)) {
+                    for (Path p : ds) {
+                        if (Files.isRegularFile(p) && isMergeTextFile(p)) {
+                            merged.add(p.toAbsolutePath().normalize());
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("扫描根目录文件失败: {}", rootAbs, e);
+                }
+                continue;
+            }
 
             Path modulePath = rootAbs.resolve(name).normalize();
             if (!Files.isDirectory(modulePath)) {
@@ -444,7 +480,7 @@ public class CodeAnalysisService {
 
                     @Override
                     public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                        if (Files.isRegularFile(file)) {
+                        if (Files.isRegularFile(file) && isMergeTextFile(file)) {
                             merged.add(file.toAbsolutePath().normalize());
                         }
                         return FileVisitResult.CONTINUE;
@@ -455,18 +491,39 @@ public class CodeAnalysisService {
                         return FileVisitResult.CONTINUE;
                     }
                 });
-                log.info("模块 [{}] 已追加完整文件（新增 {} 个，当前总 {} 个）",
+                log.info("模块 [{}] 已追加完整文本文件（新增 {} 个，当前总 {} 个）",
                         name, merged.size() - before, merged.size());
             } catch (Exception e) {
-                log.warn("扫描模块全文件失败: {}", modulePath, e);
+                log.warn("扫描模块完整文本文件失败: {}", modulePath, e);
             }
         }
         return new ArrayList<>(merged);
     }
 
     /**
-     * 额外目录收集：相对路径优先基于 effectiveRoot 解析。
+     * ★ 判断文件是否为可合并的文本文件。
+     *
+     * <ul>
+     *   <li>隐藏文件（{@code .} 开头）→ 排除，避免 {@code .env/.gitignore} 等敏感信息泄露</li>
+     *   <li>有扩展名 → 白名单 {@link #MERGE_TEXT_EXTS} 命中则保留</li>
+     *   <li>无扩展名 → 文件名白名单 {@link #MERGE_TEXT_FILENAMES} 命中则保留</li>
+     * </ul>
      */
+    private boolean isMergeTextFile(Path file) {
+        if (file == null) return false;
+        String name = file.getFileName() == null ? "" : file.getFileName().toString();
+        if (name.isEmpty() || name.startsWith(".")) return false;
+
+        int dot = name.lastIndexOf('.');
+        if (dot > 0) {
+            String ext = name.substring(dot + 1).toLowerCase();
+            return MERGE_TEXT_EXTS.contains(ext);
+        }
+        return MERGE_TEXT_FILENAMES.contains(name.toLowerCase());
+    }
+
+    // ==================== 额外目录 / 过滤 ====================
+
     private List<Path> collectExtraDirs(String extraPathsStr, Path effectiveRoot) {
         List<Path> dirs = new ArrayList<>();
         if (extraPathsStr == null || extraPathsStr.trim().isEmpty()) return dirs;
@@ -593,9 +650,6 @@ public class CodeAnalysisService {
         return filterChain;
     }
 
-    /**
-     * 追加额外文件时，相对路径基于 effectiveRoot 解析。
-     */
     private List<Path> appendExtraFiles(List<Path> existing, String extraPathsStr,
                                         Path effectiveRoot) throws Exception {
         if (extraPathsStr == null || extraPathsStr.trim().isEmpty()) return existing;

@@ -3,14 +3,13 @@ package com.omni.business.assistance.systemmonitor.component.impl;
 import com.omni.business.assistance.systemmonitor.component.AbstractSystemComponent;
 import com.omni.business.assistance.systemmonitor.model.MonitorItemInfo;
 import com.omni.business.assistance.systemmonitor.support.SystemMonitorLog;
+import com.omni.common.util.ParseUtils;
+import com.omni.framework.jstats.infrastructure.CommandExecutor;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
+/** ★ L1-07：exec 用 CommandExecutor */
 public class GpuComponent extends AbstractSystemComponent {
 
     @Override public String getId() { return "gpu"; }
@@ -22,24 +21,22 @@ public class GpuComponent extends AbstractSystemComponent {
         MonitorItemInfo info = new MonitorItemInfo(getId(), getName(), getCategory());
         info.icon("🎮");
         info.desc("GPU 型号与显存信息");
-
         String os = System.getProperty("os.name").toLowerCase();
         List<String> lines = new ArrayList<>();
-
         try {
             if (os.contains("win")) {
-                // Windows: wmic 查询
-                lines = exec("wmic", "path", "win32_VideoController", "get",
+                String out = new CommandExecutor(5).execute("wmic", "path", "win32_VideoController", "get",
                         "Name,AdapterRAM,DriverVersion,VideoProcessor", "/format:list");
+                for (String l : out.split("\n")) lines.add(l);
             } else {
-                // Linux/macOS: lspci 或 system_profiler
-                lines = exec("sh", "-c", "lspci 2>/dev/null | grep -i vga || system_profiler SPDisplaysDataType 2>/dev/null");
+                String out = new CommandExecutor(5).execute("sh", "-c",
+                        "lspci 2>/dev/null | grep -i vga || system_profiler SPDisplaysDataType 2>/dev/null");
+                for (String l : out.split("\n")) lines.add(l);
             }
         } catch (Exception e) {
             SystemMonitorLog.warn(log, "显卡信息获取失败: {}", e.getMessage());
             return info;
         }
-
         List<String> names = new ArrayList<>();
         for (String line : lines) {
             String t = line.trim();
@@ -53,7 +50,7 @@ public class GpuComponent extends AbstractSystemComponent {
                     try {
                         long bytes = Long.parseLong(val);
                         info.putCore("vramBytes", bytes);
-                        info.putCore("vramText", String.format("%.2f GB", bytes / 1024.0 / 1024 / 1024));
+                        info.putCore("vramText", ParseUtils.formatSize(bytes));
                     } catch (NumberFormatException ignored) {}
                 }
                 if ("DriverVersion".equalsIgnoreCase(key)) info.putCore("driverVersion", val);
@@ -64,19 +61,5 @@ public class GpuComponent extends AbstractSystemComponent {
         info.putCore("gpuCount", names.size());
         info.putRuntime("gpuNames", names);
         return info;
-    }
-
-    private List<String> exec(String... cmd) throws Exception {
-        ProcessBuilder pb = new ProcessBuilder(cmd);
-        pb.redirectErrorStream(true);
-        Process p = pb.start();
-        List<String> out = new ArrayList<>();
-        try (BufferedReader r = new BufferedReader(
-                new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = r.readLine()) != null) out.add(line);
-        }
-        p.waitFor(5, TimeUnit.SECONDS);
-        return out;
     }
 }

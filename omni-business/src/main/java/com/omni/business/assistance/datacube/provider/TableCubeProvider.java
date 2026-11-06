@@ -1,5 +1,6 @@
 package com.omni.business.assistance.datacube.provider;
 
+import com.omni.business.common.util.PagingSupport;
 import com.omni.business.datasource.service.DataSourceConfigService;
 import com.omni.business.datasource.service.DynamicDataSourceManager;
 import com.omni.common.datasource.model.DataSourceConfig;
@@ -20,7 +21,7 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/** Table 数据来源 Provider — 支持多方言 */
+/** ★ L1-02：分页参数统一用 PagingSupport */
 @Service
 public class TableCubeProvider implements CubeProvider {
 
@@ -30,8 +31,7 @@ public class TableCubeProvider implements CubeProvider {
     @Autowired
     private SqlDialectRegistry dialectRegistry;
 
-    @Override
-    public CubeType getType() { return CubeType.TABLE; }
+    @Override public CubeType getType() { return CubeType.TABLE; }
 
     @Override
     @SuppressWarnings("unchecked")
@@ -55,21 +55,15 @@ public class TableCubeProvider implements CubeProvider {
         if (dsConfig == null) throw new IllegalArgumentException("数据源不存在: " + dsId);
 
         SqlDialect dialect = resolveDialect(dsConfig.getDbType());
-
         SimpleDataSource ds = openDataSource(dsConfig);
         JdbcTemplate jdbc = new JdbcTemplate() {
-            @Override public Connection getConnection() throws SQLException {
-                return ds.getConnection();
-            }
+            @Override public Connection getConnection() throws SQLException { return ds.getConnection(); }
         };
 
-        // ★ 使用方言的标识符引用
         String qualified = dialect.quote(database) + "." + dialect.quote(table);
         String selectCols;
         if (wantColumns != null && !wantColumns.isEmpty()) {
-            selectCols = wantColumns.stream()
-                    .map(dialect::quote)
-                    .collect(Collectors.joining(", "));
+            selectCols = wantColumns.stream().map(dialect::quote).collect(Collectors.joining(", "));
         } else {
             selectCols = "*";
         }
@@ -78,25 +72,17 @@ public class TableCubeProvider implements CubeProvider {
         int offset = (page - 1) * pageSize;
 
         long total;
-        try {
-            total = jdbc.queryOne("SELECT COUNT(*) FROM " + qualified, rs -> rs.getLong(1));
-        } catch (Exception e) {
-            total = -1;
-        }
+        try { total = jdbc.queryOne("SELECT COUNT(*) FROM " + qualified, rs -> rs.getLong(1)); }
+        catch (Exception e) { total = -1; }
 
-        // ★ 使用方言分页
         String baseSql = "SELECT " + selectCols + " FROM " + qualified;
         String sql = dialect.buildPageSql(baseSql, offset, pageSize);
         List<Map<String, Object>> records = jdbc.queryForMapList(sql);
 
         List<String> columns;
-        if (wantColumns != null && !wantColumns.isEmpty()) {
-            columns = new ArrayList<>(wantColumns);
-        } else if (!records.isEmpty()) {
-            columns = new ArrayList<>(records.get(0).keySet());
-        } else {
-            columns = Collections.emptyList();
-        }
+        if (wantColumns != null && !wantColumns.isEmpty()) columns = new ArrayList<>(wantColumns);
+        else if (!records.isEmpty()) columns = new ArrayList<>(records.get(0).keySet());
+        else columns = Collections.emptyList();
 
         List<List<Object>> rows = new ArrayList<>(records.size());
         for (Map<String, Object> rec : records) {
@@ -126,16 +112,11 @@ public class TableCubeProvider implements CubeProvider {
 
         SimpleDataSource ds = openDataSource(configService.getById(dsId));
         AbatractDatabaseMetadataService metaService = new AbatractDatabaseMetadataService() {
-            @Override protected Connection getConnection() throws Exception {
-                return ds.getConnection();
-            }
+            @Override protected Connection getConnection() throws Exception { return ds.getConnection(); }
         };
-
         List<ColumnInfo> columnInfos = metaService.getColumns(database, null, table);
         CubeSchema schema = new CubeSchema();
-        schema.setColumns(columnInfos.stream()
-                .map(ColumnMeta::from)
-                .collect(Collectors.toList()));
+        schema.setColumns(columnInfos.stream().map(ColumnMeta::from).collect(Collectors.toList()));
         schema.getExtra().put("source", "table");
         schema.getExtra().put("database", database);
         schema.getExtra().put("table", table);

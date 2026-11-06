@@ -3,25 +3,28 @@ package com.omni.business.assistance.systemcheck.command;
 import com.omni.business.assistance.systemcheck.config.CheckConfig;
 import com.omni.business.assistance.systemcheck.model.CheckResult;
 import com.omni.business.assistance.systemcheck.model.Finding;
+import com.omni.business.common.task.TaskInfo;
+import com.omni.business.common.task.TaskRegistry;
+import com.omni.common.util.RandomUtils;
+import com.omni.common.util.ThreadPoolUtils;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 
 import java.util.*;
 import java.util.concurrent.*;
 
-/** 系统检查异步任务管理器（支持实时状态、取消、当前文件进度） */
+/**
+ * 系统检查异步任务管理。
+ * <p>★ L2-02：改用 TaskRegistry；原 cancel 逻辑通过 Registry.cancel(canceller) 注入。</p>
+ */
 public class SystemCheckTaskManager {
     private static final Logger log = LoggerFactory.getLogger(SystemCheckTaskManager.class);
-
-    private static final Map<String, TaskContext> TASKS = new ConcurrentHashMap<>();
-    private static final long RETENTION_MS = 2 * 60 * 1000L;
 
     private static final int MAX_FINDINGS_PER_CHECK = 200;
     private static final int MAX_DETAIL_LENGTH = 1000;
     private static final int MAX_SUGGESTION_LENGTH = 300;
 
-    /** 单个任务上下文 */
-    public static class TaskContext {
+    public static class TaskContext implements TaskInfo {
         public final String taskId;
         public final long startTime;
         public volatile long endTime = 0;
@@ -41,16 +44,73 @@ public class SystemCheckTaskManager {
             this.taskId = taskId;
             this.startTime = System.currentTimeMillis();
             this.ctx = new SystemCheckContext(config);
-            this.pool = Executors.newFixedThreadPool(Math.max(1, config.getThreadCount()),
-                    r -> { Thread t = new Thread(r, "sys-check-" + taskId); t.setDaemon(true); return t; });
+            this.pool = ThreadPoolUtils.newFixedThreadPool(
+                    Math.max(1, config.getThreadCount()), "sys-check-" + taskId);
         }
 
-        public long getElapsedMillis() {
-            return (endTime > 0 ? endTime : System.currentTimeMillis()) - startTime;
+        @Override public String getTaskId() { return taskId; }
+        @Override public long getStartTime() { return startTime; }
+        @Override public long getEndTime() { return endTime; }
+        @Override public String getState() { return state; }
+        @Override public String getErrorMessage() { return errorMessage; }
+
+        @Override
+        public Map<String, Object> toStatusMap() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("estimatedTotalSeconds", estimatedTotalSeconds);
+            m.put("totalModules", totalModules);
+            m.put("completedModules", completedModules);
+            m.put("elapsedSeconds", (endTime > 0 ? endTime - startTime : System.currentTimeMillis() - startTime) / 1000.0);
+
+            List<Map<String, Object>> modules = new ArrayList<>();
+            for (ModuleState ms : this.modules.values()) {
+                Map<String, Object> mm = new LinkedHashMap<>();
+                mm.put("checkId", ms.checkId);
+                mm.put("checkName", ms.checkName);
+                mm.put("state", ms.state);
+                mm.put("startTime", ms.startTime);
+                mm.put("endTime", ms.endTime);
+                mm.put("durationMs", ms.getDurationMillis());
+                mm.put("findingCount", ms.findingCount);
+                mm.put("estimatedSeconds", ms.estimatedSeconds);
+                mm.put("errorMessage", ms.errorMessage);
+                mm.put("currentFile", ms.currentFile);
+                modules.add(mm);
+            }
+            m.put("modules", modules);
+
+            if (!"RUNNING".equals(state)) {
+                List<CheckResult> rs;
+                synchronized (results) { rs = new ArrayList<>(results); }
+                rs.sort(Comparator.comparingInt(r -> {
+                    int i = 0;
+                    for (String id : this.modules.keySet()) {
+                        if (id.equals(r.getCheckId())) return i;
+                        i++;
+                    }
+                    return 999;
+                }));
+                m.put("results", rs);
+                int cOk = 0, cBad = 0, cWarn = 0, cInfo = 0;
+                for (CheckResult r : rs) {
+                    for (Finding f : r.getFindings()) {
+                        switch (f.getStatus()) {
+                            case "合规": cOk++; break;
+                            case "不合规": cBad++; break;
+                            case "警告": cWarn++; break;
+                            default: cInfo++;
+                        }
+                    }
+                }
+                Map<String, Object> stat = new LinkedHashMap<>();
+                stat.put("ok", cOk); stat.put("bad", cBad);
+                stat.put("warn", cWarn); stat.put("info", cInfo);
+                m.put("summary", stat);
+            }
+            return m;
         }
     }
 
-    /** 单模块状态 */
     public static class ModuleState {
         public final String checkId;
         public final String checkName;
@@ -60,8 +120,6 @@ public class SystemCheckTaskManager {
         public volatile int findingCount = 0;
         public volatile int estimatedSeconds = 5;
         public volatile String errorMessage;
-
-        /** ★ 新增：当前正在检查的文件名（仅 RUNNING 状态时非空） */
         public volatile String currentFile;
 
         ModuleState(String checkId, String checkName) {
@@ -75,9 +133,9 @@ public class SystemCheckTaskManager {
         }
     }
 
-    /** 创建任务，返回 taskId */
+    private static final TaskRegistry<TaskContext> REGISTRY = new TaskRegistry<>(2 * 60 * 1000L);
+
     public static String createTask(CheckConfig config, List<SystemCheckCommand> commands, Set<String> selectedIds) {
-        cleanupOld();
         if (commands == null || commands.isEmpty()) {
             throw new IllegalArgumentException("后端未注册任何检查命令 (commands 为空)");
         }
@@ -93,9 +151,9 @@ public class SystemCheckTaskManager {
             throw new IllegalArgumentException("没有有效的检查模块被选中，请检查前端传递的 checks 参数");
         }
 
-        String taskId = UUID.randomUUID().toString().replace("-", "");
+        String taskId = RandomUtils.uuidNoDash();
         TaskContext tc = new TaskContext(taskId, config);
-        TASKS.put(taskId, tc);
+        REGISTRY.register(tc);
 
         tc.totalModules = toRun.size();
         for (SystemCheckCommand cmd : toRun) {
@@ -112,8 +170,6 @@ public class SystemCheckTaskManager {
                 ms.state = "RUNNING";
                 ms.startTime = System.currentTimeMillis();
                 long t0 = ms.startTime;
-
-                // ★ 新增：绑定当前模块的进度回调（ThreadLocal 线程隔离，互不影响）
                 tc.ctx.setProgressCallback(file -> ms.currentFile = file);
 
                 CheckResult r = new CheckResult(cmd.getId(), cmd.getName());
@@ -138,7 +194,6 @@ public class SystemCheckTaskManager {
                         ms.errorMessage = e.getMessage();
                     }
                 } finally {
-                    // ★ 新增：清理 ThreadLocal，并清空 currentFile，避免完成后仍显示旧文件名
                     tc.ctx.clearProgressCallback();
                     ms.currentFile = null;
                     ms.endTime = System.currentTimeMillis();
@@ -150,7 +205,7 @@ public class SystemCheckTaskManager {
             tc.futures.add(f);
         }
 
-        new Thread(() -> {
+        ThreadPoolUtils.daemonThreadFactory("sys-check-monitor-" + taskId).newThread(() -> {
             try {
                 while (!tc.ctx.isCancelled()) {
                     boolean allDone = tc.futures.stream().allMatch(Future::isDone);
@@ -171,12 +226,31 @@ public class SystemCheckTaskManager {
             } finally {
                 tc.pool.shutdownNow();
             }
-        }, "sys-check-monitor-" + taskId).start();
+        }).start();
 
         log.info("系统检查任务已创建: taskId={}, 模块数={}, 预估总耗时={}s",
                 taskId, tc.totalModules, tc.estimatedTotalSeconds);
         return taskId;
     }
+
+    public static Map<String, Object> getStatus(String taskId) { return REGISTRY.getStatus(taskId); }
+
+    public static boolean cancel(String taskId) {
+        return REGISTRY.cancel(taskId, () -> {
+            TaskContext tc = REGISTRY.get(taskId);
+            if (tc == null) return;
+            tc.ctx.cancel();
+            for (Future<?> f : tc.futures) f.cancel(true);
+            tc.pool.shutdownNow();
+            tc.endTime = System.currentTimeMillis();
+            tc.state = "CANCELLED";
+            log.info("系统检查任务已取消: taskId={}", taskId);
+        });
+    }
+
+    public static void cleanupOld() { REGISTRY.cleanupOld(); }
+
+    // ==================== 私有工具 ====================
 
     private static List<Finding> trimFindings(List<Finding> raw) {
         if (raw == null) return new ArrayList<>();
@@ -189,115 +263,22 @@ public class SystemCheckTaskManager {
             f.setItem("已截断");
             f.setStatus("信息");
             f.setRisk("信息");
-            f.setDetail("检查共产生 " + total + " 条结果，仅保留前 "
-                    + MAX_FINDINGS_PER_CHECK + " 条以节省内存");
+            f.setDetail("检查共产生 " + total + " 条结果，仅保留前 " + MAX_FINDINGS_PER_CHECK + " 条以节省内存");
             src.add(f);
         }
         for (Finding f : src) {
-            if (f.getDetail() != null && f.getDetail().length() > MAX_DETAIL_LENGTH) {
+            if (f.getDetail() != null && f.getDetail().length() > MAX_DETAIL_LENGTH)
                 f.setDetail(f.getDetail().substring(0, MAX_DETAIL_LENGTH) + "...(已截断)");
-            }
-            if (f.getSuggestion() != null && f.getSuggestion().length() > MAX_SUGGESTION_LENGTH) {
+            if (f.getSuggestion() != null && f.getSuggestion().length() > MAX_SUGGESTION_LENGTH)
                 f.setSuggestion(f.getSuggestion().substring(0, MAX_SUGGESTION_LENGTH) + "...");
-            }
         }
         return src;
-    }
-
-    public static Map<String, Object> getStatus(String taskId) {
-        cleanupOld();
-        TaskContext tc = TASKS.get(taskId);
-        if (tc == null) return null;
-
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("taskId", taskId);
-        m.put("state", tc.state);
-        m.put("startTime", tc.startTime);
-        m.put("endTime", tc.endTime);
-        m.put("elapsedMs", tc.getElapsedMillis());
-        m.put("elapsedSeconds", tc.getElapsedMillis() / 1000.0);
-        m.put("estimatedTotalSeconds", tc.estimatedTotalSeconds);
-        m.put("totalModules", tc.totalModules);
-        m.put("completedModules", tc.completedModules);
-        m.put("errorMessage", tc.errorMessage);
-
-        List<Map<String, Object>> modules = new ArrayList<>();
-        for (ModuleState ms : tc.modules.values()) {
-            Map<String, Object> mm = new LinkedHashMap<>();
-            mm.put("checkId", ms.checkId);
-            mm.put("checkName", ms.checkName);
-            mm.put("state", ms.state);
-            mm.put("startTime", ms.startTime);
-            mm.put("endTime", ms.endTime);
-            mm.put("durationMs", ms.getDurationMillis());
-            mm.put("findingCount", ms.findingCount);
-            mm.put("estimatedSeconds", ms.estimatedSeconds);
-            mm.put("errorMessage", ms.errorMessage);
-            mm.put("currentFile", ms.currentFile);   // ★ 新增
-            modules.add(mm);
-        }
-        m.put("modules", modules);
-
-        if (!"RUNNING".equals(tc.state)) {
-            List<CheckResult> results;
-            synchronized (tc.results) {
-                results = new ArrayList<>(tc.results);
-            }
-            results.sort(Comparator.comparingInt(r -> {
-                int i = 0;
-                for (String id : tc.modules.keySet()) {
-                    if (id.equals(r.getCheckId())) return i;
-                    i++;
-                }
-                return 999;
-            }));
-            m.put("results", results);
-
-            int cOk = 0, cBad = 0, cWarn = 0, cInfo = 0;
-            for (CheckResult r : results) {
-                for (Finding f : r.getFindings()) {
-                    switch (f.getStatus()) {
-                        case "合规": cOk++; break;
-                        case "不合规": cBad++; break;
-                        case "警告": cWarn++; break;
-                        default: cInfo++;
-                    }
-                }
-            }
-            Map<String, Object> stat = new LinkedHashMap<>();
-            stat.put("ok", cOk); stat.put("bad", cBad);
-            stat.put("warn", cWarn); stat.put("info", cInfo);
-            m.put("summary", stat);
-        }
-        return m;
-    }
-
-    public static boolean cancel(String taskId) {
-        TaskContext tc = TASKS.get(taskId);
-        if (tc == null) return false;
-        if (!"RUNNING".equals(tc.state)) return false;
-        tc.ctx.cancel();
-        for (Future<?> f : tc.futures) f.cancel(true);
-        tc.pool.shutdownNow();
-        tc.endTime = System.currentTimeMillis();
-        tc.state = "CANCELLED";
-        log.info("系统检查任务已取消: taskId={}", taskId);
-        return true;
-    }
-
-    public static void cleanupOld() {
-        long now = System.currentTimeMillis();
-        TASKS.entrySet().removeIf(e -> {
-            TaskContext tc = e.getValue();
-            return tc.endTime > 0 && (now - tc.endTime > RETENTION_MS);
-        });
     }
 
     private static String suggestionFor(Finding f) {
         if ("合规".equals(f.getStatus()) || "信息".equals(f.getStatus())) return "";
         String k = f.getCategory() + "|" + f.getItem();
-        if (k.contains("端口") && k.contains("监听"))
-            return "以管理员配置入站阻断规则(Block)或停用对应服务";
+        if (k.contains("端口") && k.contains("监听")) return "以管理员配置入站阻断规则(Block)或停用对应服务";
         if (k.contains("防火墙")) return "以管理员启用防火墙并设入站默认阻断";
         if (k.contains("远程桌面")) return "关闭 xrdp/VNC 或 RDP 服务及 3389/5900 端口";
         if (k.contains("屏保") || k.contains("锁屏")) return "设置无操作 300 秒锁屏且恢复需密码";

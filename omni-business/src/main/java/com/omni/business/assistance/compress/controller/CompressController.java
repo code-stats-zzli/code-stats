@@ -2,6 +2,10 @@ package com.omni.business.assistance.compress.controller;
 
 import com.omni.business.assistance.compress.service.CompressService;
 import com.omni.business.assistance.compress.service.CompressTaskManager;
+import com.omni.business.common.util.BaseController;
+import com.omni.business.common.util.BizExceptions;
+import com.omni.business.common.util.BizResults;
+import com.omni.business.common.util.ResponseHelper;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestMapping;
@@ -14,18 +18,15 @@ import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
 import com.omni.framework.unzip.ArchiveType;
 import com.omni.framework.unzip.CompressEntry;
-import com.omni.framework.util.JsonUtil;
 import com.omni.framework.util.ParamUtils;
 
-import java.io.InputStream;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
 
+/** ★ L1-01：BaseController；★ L2-01：ResponseHelper */
 @Controller
 @RequestMapping("/compress/api")
-public class CompressController {
+public class CompressController extends BaseController {
 
     @Autowired
     private CompressService service;
@@ -34,12 +35,10 @@ public class CompressController {
     @ResponseBody
     public String supported() {
         Map<String, Object> r = new LinkedHashMap<>();
-        r.put("success", true);
         r.put("types", service.listSupportedTypes());
-        return JsonUtil.toJson(r);
+        return okFlat(r);
     }
 
-    /** 上传多个文件 → 压缩 + 生成 merge-file，返回 taskId */
     @RequestMapping("/upload")
     @ResponseBody
     public String upload() {
@@ -76,14 +75,11 @@ public class CompressController {
             if (entries.isEmpty()) return error("没有有效的文件");
 
             String archiveFileName = "archive_" + System.currentTimeMillis() + "." + targetType.ext;
-            CompressService.CompressOutcome outcome =
-                    service.compress(entries, targetType, archiveFileName, encoding);
-
+            CompressService.CompressOutcome outcome = service.compress(entries, targetType, archiveFileName, encoding);
             String taskId = CompressTaskManager.registerCompleted(
                     outcome.result, outcome.archiveFile, outcome.mergedFile, archiveFileName);
 
             Map<String, Object> resp = new LinkedHashMap<>();
-            resp.put("success", true);
             resp.put("taskId", taskId);
             resp.put("archiveFileName", archiveFileName);
             resp.put("archiveType", targetType.name());
@@ -96,9 +92,9 @@ public class CompressController {
                 resp.put("mergedTextFiles", outcome.mergeStat.textFiles);
                 resp.put("mergedBinaryFiles", outcome.mergeStat.binaryFiles);
             }
-            return JsonUtil.toJson(resp);
+            return okFlat(resp);
         } catch (Exception e) {
-            return error("压缩失败: " + rootCauseMessage(e));
+            return error("压缩失败: " + BizExceptions.shortMessage(e));
         }
     }
 
@@ -108,8 +104,7 @@ public class CompressController {
         if (taskId == null || taskId.isEmpty()) return error("缺少 taskId");
         Map<String, Object> s = CompressTaskManager.getStatus(taskId);
         if (s == null) return error("任务不存在或已过期");
-        s.put("success", true);
-        return JsonUtil.toJson(s);
+        return okFlat(s);
     }
 
     @RequestMapping("/download-archive")
@@ -120,17 +115,10 @@ public class CompressController {
         String taskId = params.get("taskId");
         CompressTaskManager.TaskContext ctx = CompressTaskManager.get(taskId);
         if (ctx == null || ctx.archiveFile == null || !Files.exists(ctx.archiveFile)) {
-            writeError(resp, 404, "Not Found", "任务不存在或文件已过期");
+            ResponseHelper.writeError(resp, 404, "任务不存在或文件已过期");
             return;
         }
-        try (InputStream in = Files.newInputStream(ctx.archiveFile)) {
-            String encoded = URLEncoder.encode(ctx.archiveFileName, StandardCharsets.UTF_8.name())
-                    .replaceAll("\\+", "%20");
-            resp.setHeader("Content-Disposition",
-                    "attachment; filename=\"" + ctx.archiveFileName + "\"; filename*=UTF-8''" + encoded);
-            resp.setContentType("application/octet-stream");
-            resp.sendStatic(in, "application/octet-stream", Files.size(ctx.archiveFile));
-        }
+        ResponseHelper.writeAttachment(resp, ctx.archiveFile, ctx.archiveFileName);
     }
 
     @RequestMapping("/download-merged")
@@ -141,18 +129,11 @@ public class CompressController {
         String taskId = params.get("taskId");
         CompressTaskManager.TaskContext ctx = CompressTaskManager.get(taskId);
         if (ctx == null || ctx.mergedFile == null || !Files.exists(ctx.mergedFile)) {
-            writeError(resp, 404, "Not Found", "任务不存在或合并文件已过期");
+            ResponseHelper.writeError(resp, 404, "任务不存在或合并文件已过期");
             return;
         }
-        try (InputStream in = Files.newInputStream(ctx.mergedFile)) {
-            String fileName = baseName(ctx.archiveFileName) + "_merged.txt";
-            String encoded = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name())
-                    .replaceAll("\\+", "%20");
-            resp.setHeader("Content-Disposition",
-                    "attachment; filename=\"" + fileName + "\"; filename*=UTF-8''" + encoded);
-            resp.setContentType("text/plain; charset=utf-8");
-            resp.sendStatic(in, "text/plain; charset=utf-8", Files.size(ctx.mergedFile));
-        }
+        String fileName = baseName(ctx.archiveFileName) + "_merged.txt";
+        ResponseHelper.writeTextAttachment(resp, ctx.mergedFile, fileName);
     }
 
     private static String baseName(String fileName) {
@@ -162,27 +143,5 @@ public class CompressController {
         if (lower.endsWith(".tgz")) return fileName.substring(0, fileName.length() - 4);
         int dot = fileName.lastIndexOf('.');
         return dot > 0 ? fileName.substring(0, dot) : fileName;
-    }
-
-    private String error(String msg) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("success", false);
-        m.put("error", msg);
-        return JsonUtil.toJson(m);
-    }
-
-    private void writeError(HttpServletResponse resp, int code, String reason, String msg) throws Exception {
-        resp.setStatus(code, reason);
-        resp.setContentType("application/json; charset=utf-8");
-        resp.write(JsonUtil.toJson(Map.of("success", false, "error", msg)));
-        resp.send();
-    }
-
-    private static String rootCauseMessage(Throwable e) {
-        if (e == null) return "未知错误";
-        Throwable cur = e;
-        while (cur.getCause() != null && cur.getCause() != cur) cur = cur.getCause();
-        String msg = cur.getMessage();
-        return cur.getClass().getSimpleName() + (msg == null ? "" : ": " + msg);
     }
 }

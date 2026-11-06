@@ -1,19 +1,17 @@
 package com.omni.business.assistance.autotest.controller;
 
-
 import com.omni.business.assistance.autotest.model.Project;
 import com.omni.business.assistance.autotest.service.ProjectService;
+import com.omni.business.common.util.BaseController;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestMapping;
 import com.omni.framework.spring.annotation.ResponseBody;
 import com.omni.framework.util.JsonUtil;
 
-import java.util.Map;
-
 @Controller
 @RequestMapping("/autotest/api/project")
-public class ProjectController {
+public class ProjectController extends BaseController {
     @Autowired
     private ProjectService projectService;
 
@@ -34,13 +32,13 @@ public class ProjectController {
     public String saveProject(String body) {
         Project project = JsonUtil.parseJson(body, Project.class);
         String id = projectService.save(project);
-        return JsonUtil.toJson(Map.of("success", true, "id", id));
+        return okId(id);
     }
 
     @RequestMapping("/delete")
     @ResponseBody
     public String deleteProject(String id) {
         projectService.delete(id);
-        return JsonUtil.toJson(Map.of("success", true));
+        return ok();
     }
 }

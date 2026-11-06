@@ -5,6 +5,7 @@ import com.omni.business.assistance.cluster.model.DeployRequest;
 import com.omni.business.assistance.cluster.model.JdkInfo;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
+import com.omni.framework.jstats.infrastructure.CommandExecutor;
 
 import java.io.*;
 import java.net.ServerSocket;
@@ -13,10 +14,7 @@ import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 主服务本机通道：直接用 ProcessBuilder。
- * 适用：目标机 == 主服务所在机器。
- */
+/** ★ L1-07：readJavaVersion 用 CommandExecutor */
 public class LocalDeployChannel implements DeployChannel {
     private static final Logger log = LoggerFactory.getLogger(LocalDeployChannel.class);
 
@@ -25,41 +23,27 @@ public class LocalDeployChannel implements DeployChannel {
     @Override
     public JdkInfo checkJdk(DeployRequest req) {
         JdkInfo info = new JdkInfo();
-        // 1) JAVA_HOME
         String javaHome = System.getenv("JAVA_HOME");
         if (javaHome != null && !javaHome.isEmpty()) {
-            String p = javaHome + File.separator + "bin" + File.separator
-                    + (isWindows() ? "java.exe" : "java");
+            String p = javaHome + File.separator + "bin" + File.separator + (isWindows() ? "java.exe" : "java");
             String v = readJavaVersion(p);
             if (v != null) info.getCandidates().add(new JdkInfo.Candidate(p, v));
         }
-        // 2) PATH 里的 java
         String pathJava = findInPath();
         if (pathJava != null) {
             String v = readJavaVersion(pathJava);
-            if (v != null) {
-                boolean dup = info.getCandidates().stream()
-                        .anyMatch(c -> c.getPath().equals(pathJava));
-                if (!dup) info.getCandidates().add(new JdkInfo.Candidate(pathJava, v));
-            }
+            if (v != null && info.getCandidates().stream().noneMatch(c -> c.getPath().equals(pathJava)))
+                info.getCandidates().add(new JdkInfo.Candidate(pathJava, v));
         }
-        // 3) 常见安装目录扫描
         scanCommonDirs(info);
-        // 4) 当前 JVM 自身
-        String self = System.getProperty("java.home") + File.separator + "bin"
-                + File.separator + (isWindows() ? "java.exe" : "java");
+        String self = System.getProperty("java.home") + File.separator + "bin" + File.separator + (isWindows() ? "java.exe" : "java");
         String selfV = readJavaVersion(self);
-        if (selfV != null) {
-            boolean dup = info.getCandidates().stream().anyMatch(c -> c.getPath().equals(self));
-            if (!dup) info.getCandidates().add(new JdkInfo.Candidate(self, selfV));
-        }
-        // 默认选中第一个
+        if (selfV != null && info.getCandidates().stream().noneMatch(c -> c.getPath().equals(self)))
+            info.getCandidates().add(new JdkInfo.Candidate(self, selfV));
         if (!info.getCandidates().isEmpty()) {
             info.setCurrentJavaPath(info.getCandidates().get(0).getPath());
             info.setCurrentVersion(info.getCandidates().get(0).getVersion());
-        } else {
-            info.setError("未在 PATH / JAVA_HOME / 常见目录中找到 java");
-        }
+        } else info.setError("未在 PATH / JAVA_HOME / 常见目录中找到 java");
         return info;
     }
 
@@ -72,8 +56,7 @@ public class LocalDeployChannel implements DeployChannel {
         } else {
             roots.add(Paths.get("/usr/lib/jvm"));
             roots.add(Paths.get("/Library/Java/JavaVirtualMachines"));
-            String sdkman = System.getProperty("user.home") + "/.sdkman/candidates/java";
-            roots.add(Paths.get(sdkman));
+            roots.add(Paths.get(System.getProperty("user.home") + "/.sdkman/candidates/java"));
         }
         for (Path r : roots) {
             if (!Files.isDirectory(r)) continue;
@@ -81,7 +64,6 @@ public class LocalDeployChannel implements DeployChannel {
                 Files.list(r).forEach(p -> {
                     Path java = p.resolve("bin").resolve(isWindows() ? "java.exe" : "java");
                     if (!Files.isRegularFile(java)) {
-                        // macOS 结构：xxx/Contents/Home/bin/java
                         Path alt = p.resolve("Contents/Home/bin/java");
                         if (Files.isRegularFile(alt)) java = alt;
                         else return;
@@ -104,25 +86,17 @@ public class LocalDeployChannel implements DeployChannel {
         return null;
     }
 
+    /** ★ L1-07：改用 CommandExecutor */
     private String readJavaVersion(String javaExe) {
         try {
-            ProcessBuilder pb = new ProcessBuilder(javaExe, "-version");
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            StringBuilder sb = new StringBuilder();
-            try (BufferedReader r = new BufferedReader(
-                    new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-                String line; while ((line = r.readLine()) != null) sb.append(line).append('\n');
-            }
-            p.waitFor();
-            return parseVersion(sb.toString());
+            String out = new CommandExecutor(10).execute(javaExe, "-version");
+            return parseVersion(out);
         } catch (Exception e) { return null; }
     }
 
     public static String parseVersion(String s) {
         if (s == null) return null;
-        java.util.regex.Matcher m = java.util.regex.Pattern
-                .compile("version\\s+\"?(\\d+)(?:\\.(\\d+))?").matcher(s);
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("version\\s+\"?(\\d+)(?:\\.(\\d+))?").matcher(s);
         if (!m.find()) return null;
         int major = Integer.parseInt(m.group(1));
         if (major == 1 && m.group(2) != null) major = Integer.parseInt(m.group(2));
@@ -149,14 +123,10 @@ public class LocalDeployChannel implements DeployChannel {
         Path deployDir = Paths.get(req.getDeployDir()).toAbsolutePath().normalize();
         Files.createDirectories(deployDir);
 
-        // 1) 拷贝 jar
         Path targetJar = deployDir.resolve(localJar.getFileName().toString());
         Files.copy(localJar, targetJar, StandardCopyOption.REPLACE_EXISTING);
-        r.logs.add("jar 已拷贝到 " + targetJar);
 
-        // 2) 构造命令
-        String javaPath = req.getJavaPath() != null && !req.getJavaPath().isEmpty()
-                ? req.getJavaPath() : "java";
+        String javaPath = req.getJavaPath() != null && !req.getJavaPath().isEmpty() ? req.getJavaPath() : "java";
         List<String> cmd = new ArrayList<>();
         cmd.add(javaPath);
         cmd.add("-jar");
@@ -176,7 +146,6 @@ public class LocalDeployChannel implements DeployChannel {
         pb.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()));
         Process p = pb.start();
         r.pid = p.pid();
-        r.logs.add("worker 进程已启动，pid=" + p.pid());
         r.startCommand = String.join(" ", cmd);
         r.success = true;
         return r;
@@ -185,19 +154,14 @@ public class LocalDeployChannel implements DeployChannel {
     @Override
     public StopResult stop(ClusterNode node) {
         StopResult r = new StopResult();
-        if (node.getPid() == null) {
-            r.message = "无 pid，无法停止";
-            return r;
-        }
+        if (node.getPid() == null) { r.message = "无 pid，无法停止"; return r; }
         try {
             ProcessHandle.of(node.getPid()).ifPresent(ph -> {
                 ph.descendants().forEach(ProcessHandle::destroy);
                 ph.destroy();
             });
             r.success = true;
-        } catch (Exception e) {
-            r.message = e.getMessage();
-        }
+        } catch (Exception e) { r.message = e.getMessage(); }
         return r;
     }
 

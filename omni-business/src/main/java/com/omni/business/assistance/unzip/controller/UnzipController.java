@@ -2,6 +2,10 @@ package com.omni.business.assistance.unzip.controller;
 
 import com.omni.business.assistance.unzip.service.UnzipService;
 import com.omni.business.assistance.unzip.service.UnzipTaskManager;
+import com.omni.business.common.util.BaseController;
+import com.omni.business.common.util.BizExceptions;
+import com.omni.business.common.util.ResponseHelper;
+import com.omni.common.util.RandomUtils;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestMapping;
@@ -14,20 +18,17 @@ import com.omni.framework.tomcat.servlet.HttpServletRequest;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
 import com.omni.framework.unzip.ExtractRequest;
 import com.omni.framework.unzip.ExtractResult;
-import com.omni.framework.util.JsonUtil;
 import com.omni.framework.util.ParamUtils;
 
-import java.io.InputStream;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
+/** ★ L1-01：BaseController；★ L2-01：ResponseHelper；★ A 类 UUID */
 @Controller
 @RequestMapping("/unzip/api")
-public class UnzipController {
+public class UnzipController extends BaseController {
 
     @Autowired
     private UnzipService service;
@@ -36,9 +37,8 @@ public class UnzipController {
     @ResponseBody
     public String supported() {
         Map<String, Object> r = new LinkedHashMap<>();
-        r.put("success", true);
         r.put("types", service.listSupportedTypes());
-        return JsonUtil.toJson(r);
+        return okFlat(r);
     }
 
     @RequestMapping("/upload")
@@ -52,18 +52,15 @@ public class UnzipController {
 
             FileItem fileItem = mp.getFileItem("file");
             if (fileItem == null) return error("缺少 file 字段");
-
             String fileName = fileItem.getFileName();
             if (fileName == null || fileName.isEmpty()) return error("文件名为空");
 
             String encoding = mp.getParameter("encoding");
             if (encoding == null || encoding.trim().isEmpty()) encoding = "UTF-8";
-
             byte[] bytes = fileItem.getBytes();
             if (bytes == null || bytes.length == 0) return error("文件内容为空");
 
-            Path workRoot = Paths.get(System.getProperty("java.io.tmpdir"), "omni-unzip",
-                    UUID.randomUUID().toString().replace("-", ""));
+            Path workRoot = Paths.get(System.getProperty("java.io.tmpdir"), "omni-unzip", RandomUtils.uuidNoDash());
             Path outputDir = workRoot.resolve("files");
             Files.createDirectories(outputDir);
 
@@ -77,7 +74,6 @@ public class UnzipController {
             String taskId = UnzipTaskManager.registerCompleted(result, fileName);
 
             Map<String, Object> resp = new LinkedHashMap<>();
-            resp.put("success", true);
             resp.put("taskId", taskId);
             resp.put("originalFileName", fileName);
             resp.put("archiveType", result.getType() != null ? result.getType().name() : null);
@@ -87,9 +83,9 @@ public class UnzipController {
             resp.put("totalBytes", result.getTotalBytes());
             resp.put("durationMs", result.getDurationMs());
             resp.put("entries", result.getEntries());
-            return JsonUtil.toJson(resp);
+            return okFlat(resp);
         } catch (Exception e) {
-            return error("解压失败: " + rootCauseMessage(e));
+            return error("解压失败: " + BizExceptions.shortMessage(e));
         }
     }
 
@@ -99,8 +95,7 @@ public class UnzipController {
         if (taskId == null || taskId.isEmpty()) return error("缺少 taskId");
         Map<String, Object> s = UnzipTaskManager.getStatus(taskId);
         if (s == null) return error("任务不存在或已过期");
-        s.put("success", true);
-        return JsonUtil.toJson(s);
+        return okFlat(s);
     }
 
     @RequestMapping("/download-merged")
@@ -111,7 +106,7 @@ public class UnzipController {
         String taskId = params.get("taskId");
         UnzipTaskManager.TaskContext ctx = UnzipTaskManager.get(taskId);
         if (ctx == null || ctx.outputDir == null) {
-            writeError(resp, 404, "Not Found", "任务不存在或已过期");
+            ResponseHelper.writeError(resp, 404, "任务不存在或已过期");
             return;
         }
         try {
@@ -124,15 +119,9 @@ public class UnzipController {
             }
             String baseName = stripExt(ctx.originalFileName);
             String fileName = (baseName.isEmpty() ? "unzipped" : baseName) + "_merged.txt";
-            String encoded = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()).replaceAll("\\+", "%20");
-            resp.setHeader("Content-Disposition",
-                    "attachment; filename=\"" + fileName + "\"; filename*=UTF-8''" + encoded);
-            resp.setContentType("text/plain; charset=utf-8");
-            try (InputStream in = Files.newInputStream(merged)) {
-                resp.sendStatic(in, "text/plain; charset=utf-8", Files.size(merged));
-            }
+            ResponseHelper.writeTextAttachment(resp, merged, fileName);
         } catch (Exception e) {
-            writeError(resp, 500, "Internal Server Error", "生成合并文件失败: " + e.getMessage());
+            ResponseHelper.writeError(resp, 500, "生成合并文件失败: " + e.getMessage());
         }
     }
 
@@ -144,7 +133,7 @@ public class UnzipController {
         String taskId = params.get("taskId");
         UnzipTaskManager.TaskContext ctx = UnzipTaskManager.get(taskId);
         if (ctx == null || ctx.outputDir == null) {
-            writeError(resp, 404, "Not Found", "任务不存在或已过期");
+            ResponseHelper.writeError(resp, 404, "任务不存在或已过期");
             return;
         }
         try {
@@ -157,15 +146,9 @@ public class UnzipController {
             }
             String baseName = stripExt(ctx.originalFileName);
             String fileName = (baseName.isEmpty() ? "unzipped" : baseName) + ".zip";
-            String encoded = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()).replaceAll("\\+", "%20");
-            resp.setHeader("Content-Disposition",
-                    "attachment; filename=\"" + fileName + "\"; filename*=UTF-8''" + encoded);
-            resp.setContentType("application/zip");
-            try (InputStream in = Files.newInputStream(zip)) {
-                resp.sendStatic(in, "application/zip", Files.size(zip));
-            }
+            ResponseHelper.writeZipAttachment(resp, zip, fileName);
         } catch (Exception e) {
-            writeError(resp, 500, "Internal Server Error", "打包失败: " + e.getMessage());
+            ResponseHelper.writeError(resp, 500, "打包失败: " + e.getMessage());
         }
     }
 
@@ -180,25 +163,12 @@ public class UnzipController {
         if (ctx == null || ctx.outputDir == null) return error("任务不存在或已过期");
         try {
             Map<String, Object> data = service.readEntry(ctx.outputDir, path);
-            data.put("success", true);
-            return JsonUtil.toJson(data);
+            return okFlat(data);
         } catch (Exception e) {
             return error(e.getMessage());
         }
     }
 
-    private String error(String msg) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("success", false);
-        m.put("error", msg);
-        return JsonUtil.toJson(m);
-    }
-    private void writeError(HttpServletResponse resp, int code, String reason, String msg) throws Exception {
-        resp.setStatus(code, reason);
-        resp.setContentType("application/json; charset=utf-8");
-        resp.write(JsonUtil.toJson(Map.of("success", false, "error", msg)));
-        resp.send();
-    }
     private static String stripExt(String name) {
         if (name == null) return "";
         String lower = name.toLowerCase();
@@ -206,12 +176,5 @@ public class UnzipController {
         if (lower.endsWith(".tgz")) return name.substring(0, name.length() - 4);
         int dot = name.lastIndexOf('.');
         return dot > 0 ? name.substring(0, dot) : name;
-    }
-    private static String rootCauseMessage(Throwable e) {
-        if (e == null) return "未知错误";
-        Throwable cur = e;
-        while (cur.getCause() != null && cur.getCause() != cur) cur = cur.getCause();
-        String msg = cur.getMessage();
-        return cur.getClass().getSimpleName() + (msg == null ? "" : ": " + msg);
     }
 }

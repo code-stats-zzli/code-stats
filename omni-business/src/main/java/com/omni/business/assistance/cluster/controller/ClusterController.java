@@ -4,6 +4,9 @@ import com.omni.business.assistance.cluster.model.ClusterNode;
 import com.omni.business.assistance.cluster.model.DeployRequest;
 import com.omni.business.assistance.cluster.model.JdkInfo;
 import com.omni.business.assistance.cluster.service.ClusterService;
+import com.omni.business.common.util.BaseController;
+import com.omni.business.common.util.ResponseHelper;
+import com.omni.common.util.StringUtils;
 import com.omni.framework.spring.annotation.*;
 import com.omni.framework.spring.mvc.RequestContextHolder;
 import com.omni.framework.spring.mvc.ResponseContextHolder;
@@ -20,41 +23,24 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/** ★ L1-01 + L1-05 + L2-01 */
 @Controller
 @RequestMapping("/cluster/api")
-public class ClusterController {
+public class ClusterController extends BaseController {
 
     @Autowired
     private ClusterService service;
 
-    // ==================== 主节点 / 部署包 ====================
-
     @RequestMapping("/master")
     @ResponseBody
-    public String master() {
-        return JsonUtil.toJson(ok(service.getMasterInfo()));
-    }
+    public String master() { return ok(service.getMasterInfo()); }
 
-    /**
-     * ★ 新增：服务器 / 客户端网络信息。
-     *
-     * <p>返回：</p>
-     * <ul>
-     *   <li>{@code serverIp}  服务端真实 IPv4</li>
-     *   <li>{@code clientIp}  客户端真实 IPv4（兼容反向代理）</li>
-     *   <li>{@code hostname}  服务端主机名</li>
-     *   <li>{@code masterUrl} 主服务访问 URL</li>
-     *   <li>{@code interfaces} 所有候选网卡</li>
-     *   <li>{@code candidateIps} 候选 IP（按优先级排序）</li>
-     * </ul>
-     */
     @RequestMapping("/server-info")
     @ResponseBody
     public String serverInfo() {
         try {
             Map<String, Object> data = new LinkedHashMap<>();
             HttpServletRequest req = RequestContextHolder.getRequest();
-
             String serverIp = service.getMasterHost();
             String clientIp = NetworkUtils.getClientIp(req);
             String hostname;
@@ -70,22 +56,17 @@ public class ClusterController {
             List<Map<String, Object>> interfaces = NetworkUtils.listNetworkInterfaces();
             data.put("interfaces", interfaces);
 
-            // 候选 IP：过滤掉回环，按 listNetworkInterfaces 内部排序（同优先级保序）
             List<String> candidateIps = new java.util.ArrayList<>();
             if (interfaces != null) {
                 for (Map<String, Object> ni : interfaces) {
                     Boolean loopback = (Boolean) ni.get("loopback");
-                    Boolean virtual  = (Boolean) ni.get("virtual");
+                    Boolean virtual = (Boolean) ni.get("virtual");
                     String ip = (String) ni.get("ip");
-                    if (Boolean.FALSE.equals(loopback) && Boolean.FALSE.equals(virtual) && ip != null) {
-                        candidateIps.add(ip);
-                    }
+                    if (Boolean.FALSE.equals(loopback) && Boolean.FALSE.equals(virtual) && ip != null) candidateIps.add(ip);
                 }
             }
-            // 去重
             data.put("candidateIps", new java.util.ArrayList<>(new java.util.LinkedHashSet<>(candidateIps)));
-
-            return JsonUtil.toJson(ok(data));
+            return ok(data);
         } catch (Exception e) {
             return error("获取服务器信息失败: " + e.getMessage());
         }
@@ -95,9 +76,7 @@ public class ClusterController {
     @ResponseBody
     public String packages() {
         List<Map<String, Object>> list = service.listPackages();
-        Map<String, Object> m = ok(null);
-        m.put("packages", list);
-        return JsonUtil.toJson(m);
+        return okOne("packages", list);
     }
 
     @RequestMapping("/packages/download")
@@ -106,76 +85,44 @@ public class ClusterController {
         if (resp == null) return;
         HttpServletRequest req = RequestContextHolder.getRequest();
         String jarName = req.getParameter("jar");
-        String token   = req.getParameter("token");
-        if (!service.verifyToken(token)) {
-            resp.setStatus(403, "Forbidden");
-            resp.write(JsonUtil.toJson(Map.of("success", false, "error", "Token 无效")));
-            resp.send();
-            return;
-        }
+        String token = req.getParameter("token");
+        if (!service.verifyToken(token)) { ResponseHelper.writeError(resp, 403, "Token 无效"); return; }
         Path jar = service.resolvePackage(jarName);
-        if (jar == null) {
-            resp.setStatus(404, "Not Found");
-            resp.send();
-            return;
-        }
-        resp.setHeader("Content-Disposition",
-                "attachment; filename=\"" + jar.getFileName().toString() + "\"");
-        resp.setContentType("application/java-archive");
-        try (InputStream in = Files.newInputStream(jar)) {
-            resp.sendStatic(in, "application/java-archive", Files.size(jar));
-        }
+        if (jar == null) { ResponseHelper.writeError(resp, 404, "包不存在"); return; }
+        ResponseHelper.writeAttachment(resp, jar, jar.getFileName().toString(), "application/java-archive");
     }
-
-    // ==================== JDK / 端口 ====================
 
     @RequestMapping("/check-jdk")
     @ResponseBody
     public String checkJdk(@RequestBody DeployRequest req) {
         try {
             JdkInfo info = service.checkJdk(req);
-            Map<String, Object> m = ok(null);
-            m.put("jdk", info);
-            return JsonUtil.toJson(m);
-        } catch (Exception e) {
-            return error("检测 JDK 失败: " + e.getMessage());
-        }
+            return okOne("jdk", info);
+        } catch (Exception e) { return error("检测 JDK 失败: " + e.getMessage()); }
     }
 
     @RequestMapping("/probe-port")
     @ResponseBody
     public String probePort(@RequestBody DeployRequest req) {
-        try {
-            return JsonUtil.toJson(service.probePort(req));
-        } catch (Exception e) {
-            return error("探测端口失败: " + e.getMessage());
-        }
+        try { return JsonUtil.toJson(service.probePort(req)); }
+        catch (Exception e) { return error("探测端口失败: " + e.getMessage()); }
     }
-
-    // ==================== 部署 ====================
 
     @RequestMapping("/deploy")
     @ResponseBody
     public String deploy(@RequestBody DeployRequest req) {
-        try {
-            return JsonUtil.toJson(service.deploy(req));
-        } catch (Exception e) {
-            return error("部署失败: " + e.getMessage());
-        }
+        try { return JsonUtil.toJson(service.deploy(req)); }
+        catch (Exception e) { return error("部署失败: " + e.getMessage()); }
     }
 
     @RequestMapping("/stop")
     @ResponseBody
     public String stop(@RequestBody Map<String, Object> body) {
         try {
-            String nodeId = body == null ? null : String.valueOf(body.get("nodeId"));
+            String nodeId = body == null ? null : StringUtils.safe(body.get("nodeId"));
             return JsonUtil.toJson(service.stop(nodeId));
-        } catch (Exception e) {
-            return error("停止失败: " + e.getMessage());
-        }
+        } catch (Exception e) { return error("停止失败: " + e.getMessage()); }
     }
-
-    // ==================== 节点注册 / 心跳 ====================
 
     @RequestMapping("/node/register")
     @ResponseBody
@@ -198,7 +145,7 @@ public class ClusterController {
     public String heartbeat(@RequestBody Map<String, Object> body) {
         if (!verifyToken()) return error("Token 无效");
         service.heartbeat(str(body.get("nodeId")));
-        return JsonUtil.toJson(Map.of("success", true));
+        return ok();
     }
 
     @RequestMapping("/node/offline")
@@ -206,41 +153,22 @@ public class ClusterController {
     public String offline(@RequestBody Map<String, Object> body) {
         if (!verifyToken()) return error("Token 无效");
         service.offline(str(body.get("nodeId")));
-        return JsonUtil.toJson(Map.of("success", true));
+        return ok();
     }
 
     @RequestMapping("/nodes")
     @ResponseBody
-    public String nodes() {
-        Map<String, Object> m = ok(null);
-        m.put("nodes", service.listNodes());
-        return JsonUtil.toJson(m);
-    }
-
-    // ==================== 工具 ====================
+    public String nodes() { return okOne("nodes", service.listNodes()); }
 
     private boolean verifyToken() {
         HttpServletRequest req = RequestContextHolder.getRequest();
         if (req == null) return false;
-        String t = req.getHeader("X-Cluster-Token");
-        return service.verifyToken(t);
+        return service.verifyToken(req.getHeader("X-Cluster-Token"));
     }
 
-    private String str(Object o) { return o == null ? null : String.valueOf(o); }
+    private String str(Object o) { return StringUtils.safe(o); }
     private int intOf(Object o, int def) {
         if (o == null) return def;
         try { return Integer.parseInt(String.valueOf(o)); } catch (Exception e) { return def; }
-    }
-    private Map<String, Object> ok(Object data) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("success", true);
-        if (data != null) m.put("data", data);
-        return m;
-    }
-    private String error(String msg) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("success", false);
-        m.put("error", msg);
-        return JsonUtil.toJson(m);
     }
 }

@@ -1,6 +1,8 @@
 package com.omni.business.assistance.directory.service;
 
 import com.omni.common.util.DriverFileNameParser;
+import com.omni.common.util.FileIOUtils;
+import com.omni.common.util.RandomUtils;
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 import com.omni.framework.spring.annotation.Service;
@@ -16,6 +18,7 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+/** ★ L1-06：readResourceContent 用 FileIOUtils */
 @Service
 public class DirectoryService {
 
@@ -29,7 +32,6 @@ public class DirectoryService {
     public static final String RES_TYPE_SQL         = "sql";
     public static final String RES_TYPE_ATTACHMENTS = "attachments";
     public static final String RES_TYPE_DRIVERS     = "drivers";
-    // ★ 新增：项目部署目录（用于管理项目 jar）
     public static final String RES_TYPE_DEPLOY      = "deploy";
     public static final String RES_TYPE_OTHERS      = "others";
 
@@ -40,14 +42,11 @@ public class DirectoryService {
         RESOURCE_TYPES.put(RES_TYPE_SQL,         "SQL管理");
         RESOURCE_TYPES.put(RES_TYPE_ATTACHMENTS, "附件");
         RESOURCE_TYPES.put(RES_TYPE_DRIVERS,     "驱动管理");
-        // ★ 新增
         RESOURCE_TYPES.put(RES_TYPE_DEPLOY,      "项目部署");
         RESOURCE_TYPES.put(RES_TYPE_OTHERS,      "其他");
     }
 
     private static final String UUID_REGEX = "[0-9a-f]{12,32}";
-
-    /** 驱动存储名反解：{dbType}_{version}_{原始文件名}.jar */
     private static final Pattern DRIVER_STORAGE_PATTERN = Pattern.compile(
             "^([a-z]+)_(.+?)_(.+\\.jar)$", Pattern.CASE_INSENSITIVE);
 
@@ -59,16 +58,11 @@ public class DirectoryService {
         this.localRoot = Paths.get(localRootPath).normalize().toAbsolutePath();
         ensureRootExists(localRoot);
 
-        this.resourcesRoot = Paths.get(System.getProperty("user.dir"), "resources")
-                .normalize().toAbsolutePath();
+        this.resourcesRoot = Paths.get(System.getProperty("user.dir"), "resources").normalize().toAbsolutePath();
         ensureRootExists(resourcesRoot);
-        for (String type : RESOURCE_TYPES.keySet()) {
-            ensureRootExists(resourcesRoot.resolve(type));
-        }
+        for (String type : RESOURCE_TYPES.keySet()) ensureRootExists(resourcesRoot.resolve(type));
         log.info("资源管理根目录已就绪: {}, 驱动目录: {}, 部署目录: {}",
-                resourcesRoot,
-                resourcesRoot.resolve(RES_TYPE_DRIVERS),
-                resourcesRoot.resolve(RES_TYPE_DEPLOY));
+                resourcesRoot, resourcesRoot.resolve(RES_TYPE_DRIVERS), resourcesRoot.resolve(RES_TYPE_DEPLOY));
     }
 
     private void ensureRootExists(Path root) {
@@ -78,7 +72,7 @@ public class DirectoryService {
         }
     }
 
-    // ==================== 本地目录（保持不变） ====================
+    // ==================== 本地目录 ====================
 
     public Path getRootPath(String rootType) {
         return ROOT_TYPE_RESOURCES.equals(rootType) ? resourcesRoot : localRoot;
@@ -142,28 +136,26 @@ public class DirectoryService {
         Path root = getRootPath(rootType);
         Path target = com.omni.common.util.FileUtils.resolveSafePath(root, filePath);
         if (!Files.isRegularFile(target)) throw new IOException("不是文件: " + target);
-        return com.omni.common.util.FileUtils.readFile(target);
+        return FileIOUtils.readString(target);
     }
 
     public void writeFile(String rootType, String filePath, String content) throws IOException {
         Path root = getRootPath(rootType);
         Path target = com.omni.common.util.FileUtils.resolveSafePath(root, filePath);
-        com.omni.common.util.FileUtils.writeFile(target, content);
+        FileIOUtils.writeString(target, content);
     }
 
     public void writeBytes(String rootType, String filePath, byte[] content) throws IOException {
         Path root = getRootPath(rootType);
         Path target = com.omni.common.util.FileUtils.resolveSafePath(root, filePath);
-        Path parent = target.getParent();
-        if (parent != null && !Files.exists(parent)) Files.createDirectories(parent);
-        Files.write(target, content);
+        FileIOUtils.writeBytes(target, content);
     }
 
     public byte[] readFileBytes(String rootType, String filePath) throws IOException {
         Path root = getRootPath(rootType);
         Path target = com.omni.common.util.FileUtils.resolveSafePath(root, filePath);
         if (!Files.isRegularFile(target)) throw new IOException("不是文件: " + target);
-        return Files.readAllBytes(target);
+        return FileIOUtils.readBytes(target);
     }
 
     public void zipDirectory(String rootType, String dirPath, OutputStream out) throws IOException {
@@ -203,20 +195,13 @@ public class DirectoryService {
         return target;
     }
 
-    /** 通用 UUID 命名（非驱动/部署类型使用） */
     private String generateStoredName(String originalName) {
         String baseName = originalName;
         String ext = "";
         int dotIdx = originalName.lastIndexOf('.');
-        if (dotIdx > 0) {
-            baseName = originalName.substring(0, dotIdx);
-            ext = originalName.substring(dotIdx);
-        }
-        String uuid = UUID.randomUUID().toString().replace("-", "");
-        return baseName + "_" + uuid + ext;
+        if (dotIdx > 0) { baseName = originalName.substring(0, dotIdx); ext = originalName.substring(dotIdx); }
+        return baseName + "_" + RandomUtils.uuidNoDash() + ext;
     }
-
-    // ==================== 驱动存储名反解 ====================
 
     private String[] parseDriverStorageName(String storedName) {
         Matcher m = DRIVER_STORAGE_PATTERN.matcher(storedName);
@@ -232,20 +217,14 @@ public class DirectoryService {
             String[] parts = parseDriverStorageName(storedName);
             return parts != null ? parts[2] : storedName;
         }
-        // ★ 部署类型保留原文件名（不做 uuid 剥离），因为存储时未加 uuid 后缀
-        if (RES_TYPE_DEPLOY.equals(type)) {
-            return storedName;
-        }
-        // 保留原有逻辑，供其他类型使用
+        if (RES_TYPE_DEPLOY.equals(type)) return storedName;
         int dotIdx = storedName.lastIndexOf('.');
         String baseName = dotIdx > 0 ? storedName.substring(0, dotIdx) : storedName;
         String ext = dotIdx > 0 ? storedName.substring(dotIdx) : "";
         int underscoreIdx = baseName.lastIndexOf('_');
         if (underscoreIdx > 0) {
             String uuidPart = baseName.substring(underscoreIdx + 1);
-            if (uuidPart.matches(UUID_REGEX)) {
-                return baseName.substring(0, underscoreIdx) + ext;
-            }
+            if (uuidPart.matches(UUID_REGEX)) return baseName.substring(0, underscoreIdx) + ext;
         }
         return storedName;
     }
@@ -261,32 +240,24 @@ public class DirectoryService {
                 boolean isDir = Files.isDirectory(p);
                 String name = p.getFileName().toString();
                 String displayName = isDir ? name : parseDisplayName(type, name);
-
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("name", name);
                 item.put("displayName", displayName);
                 item.put("isDirectory", isDir);
                 item.put("type", type);
                 item.put("parentPath", relPath == null ? "" : relPath);
-                item.put("fullRelPath", (relPath == null || relPath.isEmpty())
-                        ? name : relPath + "/" + name);
+                item.put("fullRelPath", (relPath == null || relPath.isEmpty()) ? name : relPath + "/" + name);
                 item.put("size", isDir ? 0 : Files.size(p));
                 item.put("modified", sdf.format(Files.getLastModifiedTime(p).toMillis()));
-
-                // 驱动类型额外反解 dbType / version
                 if (!isDir && RES_TYPE_DRIVERS.equals(type)) {
                     String[] parts = parseDriverStorageName(name);
-                    if (parts != null) {
-                        item.put("dbType", parts[0]);
-                        item.put("version", parts[1]);
-                    }
+                    if (parts != null) { item.put("dbType", parts[0]); item.put("version", parts[1]); }
                 }
                 list.add(item);
             }
         }
         list.sort((a, b) -> {
-            boolean da = (Boolean) a.get("isDirectory");
-            boolean db = (Boolean) b.get("isDirectory");
+            boolean da = (Boolean) a.get("isDirectory"), db = (Boolean) b.get("isDirectory");
             if (da != db) return da ? -1 : 1;
             return ((String) a.get("displayName")).compareToIgnoreCase((String) b.get("displayName"));
         });
@@ -296,169 +267,101 @@ public class DirectoryService {
     public Map<String, Object> createSubDirectory(String type, String parentRelPath, String dirName) throws IOException {
         if (dirName == null || dirName.trim().isEmpty()) throw new IllegalArgumentException("目录名不能为空");
         if (dirName.contains("/") || dirName.contains("\\")) throw new IllegalArgumentException("目录名不能包含斜杠");
-
         Path parent = resolveResourcePath(type, parentRelPath);
         if (!Files.isDirectory(parent)) throw new IOException("父路径不是目录");
-
         Path newDir = parent.resolve(dirName.trim()).normalize();
         if (!newDir.startsWith(getResourceTypePath(type))) throw new SecurityException("路径越界");
         if (Files.exists(newDir)) throw new IOException("目录已存在: " + dirName);
-
         Files.createDirectories(newDir);
-
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("name", dirName);
-        result.put("relPath", (parentRelPath == null || parentRelPath.isEmpty())
-                ? dirName : parentRelPath + "/" + dirName);
+        result.put("relPath", (parentRelPath == null || parentRelPath.isEmpty()) ? dirName : parentRelPath + "/" + dirName);
         log.info("创建资源子目录: type={}, parent={}, name={}", type, parentRelPath, dirName);
         return result;
     }
 
-    // ==================== 上传（核心改造） ====================
-
-    public Map<String, Object> uploadResource(String type, String subPath,
-                                              String originalName, byte[] content) throws IOException {
+    public Map<String, Object> uploadResource(String type, String subPath, String originalName, byte[] content) throws IOException {
         return uploadResource(type, subPath, originalName, content, null, null);
     }
 
     public Map<String, Object> uploadResource(String type, String subPath, String originalName,
                                               byte[] content, String dbType, String version) throws IOException {
-        if (RES_TYPE_DRIVERS.equals(type)) {
-            return uploadDriverResource(subPath, originalName, content, dbType, version);
-        }
-        // ★ 新增：项目部署类型走专用上传（只收 .jar，保留原名，同名拒绝）
-        if (RES_TYPE_DEPLOY.equals(type)) {
-            return uploadDeployResource(subPath, originalName, content);
-        }
+        if (RES_TYPE_DRIVERS.equals(type)) return uploadDriverResource(subPath, originalName, content, dbType, version);
+        if (RES_TYPE_DEPLOY.equals(type)) return uploadDeployResource(subPath, originalName, content);
         return uploadGenericResource(type, subPath, originalName, content);
     }
 
-    /** 驱动专用上传 */
     private Map<String, Object> uploadDriverResource(String subPath, String originalName,
-                                                     byte[] content,
-                                                     String dbType, String version) throws IOException {
-        if (originalName == null || originalName.trim().isEmpty())
-            throw new IllegalArgumentException("原始文件名不能为空");
-        if (!originalName.trim().toLowerCase().endsWith(".jar"))
-            throw new IllegalArgumentException("驱动只允许上传 .jar 文件");
-
+                                                     byte[] content, String dbType, String version) throws IOException {
+        if (originalName == null || originalName.trim().isEmpty()) throw new IllegalArgumentException("原始文件名不能为空");
+        if (!originalName.trim().toLowerCase().endsWith(".jar")) throw new IllegalArgumentException("驱动只允许上传 .jar 文件");
         String type = DriverFileNameParser.normalizeDbType(dbType);
-        if (!DriverFileNameParser.isAllowedDbType(type))
-            throw new IllegalArgumentException("不支持的数据库类型: " + dbType
-                    + "（仅支持 " + String.join("/", DriverFileNameParser.ALLOWED_DB_TYPES) + "）");
-        if (version == null || version.trim().isEmpty())
-            throw new IllegalArgumentException("驱动版本不能为空");
-        if (version.contains("_"))
-            throw new IllegalArgumentException("驱动版本不能包含下划线 _");
+        if (!DriverFileNameParser.isAllowedDbType(type)) throw new IllegalArgumentException("不支持的数据库类型: " + dbType);
+        if (version == null || version.trim().isEmpty()) throw new IllegalArgumentException("驱动版本不能为空");
+        if (version.contains("_")) throw new IllegalArgumentException("驱动版本不能包含下划线 _");
 
         String storedName = DriverFileNameParser.buildStorageName(type, version.trim(), originalName);
         Path dir = resolveResourcePath(RES_TYPE_DRIVERS, subPath);
         if (!Files.isDirectory(dir)) throw new IOException("上传路径不是目录: " + subPath);
-
         Path target = dir.resolve(storedName);
-        if (Files.exists(target)) {
-            throw new IOException("驱动已存在："
-                    + type + " / " + version.trim()
-                    + "（存储名：" + storedName + "），不可重复上传");
-        }
-
+        if (Files.exists(target)) throw new IOException("驱动已存在：" + type + " / " + version.trim());
         Files.write(target, content);
-
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("storedName", storedName);
         result.put("displayName", originalName);
         result.put("type", RES_TYPE_DRIVERS);
         result.put("subPath", subPath);
-        result.put("fullRelPath", (subPath == null || subPath.isEmpty())
-                ? storedName : subPath + "/" + storedName);
+        result.put("fullRelPath", (subPath == null || subPath.isEmpty()) ? storedName : subPath + "/" + storedName);
         result.put("size", content.length);
         result.put("dbType", type);
         result.put("version", version.trim());
-        log.info("上传驱动: dbType={}, version={}, fileName={}, size={}B, storedName={}",
-                type, version, originalName, content.length, storedName);
         return result;
     }
 
-    // ★ ==================== 项目部署专用上传 ====================
-    /**
-     * 项目部署上传：
-     *  - 只允许 .jar
-     *  - 保留原始文件名（部署时可直接 java -jar xxx.jar）
-     *  - 同名文件已存在则拒绝（避免误覆盖已部署的包）
-     *  - 支持子目录
-     */
-    private Map<String, Object> uploadDeployResource(String subPath, String originalName,
-                                                     byte[] content) throws IOException {
-        if (originalName == null || originalName.trim().isEmpty())
-            throw new IllegalArgumentException("原始文件名不能为空");
+    private Map<String, Object> uploadDeployResource(String subPath, String originalName, byte[] content) throws IOException {
+        if (originalName == null || originalName.trim().isEmpty()) throw new IllegalArgumentException("原始文件名不能为空");
         String cleanName = originalName.trim();
-
-        if (!cleanName.toLowerCase().endsWith(".jar"))
-            throw new IllegalArgumentException("项目部署目录只允许上传 .jar 文件");
-
-        // 路径穿越 / 非法字符校验
-        if (cleanName.contains("/") || cleanName.contains("\\")
-                || cleanName.contains("..") || cleanName.contains("\u0000"))
+        if (!cleanName.toLowerCase().endsWith(".jar")) throw new IllegalArgumentException("项目部署目录只允许上传 .jar 文件");
+        if (cleanName.contains("/") || cleanName.contains("\\") || cleanName.contains("..") || cleanName.contains("\u0000"))
             throw new IllegalArgumentException("非法文件名: " + originalName);
-
         Path dir = resolveResourcePath(RES_TYPE_DEPLOY, subPath);
         if (!Files.isDirectory(dir)) throw new IOException("上传路径不是目录: " + subPath);
-
         Path target = dir.resolve(cleanName);
-        if (!target.startsWith(getResourceTypePath(RES_TYPE_DEPLOY)))
-            throw new SecurityException("路径越界");
-
-        if (Files.exists(target)) {
-            throw new IOException("文件已存在：" + cleanName
-                    + "，请先删除旧版本或使用子目录区分版本");
-        }
-
+        if (!target.startsWith(getResourceTypePath(RES_TYPE_DEPLOY))) throw new SecurityException("路径越界");
+        if (Files.exists(target)) throw new IOException("文件已存在：" + cleanName);
         Files.write(target, content);
-
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("storedName", cleanName);
         result.put("displayName", cleanName);
         result.put("type", RES_TYPE_DEPLOY);
         result.put("subPath", subPath);
-        result.put("fullRelPath", (subPath == null || subPath.isEmpty())
-                ? cleanName : subPath + "/" + cleanName);
+        result.put("fullRelPath", (subPath == null || subPath.isEmpty()) ? cleanName : subPath + "/" + cleanName);
         result.put("size", content.length);
-        log.info("上传部署包: path={}, fileName={}, size={}B",
-                subPath, cleanName, content.length);
         return result;
     }
 
-    /** 通用上传（其他类型） */
     private Map<String, Object> uploadGenericResource(String type, String subPath,
                                                       String originalName, byte[] content) throws IOException {
         Path dir = resolveResourcePath(type, subPath);
         if (!Files.isDirectory(dir)) throw new IOException("上传路径不是目录: " + subPath);
-
         String storedName = generateStoredName(originalName);
         Path target = dir.resolve(storedName);
         Files.write(target, content);
-
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("storedName", storedName);
         result.put("displayName", originalName);
         result.put("type", type);
         result.put("subPath", subPath);
-        result.put("fullRelPath", (subPath == null || subPath.isEmpty())
-                ? storedName : subPath + "/" + storedName);
+        result.put("fullRelPath", (subPath == null || subPath.isEmpty()) ? storedName : subPath + "/" + storedName);
         result.put("size", content.length);
-        log.info("上传资源: type={}, subPath={}, displayName={}, storedName={}, size={}B",
-                type, subPath, originalName, storedName, content.length);
         return result;
     }
-
-    // ==================== 删除 / 读取（保持兼容） ====================
 
     public void deleteResource(String type, String fullRelPath) throws IOException {
         Path target = resolveResourcePath(type, fullRelPath);
         Path typeRoot = getResourceTypePath(type);
         if (target.equals(typeRoot)) throw new SecurityException("不能删除类型根目录");
         if (!Files.exists(target)) throw new IOException("资源不存在: " + fullRelPath);
-
         if (Files.isDirectory(target)) {
             try (var walk = Files.walk(target)) {
                 walk.sorted(Comparator.reverseOrder()).forEach(p -> {
@@ -468,7 +371,6 @@ public class DirectoryService {
         } else {
             Files.delete(target);
         }
-        log.info("删除资源: type={}, path={}", type, fullRelPath);
     }
 
     public Path getResourceFilePath(String type, String fullRelPath) throws IOException {
@@ -479,7 +381,7 @@ public class DirectoryService {
 
     public String readResourceContent(String type, String fullRelPath) throws IOException {
         Path file = getResourceFilePath(type, fullRelPath);
-        return new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        return FileIOUtils.readString(file);
     }
 
     public Map<String, Integer> countResources() {

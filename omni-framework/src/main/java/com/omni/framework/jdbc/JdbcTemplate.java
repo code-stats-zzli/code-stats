@@ -1,10 +1,9 @@
-// ======== D:\work\git\CodeStats\src\main\java\com\omni\framework\jdbc\JdbcTemplate.java ========
 package com.omni.framework.jdbc;
 
 import com.omni.framework.log.LoggerFactory;
 import com.omni.framework.log.core.Logger;
 import com.omni.framework.util.ReflectionUtil;
-import com.omni.framework.util.TypeConverter;  // ★ 导入新工具类
+import com.omni.framework.util.TypeConverter;
 
 import java.beans.IntrospectionException;
 import java.beans.Introspector;
@@ -16,9 +15,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
- * JDBC 模板类（模板模式）
+ * JDBC 模板类。
+ * <p>★ L2-03：新增 {@link #withCatalog(String, Function)}，修复 setCatalog 失效问题。</p>
  */
 public class JdbcTemplate {
 
@@ -37,9 +38,7 @@ public class JdbcTemplate {
             if (timeoutSeconds > 0) ps.setQueryTimeout(timeoutSeconds);
             setParameters(ps, args);
             try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    results.add(rowMapper.mapRow(rs));
-                }
+                while (rs.next()) results.add(rowMapper.mapRow(rs));
             }
         } catch (SQLException e) {
             log.error("Query failed: {}", sql, e);
@@ -89,6 +88,21 @@ public class JdbcTemplate {
         }
     }
 
+    // ==================== ★ L2-03 新增 ====================
+
+    /**
+     * 在指定 database 下执行回调，{@code setCatalog} 在同一个 Connection 生命周期内生效。
+     * <p>替代原有"先 getConnection 设 catalog，关闭后又新开 Connection 导致 catalog 失效"的错误用法。</p>
+     */
+    public <T> T withCatalog(String database, Function<Connection, T> callback) throws Exception {
+        try (Connection conn = getConnection()) {
+            if (database != null && !database.isEmpty()) {
+                conn.setCatalog(database);
+            }
+            return callback.apply(conn);
+        }
+    }
+
     // ==================== 扩展方法 ====================
 
     public <T> List<T> queryForList(String sql, Class<T> clazz, Object... args) throws IntrospectionException, InvocationTargetException, NoSuchMethodException, InstantiationException, IllegalAccessException {
@@ -104,9 +118,7 @@ public class JdbcTemplate {
             ResultSetMetaData meta = rs.getMetaData();
             int colCount = meta.getColumnCount();
             Map<String, Object> row = new HashMap<>();
-            for (int i = 1; i <= colCount; i++) {
-                row.put(meta.getColumnLabel(i), rs.getObject(i));
-            }
+            for (int i = 1; i <= colCount; i++) row.put(meta.getColumnLabel(i), rs.getObject(i));
             return row;
         }, args);
     }
@@ -121,9 +133,7 @@ public class JdbcTemplate {
             PropertyDescriptor[] props = Introspector.getBeanInfo(clazz).getPropertyDescriptors();
             Map<String, Method> writeMethods = new HashMap<>();
             for (PropertyDescriptor pd : props) {
-                if (pd.getWriteMethod() != null) {
-                    writeMethods.put(pd.getName(), pd.getWriteMethod());
-                }
+                if (pd.getWriteMethod() != null) writeMethods.put(pd.getName(), pd.getWriteMethod());
             }
             for (int i = 1; i <= columnCount; i++) {
                 String columnName = meta.getColumnLabel(i);
@@ -134,9 +144,7 @@ public class JdbcTemplate {
                     if (value != null && setter.getParameterTypes()[0].isAssignableFrom(value.getClass())) {
                         setter.invoke(bean, value);
                     } else if (value != null) {
-                        // ★ 使用 TypeConverter 进行转换
-                        Object converted = TypeConverter.convert(value, setter.getParameterTypes()[0]);
-                        setter.invoke(bean, converted);
+                        setter.invoke(bean, TypeConverter.convert(value, setter.getParameterTypes()[0]));
                     }
                 }
             }
@@ -148,10 +156,7 @@ public class JdbcTemplate {
         return rs -> {
             Object val = rs.getObject(1);
             if (val == null) return null;
-            if (requiredType.isAssignableFrom(val.getClass())) {
-                return requiredType.cast(val);
-            }
-            // ★ 使用 TypeConverter 进行转换
+            if (requiredType.isAssignableFrom(val.getClass())) return requiredType.cast(val);
             return TypeConverter.convert(val, requiredType);
         };
     }
@@ -164,9 +169,7 @@ public class JdbcTemplate {
 
     protected void setParameters(PreparedStatement ps, Object[] args) throws SQLException {
         if (args == null) return;
-        for (int i = 0; i < args.length; i++) {
-            ps.setObject(i + 1, args[i]);
-        }
+        for (int i = 0; i < args.length; i++) ps.setObject(i + 1, args[i]);
     }
 
     private static String underscoreToCamel(String name) {
@@ -174,17 +177,11 @@ public class JdbcTemplate {
         StringBuilder sb = new StringBuilder();
         boolean nextUpper = false;
         for (char c : name.toCharArray()) {
-            if (c == '_') {
-                nextUpper = true;
-            } else {
-                sb.append(nextUpper ? Character.toUpperCase(c) : c);
-                nextUpper = false;
-            }
+            if (c == '_') nextUpper = true;
+            else { sb.append(nextUpper ? Character.toUpperCase(c) : c); nextUpper = false; }
         }
         return sb.toString();
     }
-
-    // ==================== 函数式接口 ====================
 
     @FunctionalInterface
     public interface RowMapper<T> {

@@ -1,25 +1,25 @@
-// 文件路径: src/main/java/com/omni/business/assistance/questionbank/controller/QuestionBankController.java
 package com.omni.business.assistance.questionbank.controller;
 
 import com.omni.business.assistance.questionbank.service.QuestionBankService;
+import com.omni.business.common.util.BaseController;
+import com.omni.business.common.util.PagingSupport;
+import com.omni.business.common.util.ResponseHelper;
 import com.omni.framework.spring.annotation.*;
 import com.omni.framework.tomcat.servlet.HttpServletResponse;
 import com.omni.framework.util.JsonUtil;
 
-import java.io.InputStream;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/** ★ L1-01 + L1-02 + L2-01 */
 @Controller
 @RequestMapping("/questionbank/api")
-public class QuestionBankController {
+public class QuestionBankController extends BaseController {
 
     @Autowired
     private QuestionBankService service;
@@ -40,117 +40,81 @@ public class QuestionBankController {
     public String scanFiles(@RequestParam("rootDir") String rootDir,
                             @RequestParam(value = "keyword", required = false) String keyword,
                             @RequestParam(value = "namePrefixes", required = false) String namePrefixes) {
-        Map<String, Object> result = new HashMap<>();
         try {
             List<String> files = service.scanExcelFiles(rootDir, keyword, namePrefixes);
-            result.put("success", true);
-            result.put("files", files);
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("files", files);
+            return okFlat(r);
         } catch (Exception e) {
-            result.put("success", false);
-            result.put("error", e.getMessage());
+            return error(e.getMessage());
         }
-        return JsonUtil.toJson(result);
     }
 
     @RequestMapping("/merge")
     @ResponseBody
     public String mergeFiles(@RequestBody Map<String, String> req) {
-        String rootDir = req.get("rootDir");
-        String keyword = req.get("keyword");
-        String namePrefixes = req.get("namePrefixes");
-        String outputFile = req.get("outputFile");
-        Map<String, Object> result = new HashMap<>();
         try {
-            Map<String, Object> mergeResult = service.mergeFiles(rootDir, keyword, namePrefixes, outputFile);
-            result.put("success", true);
-            result.putAll(mergeResult);
+            Map<String, Object> mergeResult = service.mergeFiles(
+                    req.get("rootDir"), req.get("keyword"), req.get("namePrefixes"), req.get("outputFile"));
+            return okFlat(mergeResult);
         } catch (Exception e) {
-            result.put("success", false);
-            result.put("error", e.getMessage());
+            return error(e.getMessage());
         }
-        return JsonUtil.toJson(result);
     }
 
     @RequestMapping("/search")
     @ResponseBody
     public String search(@RequestParam("keyword") String keyword) {
-        Map<String, Object> result = new HashMap<>();
         try {
-            Map<String, Object> searchResult = service.searchByKeyword(keyword);
-            result.put("success", true);
-            result.put("columns", searchResult.get("columns"));
-            result.put("row", searchResult.get("row"));      // 只返回第一条匹配行
+            Map<String, Object> r = service.searchByKeyword(keyword);
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("columns", r.get("columns"));
+            out.put("row", r.get("row"));
+            return okFlat(out);
         } catch (Exception e) {
-            result.put("success", false);
-            result.put("error", e.getMessage());
+            return error(e.getMessage());
         }
-        return JsonUtil.toJson(result);
     }
 
+    /** ★ L1-02：使用 PagingSupport */
     @RequestMapping("/preview")
     @ResponseBody
-    public String previewTable(@RequestParam(value = "keyword", required = false) String keyword,
-                               @RequestParam(value = "page", defaultValue = "1") int page,
-                               @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
-        Map<String, Object> result = new HashMap<>();
+    public String previewTable(String keyword) {
         try {
-            Map<String, Object> data = service.getPreviewData(keyword, page, pageSize);
-            result.put("success", true);
-            result.putAll(data);
+            PagingSupport.Page pg = PagingSupport.fromRequest(20, 500);
+            Map<String, Object> data = service.getPreviewData(keyword, pg.getPage(), pg.getPageSize());
+            return okFlat(data);
         } catch (Exception e) {
-            result.put("success", false);
-            result.put("error", e.getMessage());
+            return error(e.getMessage());
         }
-        return JsonUtil.toJson(result);
     }
 
     @RequestMapping("/download")
-    public void downloadMergedFile(@RequestParam("file") String file, HttpServletResponse response) throws Exception {
-        String decodedPath = URLDecoder.decode(file, StandardCharsets.UTF_8.name());
+    public void downloadMergedFile(@RequestParam("file") String file) throws Exception {
+        HttpServletResponse resp = com.omni.framework.spring.mvc.ResponseContextHolder.getResponse();
+        if (resp == null) return;
+        String decodedPath = java.net.URLDecoder.decode(file, java.nio.charset.StandardCharsets.UTF_8.name());
         Path path = Paths.get(decodedPath).normalize();
-
-        if (path.toString().contains("..")) {
-            response.setStatus(403, "Access denied");
-            response.write("Access denied");
-            response.send();
-            return;
-        }
-
+        if (path.toString().contains("..")) { ResponseHelper.writeError(resp, 403, "Access denied"); return; }
         if (!Files.exists(path) || Files.isDirectory(path)) {
-            response.setStatus(404, "Not Found");
-            response.write("File not found: " + path);
-            response.send();
+            ResponseHelper.writeError(resp, 404, "File not found: " + path);
             return;
         }
-
-        response.setHeader("Content-Disposition", "attachment; filename=\"" + path.getFileName().toString() + "\"");
-        response.setContentType("text/plain");
-
-        try (InputStream in = Files.newInputStream(path)) {
-            response.sendStatic(in, "text/plain", Files.size(path));
-        } catch (Exception e) {
-            response.setStatus(500, "Internal Server Error");
-            response.write("Internal error: " + e.getMessage());
-            response.send();
-        }
+        ResponseHelper.writeTextAttachment(resp, path, path.getFileName().toString());
     }
 
-    // ========== 导出 Excel ==========
     @RequestMapping("/exportExcel")
-    public void exportExcel(@RequestParam(value = "keyword", required = false) String keyword,
-                            HttpServletResponse response) throws Exception {
+    public void exportExcel(String keyword) throws Exception {
+        HttpServletResponse response = com.omni.framework.spring.mvc.ResponseContextHolder.getResponse();
+        if (response == null) return;
         try {
             response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             String fileName = "题库数据_" + System.currentTimeMillis() + ".xlsx";
-            String encodedFileName = URLEncoder.encode(fileName, "UTF-8").replaceAll("\\+", "%20");
+            String encodedFileName = java.net.URLEncoder.encode(fileName, "UTF-8").replaceAll("\\+", "%20");
             response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFileName);
-            service.exportToExcel(keyword, response.getOutputStream());
+            service.exportToExcel(keyword, response.getRawOutputStream());
         } catch (Exception e) {
-            e.printStackTrace();
-            response.setStatus(500, "Internal Server Error");
-            response.setContentType("text/plain;charset=UTF-8");
-            response.write("导出失败：" + e.getMessage());
-            response.send();
+            ResponseHelper.writeError(response, 500, "导出失败：" + e.getMessage());
         }
     }
 }

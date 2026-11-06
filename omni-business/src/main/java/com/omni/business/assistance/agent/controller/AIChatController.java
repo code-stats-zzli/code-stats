@@ -1,6 +1,7 @@
 package com.omni.business.assistance.agent.controller;
 
 import com.omni.business.assistance.agent.service.AIChatService;
+import com.omni.business.common.util.BaseController;
 import com.omni.framework.spring.annotation.Autowired;
 import com.omni.framework.spring.annotation.Controller;
 import com.omni.framework.spring.annotation.RequestMapping;
@@ -13,9 +14,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.*;
 
+/** ★ L1-01 */
 @Controller
 @RequestMapping("/agent/api")
-public class AIChatController {
+public class AIChatController extends BaseController {
 
     @Autowired
     private AIChatService chatService;
@@ -26,9 +28,7 @@ public class AIChatController {
     @ResponseBody
     public String chat() {
         HttpServletRequest request = RequestContextHolder.getRequest();
-        if (request == null) {
-            return errorResponse("无法获取请求对象");
-        }
+        if (request == null) return error("无法获取请求对象");
         String body = request.getBody();
         try {
             JsonNode root = objectMapper.readTree(body);
@@ -40,7 +40,6 @@ public class AIChatController {
             String customUrl = root.has("customUrl") ? root.get("customUrl").asText() : null;
             String customKey = root.has("customKey") ? root.get("customKey").asText() : null;
 
-            // 提取消息历史
             List<Map<String, String>> messages = new ArrayList<>();
             if (root.has("messages") && root.get("messages").isArray()) {
                 for (JsonNode msg : root.get("messages")) {
@@ -52,19 +51,12 @@ public class AIChatController {
             } else if (question != null && !question.trim().isEmpty()) {
                 messages.add(Map.of("role", "user", "content", question));
             }
-
-            if (messages.isEmpty()) {
-                return errorResponse("缺少消息内容");
-            }
+            if (messages.isEmpty()) return error("缺少消息内容");
 
             String reply = chatService.chat(sessionId, question, messages, backend, model, temperature, customUrl, customKey);
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("response", reply);
-            return JsonUtil.toJson(result);
-
+            return okOne("response", reply);
         } catch (Exception e) {
-            return errorResponse(e.getMessage());
+            return error(e.getMessage());
         }
     }
 
@@ -72,19 +64,14 @@ public class AIChatController {
     @ResponseBody
     public String closeSession() {
         HttpServletRequest request = RequestContextHolder.getRequest();
-        if (request == null) return errorResponse("无法获取请求对象");
-        String body = request.getBody();
+        if (request == null) return error("无法获取请求对象");
         try {
-            JsonNode root = objectMapper.readTree(body);
+            JsonNode root = objectMapper.readTree(request.getBody());
             String sessionId = root.has("sessionId") ? root.get("sessionId").asText() : null;
             if (sessionId != null) chatService.closeSession(sessionId);
-            return JsonUtil.toJson(Map.of("success", true));
+            return ok();
         } catch (Exception e) {
-            return errorResponse(e.getMessage());
+            return error(e.getMessage());
         }
-    }
-
-    private String errorResponse(String msg) {
-        return JsonUtil.toJson(Map.of("success", false, "error", msg));
     }
 }

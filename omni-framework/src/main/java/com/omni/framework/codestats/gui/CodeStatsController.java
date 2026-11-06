@@ -84,7 +84,8 @@ public class CodeStatsController {
                     if (mergePathStr != null && !mergePathStr.trim().isEmpty()) {
                         Path mergePath = Paths.get(mergePathStr.trim());
                         try {
-                            new MergeFilesStage(mergePath).process(files);
+                            // ★ 关键修复：传 rootDir，使合并文件写相对路径，可被「代码导入」还原
+                            new MergeFilesStage(Paths.get(rootDir), Collections.emptyList(), mergePath).process(files);
                         } catch (Exception e) {
                             System.err.println("Merge failed: " + e.getMessage());
                         }

@@ -44,9 +44,6 @@ public class CodeAnalysisService {
 
     private final Cache<String, DependencyResult> dependencyCache = CacheFactory.createDefaultCache();
 
-    /**
-     * ★ 产出文件注册表：analyze 生成的合并文件自动加入，download 时命中即放行。
-     */
     private static final Set<String> DOWNLOADABLE_PATHS = ConcurrentHashMap.newKeySet();
     private static final int DOWNLOADABLE_CAP = 1000;
 
@@ -56,17 +53,14 @@ public class CodeAnalysisService {
             "__pycache__", ".venv", "venv", ".pytest_cache", ".next", ".nuxt"
     ));
 
-    /** ★ 根目录直属文件的特殊 module 名 */
     private static final String ROOT_FILES_MODULE = "(根目录文件)";
 
-    /** ★ 注册可下载文件（由 analyze 生成合并文件后调用） */
     public static void registerDownloadable(Path file) {
         if (file == null) return;
         if (DOWNLOADABLE_PATHS.size() >= DOWNLOADABLE_CAP) DOWNLOADABLE_PATHS.clear();
         DOWNLOADABLE_PATHS.add(file.toAbsolutePath().normalize().toString());
     }
 
-    /** ★ 判断文件是否在注册表中 */
     public static boolean isDownloadable(Path file) {
         if (file == null) return false;
         return DOWNLOADABLE_PATHS.contains(file.toAbsolutePath().normalize().toString());
@@ -98,19 +92,8 @@ public class CodeAnalysisService {
         return JsonUtil.toJson(getDefaultConfig());
     }
 
-    // ==================== ★ 新增：模块列表 ====================
+    // ==================== 模块列表（保持原有逻辑） ====================
 
-    /**
-     * 扫描 rootDir 下的"模块"候选（一级子目录），返回每个模块的文件数与总字节数。
-     *
-     * <p>识别规则：</p>
-     * <ul>
-     *   <li>rootDir 下的每个一级子目录 = 一个 module；</li>
-     *   <li>跳过 .git / target / node_modules 等噪音目录；</li>
-     *   <li>rootDir 直属的散文件合并为特殊 module {@code (根目录文件)}；</li>
-     *   <li>返回按 fileCount 降序，方便前端默认展示热门模块。</li>
-     * </ul>
-     */
     public List<Map<String, Object>> getModules(Map<String, String> params) {
         try {
             Config config = buildConfig(params);
@@ -128,7 +111,6 @@ public class CodeAnalysisService {
 
             List<Map<String, Object>> modules = new ArrayList<>();
 
-            // 1) rootDir 下的一级子目录
             try (DirectoryStream<Path> ds = Files.newDirectoryStream(rootDir)) {
                 for (Path p : ds) {
                     if (!Files.isDirectory(p)) continue;
@@ -136,7 +118,7 @@ public class CodeAnalysisService {
                     if (name.isEmpty() || name.startsWith(".") || EXTRA_SKIP_DIRS.contains(name)) continue;
 
                     int[] stats = countFiles(p, extSet);
-                    if (stats[0] == 0) continue; // 没有匹配文件，不展示
+                    if (stats[0] == 0) continue;
 
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("name", name);
@@ -148,7 +130,6 @@ public class CodeAnalysisService {
                 }
             }
 
-            // 2) rootDir 直属文件
             int[] rootStats = countFilesFlat(rootDir, extSet);
             if (rootStats[0] > 0) {
                 Map<String, Object> m = new LinkedHashMap<>();
@@ -224,7 +205,7 @@ public class CodeAnalysisService {
         return new int[]{count[0], (int) Math.min(bytes[0], Integer.MAX_VALUE)};
     }
 
-    // ==================== ★ 修改：analyze 支持 modules 过滤 ====================
+    // ==================== ★ analyze() 已修复：传 rootDir 给 MergeFilesStage ====================
 
     public String analyze(Map<String, String> params) {
         try {
@@ -235,7 +216,6 @@ public class CodeAnalysisService {
             List<Path> files = new CollectStage(filterChain).process(config.getRootDir());
             files = appendExtraFiles(files, params.get("extraPaths"));
 
-            // ★ 新增：modules 过滤
             String modulesParam = params.get("modules");
             if (modulesParam != null && !modulesParam.trim().isEmpty()) {
                 files = filterByModules(files, modulesParam, config.getRootDir());
@@ -263,10 +243,13 @@ public class CodeAnalysisService {
             if (mergeEnabled && mergeOutputFile != null && !mergeOutputFile.isEmpty()) {
                 try {
                     Path mergePath = Paths.get(mergeOutputFile).toAbsolutePath().normalize();
-                    new MergeFilesStage(mergePath).process(files);
+                    // ★ 关键修复：把 rootDir / extraPathDirs 传给 MergeFilesStage，
+                    //   使其写入相对路径，从而可被「代码导入」还原
+                    List<Path> extraDirs = collectExtraDirs(params.get("extraPaths"));
+                    new MergeFilesStage(config.getRootDir(), extraDirs, mergePath).process(files);
                     registerDownloadable(mergePath);
                     mergeOutputFile = mergePath.toString();
-                    log.info("合并文件已注册可下载: {}", mergeOutputFile);
+                    log.info("合并文件已生成（相对路径模式）: {}", mergeOutputFile);
                 } catch (Exception e) {
                     log.error("合并文件失败: {}", mergeOutputFile, e);
                     mergeOutputFile = null;
@@ -281,10 +264,24 @@ public class CodeAnalysisService {
     }
 
     /**
-     * 按 modules 参数过滤文件列表。
-     * - 普通 module：保留路径前缀匹配的文件
-     * - (根目录文件)：保留 parent == rootDir 的直属文件
+     * ★ 新增：把 extraPaths 中的「目录」收集起来，用于合并文件相对路径计算。
+     * 单文件 extraPath 不纳入 base（会用文件名兜底，保证可导入）。
      */
+    private List<Path> collectExtraDirs(String extraPathsStr) {
+        List<Path> dirs = new ArrayList<>();
+        if (extraPathsStr == null || extraPathsStr.trim().isEmpty()) return dirs;
+        for (String raw : extraPathsStr.split(",")) {
+            String s = raw.trim();
+            if (s.isEmpty()) continue;
+            try {
+                Path p = Paths.get(s).toAbsolutePath().normalize();
+                if (Files.isDirectory(p)) dirs.add(p);
+            } catch (Exception ignored) {
+            }
+        }
+        return dirs;
+    }
+
     private List<Path> filterByModules(List<Path> files, String modulesParam, Path rootDir) {
         Path rootAbs = rootDir.toAbsolutePath().normalize();
         Set<Path> modulePaths = new LinkedHashSet<>();
@@ -321,7 +318,7 @@ public class CodeAnalysisService {
                 .collect(Collectors.toList());
     }
 
-    // ==================== 依赖分析 ====================
+    // ==================== 依赖分析（保持原有逻辑） ====================
 
     private String generateDependencyCacheKey(Map<String, String> params) {
         StringBuilder sb = new StringBuilder();
@@ -427,7 +424,7 @@ public class CodeAnalysisService {
         return new ArrayList<>(merged);
     }
 
-    // ==================== 响应序列化 ====================
+    // ==================== 响应序列化（保持原有逻辑） ====================
 
     private String buildDependencyResponseJson(DependencyResult result, long elapsedMs) {
         Map<String, Object> response = new LinkedHashMap<>();
@@ -514,7 +511,7 @@ public class CodeAnalysisService {
         return JsonUtil.toJson(err);
     }
 
-    // ==================== 外部查询接口 ====================
+    // ==================== 外部查询接口（保持原有逻辑） ====================
 
     public DependencyResult getDependencyResult(Map<String, String> params) throws Exception {
         String cacheKey = generateDependencyCacheKey(params);
@@ -568,7 +565,7 @@ public class CodeAnalysisService {
         return graphData;
     }
 
-    // ==================== 配置构建 ====================
+    // ==================== 配置构建（保持原有逻辑） ====================
 
     private Config buildConfig(Map<String, String> params) {
         Config.Builder builder = new Config.Builder();

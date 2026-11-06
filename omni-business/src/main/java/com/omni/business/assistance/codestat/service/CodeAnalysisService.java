@@ -41,24 +41,14 @@ import java.util.stream.Collectors;
 /**
  * 代码分析业务服务。
  *
- * <p>本次修复：</p>
+ * <p>关键修复点汇总（历次迭代）：</p>
  * <ul>
- *   <li>rootDir 支持"包装目录自动下探"（默认 {@code omni-bootstrap}），
- *       解决项目多一层目录后，模块识别错乱、合并文件 header 多一层前缀的问题。</li>
- *   <li>下探层数、包装目录名可通过配置项调整。</li>
- *   <li>合并文件相对路径基准 = effectiveRoot（下探后的项目根），
- *       使合并文件可被「代码导入」还原。</li>
+ *   <li>wrapper-dirs 自动下探（配置驱动），解决 rootDir 多一层包装目录问题</li>
+ *   <li>合并文件相对路径基准 = effectiveRoot（下探后的项目根）</li>
+ *   <li>默认扩展名从配置读取，覆盖 HTML/CSS/JS 等 Web 资源</li>
+ *   <li><b>本轮新增</b>：extraPaths 相对路径优先基于 effectiveRoot 解析；
+ *       额外文件不再被模块过滤误伤；响应回显 effectiveRoot 供前端提示导入 targetRoot</li>
  * </ul>
- *
- * <p>配置项（application.properties）：</p>
- * <pre>
- *   # 代码分析：需要自动下探的包装目录名（逗号分隔，大小写敏感）
- *   # 仅当 rootDir 下只有 1 个非 skip 子目录、且该目录名在此列表中时才会下探
- *   code.analysis.wrapper-dirs=omni-bootstrap
- *
- *   # 最多下探层数（防止误伤嵌套结构）
- *   code.analysis.wrapper-max-depth=3
- * </pre>
  */
 @Service
 public class CodeAnalysisService {
@@ -66,9 +56,6 @@ public class CodeAnalysisService {
 
     private final Cache<String, DependencyResult> dependencyCache = CacheFactory.createDefaultCache();
 
-    /**
-     * ★ 产出文件注册表：analyze 生成的合并文件自动加入，download 时命中即放行。
-     */
     private static final Set<String> DOWNLOADABLE_PATHS = ConcurrentHashMap.newKeySet();
     private static final int DOWNLOADABLE_CAP = 1000;
 
@@ -78,28 +65,21 @@ public class CodeAnalysisService {
             "__pycache__", ".venv", "venv", ".pytest_cache", ".next", ".nuxt"
     ));
 
-    /** ★ 根目录直属文件的特殊 module 名 */
     private static final String ROOT_FILES_MODULE = "(根目录文件)";
 
-    /** ★ 注册可下载文件（由 analyze 生成合并文件后调用） */
     public static void registerDownloadable(Path file) {
         if (file == null) return;
         if (DOWNLOADABLE_PATHS.size() >= DOWNLOADABLE_CAP) DOWNLOADABLE_PATHS.clear();
         DOWNLOADABLE_PATHS.add(file.toAbsolutePath().normalize().toString());
     }
 
-    /** ★ 判断文件是否在注册表中 */
     public static boolean isDownloadable(Path file) {
         if (file == null) return false;
         return DOWNLOADABLE_PATHS.contains(file.toAbsolutePath().normalize().toString());
     }
 
-    // ==================== ★ 包装目录自动下探（配置驱动） ====================
+    // ==================== 包装目录自动下探 ====================
 
-    /**
-     * 加载需要自动下探的包装目录白名单。
-     * 配置项：{@code code.analysis.wrapper-dirs}（逗号分隔），默认 {@code omni-bootstrap}。
-     */
     private Set<String> loadWrapperDirs() {
         String cfg = null;
         try {
@@ -118,21 +98,6 @@ public class CodeAnalysisService {
         return set;
     }
 
-    /**
-     * 解析有效项目根：按 {@code code.analysis.wrapper-dirs} 白名单循环下探，
-     * 最多 {@code code.analysis.wrapper-max-depth} 层。
-     *
-     * <p>每层下探条件（全部满足）：</p>
-     * <ol>
-     *   <li>当前目录下恰有 1 个非 skip 子目录 A</li>
-     *   <li>A 的名字在 {@code code.analysis.wrapper-dirs} 白名单中</li>
-     *   <li>A 自身含 {@code pom.xml} 或 {@code src}</li>
-     *   <li>A 下含 ≥1 个"类模块"子目录（其下有 {@code pom.xml} 或 {@code src}）</li>
-     *   <li>当前目录自身<b>没有</b> {@code src}</li>
-     * </ol>
-     *
-     * <p>传统多模块项目（rootDir 下 ≥2 个模块子目录，或子目录名不在白名单）不会下探，行为不变。</p>
-     */
     private Path resolveEffectiveRoot(Path rootDir) {
         if (rootDir == null) return null;
         Path current = rootDir.toAbsolutePath().normalize();
@@ -157,14 +122,9 @@ public class CodeAnalysisService {
         return current;
     }
 
-    /**
-     * 尝试下探一层。返回 null 表示不下探。
-     */
     private Path tryDescend(Path current, Set<String> wrapperNames) {
-        // 自身已有 src → 已经是项目根，不再下探
         if (Files.exists(current.resolve("src"))) return null;
 
-        // 收集非 skip 子目录
         List<Path> subDirs = new ArrayList<>();
         try (DirectoryStream<Path> ds = Files.newDirectoryStream(current)) {
             for (Path p : ds) {
@@ -177,21 +137,16 @@ public class CodeAnalysisService {
             return null;
         }
 
-        // 必须恰好 1 个
         if (subDirs.size() != 1) return null;
 
         Path only = subDirs.get(0);
         String onlyName = only.getFileName() == null ? "" : only.getFileName().toString();
-
-        // ★ 名字必须在白名单中（避免把只有 1 个子目录的普通项目误判为包装目录）
         if (!wrapperNames.contains(onlyName)) return null;
 
-        // 该子目录必须看起来像项目
         boolean looksLikeProject = Files.exists(only.resolve("pom.xml"))
                 || Files.exists(only.resolve("src"));
         if (!looksLikeProject) return null;
 
-        // 该子目录下必须有 ≥1 个类模块子目录
         int moduleLikeCount = 0;
         try (DirectoryStream<Path> ds = Files.newDirectoryStream(only)) {
             for (Path p : ds) {
@@ -207,6 +162,41 @@ public class CodeAnalysisService {
         }
 
         return moduleLikeCount >= 1 ? only : null;
+    }
+
+    // ==================== ★ 新增：extraPaths 相对路径解析 ====================
+
+    /**
+     * 解析单个 extraPath 为绝对路径。
+     *
+     * <p>优先级：</p>
+     * <ol>
+     *   <li>绝对路径 → 原样使用</li>
+     *   <li>相对路径 → 优先基于 effectiveRoot 解析（已存在即采用）</li>
+     *   <li>回退 → 基于 user.dir 解析（已存在即采用）</li>
+     *   <li>都不存在 → 返回 effectiveRoot 版本（后续会被 isDirectory/isFile 过滤掉）</li>
+     * </ol>
+     *
+     * <p>解决：用户从子模块目录启动（如 user.dir = .../omni-bootstrap）时，
+     * 填 {@code omni-bootstrap/webapps} 不会变成 {@code omni-bootstrap/omni-bootstrap/webapps}。</p>
+     */
+    private Path resolveExtraPath(String pathStr, Path effectiveRoot) {
+        if (pathStr == null || pathStr.trim().isEmpty()) return null;
+        Path p;
+        try {
+            p = Paths.get(pathStr);
+        } catch (Exception e) {
+            return null;
+        }
+        if (p.isAbsolute()) return p.normalize();
+        if (effectiveRoot != null) {
+            Path based = effectiveRoot.resolve(p).normalize();
+            if (Files.exists(based)) return based;
+        }
+        Path basedUserDir = Paths.get(System.getProperty("user.dir", "."))
+                .resolve(p).normalize();
+        if (Files.exists(basedUserDir)) return basedUserDir;
+        return effectiveRoot != null ? effectiveRoot.resolve(p).normalize() : basedUserDir;
     }
 
     // ==================== 代码统计 ====================
@@ -235,12 +225,11 @@ public class CodeAnalysisService {
         return JsonUtil.toJson(getDefaultConfig());
     }
 
-    // ==================== 模块列表（基于 effectiveRoot） ====================
+    // ==================== 模块列表 ====================
 
     public List<Map<String, Object>> getModules(Map<String, String> params) {
         try {
             Config config = buildConfig(params);
-            // ★ 用 effectiveRoot（自动下探包装目录）
             Path rootDir = resolveEffectiveRoot(config.getRootDir());
             if (!Files.isDirectory(rootDir)) return new ArrayList<>();
 
@@ -349,24 +338,26 @@ public class CodeAnalysisService {
         return new int[]{count[0], (int) Math.min(bytes[0], Integer.MAX_VALUE)};
     }
 
-    // ==================== ★ analyze：用 effectiveRoot ====================
+    // ==================== analyze：★ 本次核心改动 ====================
 
     public String analyze(Map<String, String> params) {
         try {
             Config config = buildConfig(params);
-            // ★ 用 effectiveRoot（自动下探包装目录）
             Path effectiveRoot = resolveEffectiveRoot(config.getRootDir());
             long startTime = System.currentTimeMillis();
 
             CompositeFilter filterChain = buildFilterChain(config, effectiveRoot);
             List<Path> files = new CollectStage(filterChain).process(effectiveRoot);
-            files = appendExtraFiles(files, params.get("extraPaths"));
 
-            // modules 过滤
+            // ★ 关键改动 1：先按模块过滤主文件（受用户勾选影响）
             String modulesParam = params.get("modules");
             if (modulesParam != null && !modulesParam.trim().isEmpty()) {
                 files = filterByModules(files, modulesParam, effectiveRoot);
             }
+
+            // ★ 关键改动 2：再追加额外文件（不受模块过滤影响；相对路径基于 effectiveRoot 解析）
+            String extraPathsParam = params.get("extraPaths");
+            files = appendExtraFiles(files, extraPathsParam, effectiveRoot);
 
             ParallelAnalyzeStage analyzeStage = new ParallelAnalyzeStage(
                     config.getThreadCount(), config.isExcludeComments(), null);
@@ -390,8 +381,8 @@ public class CodeAnalysisService {
             if (mergeEnabled && mergeOutputFile != null && !mergeOutputFile.isEmpty()) {
                 try {
                     Path mergePath = Paths.get(mergeOutputFile).toAbsolutePath().normalize();
-                    // ★ 用 effectiveRoot 作为相对路径基准
-                    List<Path> extraDirs = collectExtraDirs(params.get("extraPaths"));
+                    // ★ extraDirs 也基于 effectiveRoot 解析相对路径
+                    List<Path> extraDirs = collectExtraDirs(extraPathsParam, effectiveRoot);
                     new MergeFilesStage(effectiveRoot, extraDirs, mergePath).process(files);
                     registerDownloadable(mergePath);
                     mergeOutputFile = mergePath.toString();
@@ -409,15 +400,18 @@ public class CodeAnalysisService {
         }
     }
 
-    private List<Path> collectExtraDirs(String extraPathsStr) {
+    /**
+     * ★ 改动：额外目录收集，相对路径优先基于 effectiveRoot 解析。
+     */
+    private List<Path> collectExtraDirs(String extraPathsStr, Path effectiveRoot) {
         List<Path> dirs = new ArrayList<>();
         if (extraPathsStr == null || extraPathsStr.trim().isEmpty()) return dirs;
         for (String raw : extraPathsStr.split(",")) {
             String s = raw.trim();
             if (s.isEmpty()) continue;
             try {
-                Path p = Paths.get(s).toAbsolutePath().normalize();
-                if (Files.isDirectory(p)) dirs.add(p);
+                Path p = resolveExtraPath(s, effectiveRoot);
+                if (p != null && Files.isDirectory(p)) dirs.add(p);
             } catch (Exception ignored) {
             }
         }
@@ -460,7 +454,7 @@ public class CodeAnalysisService {
                 .collect(Collectors.toList());
     }
 
-    // ==================== 依赖分析（用 effectiveRoot） ====================
+    // ==================== 依赖分析 ====================
 
     private String generateDependencyCacheKey(Map<String, String> params) {
         StringBuilder sb = new StringBuilder();
@@ -510,7 +504,7 @@ public class CodeAnalysisService {
         CompositeFilter filterChain = buildFilterChain(config, effectiveRoot);
 
         List<Path> files = new CollectStage(filterChain).process(effectiveRoot);
-        files = appendExtraFiles(files, params.get("extraPaths"));
+        files = appendExtraFiles(files, params.get("extraPaths"), effectiveRoot);
 
         if (files.isEmpty()) {
             return new DependencyResult(Collections.emptyMap(), new DependencyGraph(), 0L);
@@ -524,9 +518,6 @@ public class CodeAnalysisService {
         return buildFilterChain(config, config.getRootDir());
     }
 
-    /**
-     * 用 effectiveRoot 覆盖 GitIgnoreFilter 的基准目录。
-     */
     private CompositeFilter buildFilterChain(Config config, Path effectiveRoot) {
         CompositeFilter filterChain = new CompositeFilter();
         if (config.getExtensions() != null && !config.getExtensions().isEmpty()) {
@@ -542,13 +533,20 @@ public class CodeAnalysisService {
         return filterChain;
     }
 
-    private List<Path> appendExtraFiles(List<Path> existing, String extraPathsStr) throws Exception {
+    /**
+     * ★ 改动：追加额外文件时，相对路径基于 effectiveRoot 解析。
+     *
+     * @param effectiveRoot 用于解析相对路径 + 供 MergeFilesStage 做相对化基准
+     */
+    private List<Path> appendExtraFiles(List<Path> existing, String extraPathsStr,
+                                        Path effectiveRoot) throws Exception {
         if (extraPathsStr == null || extraPathsStr.trim().isEmpty()) return existing;
         Set<Path> merged = new LinkedHashSet<>(existing);
         for (String extraPath : extraPathsStr.split(",")) {
             String trimmed = extraPath.trim();
             if (trimmed.isEmpty()) continue;
-            Path root = Paths.get(trimmed).toAbsolutePath().normalize();
+            Path root = resolveExtraPath(trimmed, effectiveRoot);
+            if (root == null) continue;
             if (Files.isDirectory(root)) {
                 Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
                     @Override
@@ -650,7 +648,7 @@ public class CodeAnalysisService {
         if (mergeEnabled && mergeOutputFile != null && !mergeOutputFile.isEmpty()) {
             response.put("mergeOutput", mergeOutputFile);
         }
-        // ★ 返回 effectiveRoot，供前端提示用户"导入 targetRoot 应该是这个"
+        // ★ 回显 effectiveRoot，前端提示用户导入 targetRoot 应该填这个
         if (effectiveRoot != null) {
             response.put("effectiveRoot", effectiveRoot.toString());
         }
@@ -726,8 +724,23 @@ public class CodeAnalysisService {
         Config.Builder builder = new Config.Builder();
         String rootDir = params.get("rootDir");
         builder.rootDir(rootDir != null && !rootDir.isEmpty() ? Paths.get(rootDir) : Paths.get("."));
+
+        // ★ 保留上一轮：extensions 为空时从全局配置兜底（默认 Web 全栈）
         String exts = params.get("extensions");
-        if (exts != null && !exts.isEmpty()) builder.extensions(Arrays.asList(exts.split(",")));
+        if (exts == null || exts.trim().isEmpty()) {
+            exts = ConfigLoader.getProperty("code.analysis.default-extensions",
+                    "html,js,css");
+        }
+        List<String> extList = new ArrayList<>();
+        if (exts != null) {
+            for (String s : exts.split(",")) {
+                String t = s.trim();
+                if (!t.isEmpty()) extList.add(t);
+            }
+        }
+        if (extList.isEmpty()) extList.add("java");
+        builder.extensions(extList);
+
         String exclude = params.get("excludePaths");
         if (exclude != null && !exclude.isEmpty()) builder.excludePaths(Arrays.asList(exclude.split(",")));
         builder.excludeComments("true".equalsIgnoreCase(params.get("excludeComments")));
@@ -746,12 +759,16 @@ public class CodeAnalysisService {
         String rootDir = params.get("rootDir");
         builder.rootDir(rootDir != null && !rootDir.isEmpty() ? Paths.get(rootDir) : Paths.get("."));
         String exts = params.get("extensions");
-        builder.extensions(exts != null && !exts.isEmpty() ? Arrays.asList(exts.split(",")) : Collections.singletonList("java"));
+        builder.extensions(exts != null && !exts.isEmpty()
+                ? Arrays.asList(exts.split(","))
+                : Collections.singletonList("java"));
         String exclude = params.get("excludePaths");
         if (exclude != null && !exclude.isEmpty()) builder.excludePaths(Arrays.asList(exclude.split(",")));
         builder.excludeComments("true".equalsIgnoreCase(params.get("excludeComments")));
         String threads = params.get("threadCount");
-        builder.threadCount(threads != null && !threads.isEmpty() ? Integer.parseInt(threads) : Runtime.getRuntime().availableProcessors());
+        builder.threadCount(threads != null && !threads.isEmpty()
+                ? Integer.parseInt(threads)
+                : Runtime.getRuntime().availableProcessors());
         builder.sortBy("name");
         builder.useGitIgnore("true".equalsIgnoreCase(params.get("useGitIgnore")));
         return builder.build();

@@ -10,10 +10,34 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 
+/**
+ * 合并文件生成阶段。
+ *
+ * <p>合并文件格式（与「代码导入」兼容）：</p>
+ * <pre>
+ * // ======== &lt;相对路径&gt; ========
+ * &lt;原样文本内容&gt;
+ *
+ * // ======== &lt;二进制路径&gt; ========
+ * [BASE64]
+ * &lt;base64 编码，76 字符换行&gt;
+ * </pre>
+ *
+ * <p><b>本轮改动</b>：当 {@link com.omni.business.assistance.codestat.service.CodeAnalysisService}
+ * 勾选模块后会追加模块下的完整文件（含 .png / .jar / .xlsx 等），
+ * 合并阶段对二进制文件改用 Base64 编码块写入，避免污染合并文件、
+ * 保证仍能被「代码导入 → ImportFileService」完整还原。</p>
+ */
 public class MergeFilesStage implements Stage<List<Path>, Void> {
     private static final Logger log = LoggerFactory.getLogger(MergeFilesStage.class);
+
+    /** 二进制文件标记，与 ImportFileService / MergeFileWriter 保持一致 */
+    private static final String BASE64_TAG = "[BASE64]";
+    private static final Base64.Encoder BASE64_ENCODER =
+            Base64.getMimeEncoder(76, "\n".getBytes(StandardCharsets.US_ASCII));
 
     private final Path outputFile;
     /** 项目根目录（相对路径基准）；null 表示沿用旧行为（写绝对路径） */
@@ -78,15 +102,48 @@ public class MergeFilesStage implements Stage<List<Path>, Void> {
                     continue;
                 }
                 String header = "\n// ======== " + rel + " ========\n";
-                out.write(header.getBytes(StandardCharsets.UTF_8));
-                Files.copy(file, out);
-                out.write('\n');
+
+                // ★ 二进制文件用 [BASE64] 块写入，保持合并文件可解析
+                if (isBinaryFile(rel)) {
+                    out.write((header + BASE64_TAG + "\n").getBytes(StandardCharsets.UTF_8));
+                    byte[] data = Files.readAllBytes(file);
+                    String b64 = BASE64_ENCODER.encodeToString(data);
+                    out.write(b64.getBytes(StandardCharsets.US_ASCII));
+                    if (!b64.endsWith("\n")) out.write('\n');
+                    out.write('\n');
+                } else {
+                    out.write(header.getBytes(StandardCharsets.UTF_8));
+                    Files.copy(file, out);
+                    out.write('\n');
+                }
                 written++;
             }
             out.write(buildAiPrompt().getBytes(StandardCharsets.UTF_8));
         }
-        log.info("Merged {} files into: {} (skipped {} unreadable/out-of-root)", written, outputFile, skipped);
+        log.info("Merged {} files into: {} (skipped {} unreadable/out-of-root)",
+                written, outputFile, skipped);
         return null;
+    }
+
+    /**
+     * 判断合并文件中的路径是否为二进制类型。
+     * <p>与 {@code com.omni.framework.unzip.util.MergeFileWriter#isBinary} 保持一致。</p>
+     */
+    private boolean isBinaryFile(String path) {
+        if (path == null) return false;
+        int dot = path.lastIndexOf('.');
+        if (dot < 0) return false;
+        switch (path.substring(dot + 1).toLowerCase()) {
+            case "jar": case "class": case "zip": case "gz": case "tar": case "tgz":
+            case "png": case "jpg": case "jpeg": case "gif": case "bmp": case "ico":
+            case "webp": case "pdf": case "exe": case "dll": case "so": case "dylib":
+            case "bin": case "mp3": case "mp4": case "wav": case "flac":
+            case "ttf": case "woff": case "woff2": case "eot":
+            case "xlsx": case "xls": case "docx": case "doc": case "pptx": case "ppt":
+                return true;
+            default:
+                return false;
+        }
     }
 
     /**
@@ -115,7 +172,6 @@ public class MergeFilesStage implements Stage<List<Path>, Void> {
 
     /**
      * 合并文件末尾追加的 AI 上下文提示块。
-     * 文档与实现现已一致：header 中写的是相对 rootDir 的相对路径。
      */
     private String buildAiPrompt() {
         StringBuilder sb = new StringBuilder();
@@ -131,6 +187,7 @@ public class MergeFilesStage implements Stage<List<Path>, Void> {
         sb.append("//   相对路径相对本次代码分析的 rootDir，例如：\n");
         sb.append("//       omni-common/src/main/java/com/omni/common/cache/Cache.java\n");
         sb.append("//   分隔头之后紧跟该文件的原始内容（原样保留，不转义、不缩进）。\n");
+        sb.append("//   二进制文件（.png/.jar/.xlsx 等）以 [BASE64] 标记，后面接 base64 内容（76 字符换行）。\n");
         sb.append("//   系统解析时会读取分隔头中的路径，并恢复为 targetRoot 下对应目录结构。\n");
         sb.append("//\n");
         sb.append("// 【示例】\n");
@@ -142,8 +199,16 @@ public class MergeFilesStage implements Stage<List<Path>, Void> {
         sb.append("//   server.port=28080\n");
         sb.append("//   context.path=/omni\n");
         sb.append("//\n");
+        sb.append("//   // ======== omni-bootstrap/webapps/demo/index.html ========\n");
+        sb.append("//   <!DOCTYPE html>\n");
+        sb.append("//   ...\n");
+        sb.append("//\n");
+        sb.append("//   // ======== omni-bootstrap/webapps/demo/logo.png ========\n");
+        sb.append("//   [BASE64]\n");
+        sb.append("//   iVBORw0KGgoAAAANSUhEUgAA...\n");
+        sb.append("//\n");
         sb.append("// 【使用建议】\n");
-        sb.append("//   导入时 targetRoot 设为原项目根目录，即可完整还原多模块结构。\n");
+        sb.append("//   导入时 targetRoot 设为原项目根目录，即可完整还原多模块结构（含资源、webapps、二进制）。\n");
         sb.append("// ============================================================\n");
         sb.append("// （本提示块不参与代码导入解析，仅作为 AI 上下文说明）\n");
         sb.append("// ============================================================\n");

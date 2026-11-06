@@ -46,8 +46,11 @@ import java.util.stream.Collectors;
  *   <li>wrapper-dirs 自动下探（配置驱动），解决 rootDir 多一层包装目录问题</li>
  *   <li>合并文件相对路径基准 = effectiveRoot（下探后的项目根）</li>
  *   <li>默认扩展名从配置读取，覆盖 HTML/CSS/JS 等 Web 资源</li>
- *   <li><b>本轮新增</b>：extraPaths 相对路径优先基于 effectiveRoot 解析；
+ *   <li>extraPaths 相对路径优先基于 effectiveRoot 解析；
  *       额外文件不再被模块过滤误伤；响应回显 effectiveRoot 供前端提示导入 targetRoot</li>
+ *   <li><b>本轮新增</b>：勾选模块时，模块下的「完整文件」（含 src/main/resources、pom.xml、
+ *       webapps 等非 java 文件）一并加入待合并列表，不受 extensions 限制。
+ *       合并阶段对二进制文件（.png/.jar/.xlsx 等）自动 Base64 编码，合并文件仍可被「代码导入」完整还原。</li>
  * </ul>
  */
 @Service
@@ -81,7 +84,7 @@ public class CodeAnalysisService {
     // ==================== 包装目录自动下探 ====================
 
     private Set<String> loadWrapperDirs() {
-        String cfg = null;
+        String cfg;
         try {
             cfg = ConfigLoader.getProperty("code.analysis.wrapper-dirs", "omni-bootstrap");
         } catch (Throwable t) {
@@ -164,7 +167,7 @@ public class CodeAnalysisService {
         return moduleLikeCount >= 1 ? only : null;
     }
 
-    // ==================== ★ 新增：extraPaths 相对路径解析 ====================
+    // ==================== extraPaths 相对路径解析 ====================
 
     /**
      * 解析单个 extraPath 为绝对路径。
@@ -176,9 +179,6 @@ public class CodeAnalysisService {
      *   <li>回退 → 基于 user.dir 解析（已存在即采用）</li>
      *   <li>都不存在 → 返回 effectiveRoot 版本（后续会被 isDirectory/isFile 过滤掉）</li>
      * </ol>
-     *
-     * <p>解决：用户从子模块目录启动（如 user.dir = .../omni-bootstrap）时，
-     * 填 {@code omni-bootstrap/webapps} 不会变成 {@code omni-bootstrap/omni-bootstrap/webapps}。</p>
      */
     private Path resolveExtraPath(String pathStr, Path effectiveRoot) {
         if (pathStr == null || pathStr.trim().isEmpty()) return null;
@@ -338,7 +338,7 @@ public class CodeAnalysisService {
         return new int[]{count[0], (int) Math.min(bytes[0], Integer.MAX_VALUE)};
     }
 
-    // ==================== analyze：★ 本次核心改动 ====================
+    // ==================== analyze（核心流程） ====================
 
     public String analyze(Map<String, String> params) {
         try {
@@ -349,13 +349,15 @@ public class CodeAnalysisService {
             CompositeFilter filterChain = buildFilterChain(config, effectiveRoot);
             List<Path> files = new CollectStage(filterChain).process(effectiveRoot);
 
-            // ★ 关键改动 1：先按模块过滤主文件（受用户勾选影响）
+            // ① 按模块过滤主文件（受用户勾选影响）
             String modulesParam = params.get("modules");
             if (modulesParam != null && !modulesParam.trim().isEmpty()) {
                 files = filterByModules(files, modulesParam, effectiveRoot);
+                // ★ 新增：选中模块时，把该模块下的「完整文件」也一并追加进来
+                files = appendModuleAllFiles(files, modulesParam, effectiveRoot);
             }
 
-            // ★ 关键改动 2：再追加额外文件（不受模块过滤影响；相对路径基于 effectiveRoot 解析）
+            // ② 追加额外文件（不受模块过滤影响；相对路径基于 effectiveRoot 解析）
             String extraPathsParam = params.get("extraPaths");
             files = appendExtraFiles(files, extraPathsParam, effectiveRoot);
 
@@ -381,8 +383,8 @@ public class CodeAnalysisService {
             if (mergeEnabled && mergeOutputFile != null && !mergeOutputFile.isEmpty()) {
                 try {
                     Path mergePath = Paths.get(mergeOutputFile).toAbsolutePath().normalize();
-                    // ★ extraDirs 也基于 effectiveRoot 解析相对路径
                     List<Path> extraDirs = collectExtraDirs(extraPathsParam, effectiveRoot);
+                    // ★ 合并阶段对二进制文件自动 Base64 编码
                     new MergeFilesStage(effectiveRoot, extraDirs, mergePath).process(files);
                     registerDownloadable(mergePath);
                     mergeOutputFile = mergePath.toString();
@@ -401,7 +403,69 @@ public class CodeAnalysisService {
     }
 
     /**
-     * ★ 改动：额外目录收集，相对路径优先基于 effectiveRoot 解析。
+     * ★ 新增：追加选中模块下的所有文件（不受 extensions 限制）。
+     *
+     * <p>背景：当用户只配置 extensions=java 时，模块下的
+     * src/main/resources（.properties/.xml/.yml）、webapps（.html/.css/.js）、
+     * pom.xml 等会被 ExtensionFilter 过滤掉。但「合并文件导出」场景期望
+     * 选中模块的完整文件都被输出，便于完整还原项目。</p>
+     *
+     * <p>会跳过 EXTRA_SKIP_DIRS（target/node_modules/.git 等）与所有隐藏目录。</p>
+     */
+    private List<Path> appendModuleAllFiles(List<Path> existing, String modulesParam, Path rootDir) {
+        if (modulesParam == null || modulesParam.trim().isEmpty()) return existing;
+
+        Path rootAbs = rootDir.toAbsolutePath().normalize();
+        Set<Path> merged = new LinkedHashSet<>(existing);
+
+        for (String raw : modulesParam.split(",")) {
+            String name = raw.trim();
+            if (name.isEmpty() || ROOT_FILES_MODULE.equals(name)) continue;
+
+            Path modulePath = rootAbs.resolve(name).normalize();
+            if (!Files.isDirectory(modulePath)) {
+                log.warn("模块目录不存在，跳过完整文件扫描: {}", modulePath);
+                continue;
+            }
+
+            final int before = merged.size();
+            try {
+                Files.walkFileTree(modulePath, new SimpleFileVisitor<Path>() {
+                    @Override
+                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                        if (!dir.equals(modulePath)) {
+                            String dirName = dir.getFileName() == null ? "" : dir.getFileName().toString();
+                            if (EXTRA_SKIP_DIRS.contains(dirName) || dirName.startsWith(".")) {
+                                return FileVisitResult.SKIP_SUBTREE;
+                            }
+                        }
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                        if (Files.isRegularFile(file)) {
+                            merged.add(file.toAbsolutePath().normalize());
+                        }
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
+                log.info("模块 [{}] 已追加完整文件（新增 {} 个，当前总 {} 个）",
+                        name, merged.size() - before, merged.size());
+            } catch (Exception e) {
+                log.warn("扫描模块全文件失败: {}", modulePath, e);
+            }
+        }
+        return new ArrayList<>(merged);
+    }
+
+    /**
+     * 额外目录收集：相对路径优先基于 effectiveRoot 解析。
      */
     private List<Path> collectExtraDirs(String extraPathsStr, Path effectiveRoot) {
         List<Path> dirs = new ArrayList<>();
@@ -514,10 +578,6 @@ public class CodeAnalysisService {
         return stage.process(files);
     }
 
-    private CompositeFilter buildFilterChain(Config config) {
-        return buildFilterChain(config, config.getRootDir());
-    }
-
     private CompositeFilter buildFilterChain(Config config, Path effectiveRoot) {
         CompositeFilter filterChain = new CompositeFilter();
         if (config.getExtensions() != null && !config.getExtensions().isEmpty()) {
@@ -534,9 +594,7 @@ public class CodeAnalysisService {
     }
 
     /**
-     * ★ 改动：追加额外文件时，相对路径基于 effectiveRoot 解析。
-     *
-     * @param effectiveRoot 用于解析相对路径 + 供 MergeFilesStage 做相对化基准
+     * 追加额外文件时，相对路径基于 effectiveRoot 解析。
      */
     private List<Path> appendExtraFiles(List<Path> existing, String extraPathsStr,
                                         Path effectiveRoot) throws Exception {
@@ -562,7 +620,7 @@ public class CodeAnalysisService {
                         return FileVisitResult.CONTINUE;
                     }
                     @Override
-                    public FileVisitResult visitFileFailed(Path file, java.io.IOException exc) {
+                    public FileVisitResult visitFileFailed(Path file, IOException exc) {
                         return FileVisitResult.CONTINUE;
                     }
                 });
@@ -648,7 +706,6 @@ public class CodeAnalysisService {
         if (mergeEnabled && mergeOutputFile != null && !mergeOutputFile.isEmpty()) {
             response.put("mergeOutput", mergeOutputFile);
         }
-        // ★ 回显 effectiveRoot，前端提示用户导入 targetRoot 应该填这个
         if (effectiveRoot != null) {
             response.put("effectiveRoot", effectiveRoot.toString());
         }
@@ -725,11 +782,9 @@ public class CodeAnalysisService {
         String rootDir = params.get("rootDir");
         builder.rootDir(rootDir != null && !rootDir.isEmpty() ? Paths.get(rootDir) : Paths.get("."));
 
-        // ★ 保留上一轮：extensions 为空时从全局配置兜底（默认 Web 全栈）
         String exts = params.get("extensions");
         if (exts == null || exts.trim().isEmpty()) {
-            exts = ConfigLoader.getProperty("code.analysis.default-extensions",
-                    "html,js,css");
+            exts = ConfigLoader.getProperty("code.analysis.default-extensions", "html,js,css");
         }
         List<String> extList = new ArrayList<>();
         if (exts != null) {

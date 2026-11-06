@@ -28,10 +28,28 @@ import java.io.FileInputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.net.SocketException;
+import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
+/**
+ * Spring MVC 前端控制器（自研 DispatcherServlet）。
+ *
+ * <p>本次修复：静态资源 {@code webapps/{app}/} 的根目录支持配置、支持多个候选、
+ * 支持 {@code ${user.dir}} / {@code ${user.home}} / {@code ${java.io.tmpdir}} 变量，
+ * 彻底解决"项目多了一层 {@code omni-bootstrap/} 后静态文件 404"问题。</p>
+ *
+ * <p>配置项（application.properties）：</p>
+ * <pre>
+ *   # 静态资源 webapps 父目录候选列表（逗号分隔，按顺序探测，命中即用）
+ *   # 每个条目指向"包含 demo/ agent/ files/ 等 webapp 子目录的那个 webapps 目录"
+ *   # 支持相对路径（相对 user.dir）与绝对路径；支持 ${user.dir} 等变量
+ *   # 留空/不配置：使用内置默认候选
+ *   webapps.roots=${user.dir}/webapps,${user.dir}/omni-bootstrap/webapps
+ * </pre>
+ */
 public class DispatcherServlet extends HttpServlet {
     private static final Logger log = LoggerFactory.getLogger(DispatcherServlet.class);
 
@@ -42,6 +60,11 @@ public class DispatcherServlet extends HttpServlet {
             "password", "passwd", "pwd", "secret", "token",
             "accessToken", "apiKey", "apikey", "key", "credential"
     ));
+
+    /** 静态资源候选根目录缓存（配置项 webapps.roots 的解析结果，弱缓存 5 秒） */
+    private volatile List<Path> cachedWebappParentRoots;
+    private volatile long cachedWebappRootsAt = 0L;
+    private static final long WEBAPP_ROOTS_CACHE_MS = 5000L;
 
     @Override
     public void init() throws Exception {
@@ -66,6 +89,17 @@ public class DispatcherServlet extends HttpServlet {
                 new DefaultHandlerExceptionResolver()
         );
 
+        // 启动时打印一次静态资源候选根，便于排查
+        List<Path> roots = resolveWebappParentRoots(true);
+        if (roots.isEmpty()) {
+            log.warn("⚠ 静态资源根目录候选为空（webapps.roots 配置解析后无有效目录），静态文件访问将返回 404");
+        } else {
+            log.info("静态资源根目录候选：");
+            for (int i = 0; i < roots.size(); i++) {
+                log.info("  [{}] {}", i + 1, roots.get(i));
+            }
+        }
+
         log.info("DispatcherServlet 初始化完成");
     }
 
@@ -85,8 +119,6 @@ public class DispatcherServlet extends HttpServlet {
         String uri = req.getUri();
         String query = req.getQueryString();
 
-        // ★ 访问日志：对已知高频轮询接口默认静默
-        //   错误日志（500 / 异常）不经过此判断，始终打印
         boolean accessLog = AccessLogFilter.shouldLog(uri);
 
         if (accessLog) {
@@ -137,7 +169,6 @@ public class DispatcherServlet extends HttpServlet {
                 return;
             }
 
-            // ★ 核心新增：如果 uri 是根路径或空目录访问，自动重定向到主页面
             if (tryRedirectToHomePage(req, res)) {
                 if (accessLog) {
                     log.info(" 重定向到主页面: {} → {} 耗时: {}ms",
@@ -149,7 +180,6 @@ public class DispatcherServlet extends HttpServlet {
             res.setStatus(404, "Not Found");
             res.write("<h1>404 - Not Found</h1>");
             res.send();
-            // 404 属于「非预期」访问，保留 warn 便于排查，不受 accessLog 控制
             log.warn("⚠️ 404 Not Found: {} {} 耗时: {}ms",
                     method, uri, System.currentTimeMillis() - startTime);
 
@@ -160,14 +190,12 @@ public class DispatcherServlet extends HttpServlet {
                 if (msg != null && (msg.contains("软件中止")
                         || msg.contains("Connection reset")
                         || msg.contains("Broken pipe"))) {
-                    // 客户端断开连接属于正常现象，降级为 debug 避免刷屏
                     log.debug("客户端已断开连接，请求详情: {} {}?{}",
                             method, uri, query != null ? query : "");
                     return;
                 }
             }
 
-            // 错误日志始终打印
             log.error(" 处理请求失败: {} {} 耗时: {}ms",
                     method, uri, System.currentTimeMillis() - startTime, e);
 
@@ -192,28 +220,7 @@ public class DispatcherServlet extends HttpServlet {
         }
     }
 
-    /**
-     * ★ 新增：尝试重定向到主页面。
-     *
-     * <p>触发条件（全部满足）：</p>
-     * <ol>
-     *   <li>配置 {@code server.home.redirect.enabled} 为 true（默认 true）</li>
-     *   <li>配置 {@code server.home.redirect.url} 非空</li>
-     *   <li>URI 是根路径 {@code "/"}、空串，或以 {@code "/"} 结尾（即"目录访问"，而非"访问具体文件"）</li>
-     *   <li>URI 不匹配 {@code server.home.redirect.exclude-prefixes} 中排除的前缀</li>
-     * </ol>
-     *
-     * <p>URL 拼接规则：</p>
-     * <ul>
-     *   <li>{@code http(s)://...}：完整 URL，原样使用</li>
-     *   <li>以 contextPath 开头（如 {@code /omni/demo/index.html}）：原样使用</li>
-     *   <li>其他相对路径（如 {@code /demo/index.html}）：自动前缀 contextPath</li>
-     * </ul>
-     *
-     * @return true 表示已重定向并提交响应；false 表示未触发（调用方应继续走 404 分支）
-     */
     private boolean tryRedirectToHomePage(HttpServletRequest req, HttpServletResponse res) {
-        // ---------- ① 判断 URI 是否为"目录访问" ----------
         String uri = req.getUri();
         if (uri == null) {
             uri = "/";
@@ -226,7 +233,6 @@ public class DispatcherServlet extends HttpServlet {
             return false;
         }
 
-        // ---------- ② 排除前缀（避免 API 根路径被误重定向） ----------
         String excludePrefixes = ConfigLoader.getProperty(
                 "server.home.redirect.exclude-prefixes", "");
         if (excludePrefixes != null && !excludePrefixes.trim().isEmpty()) {
@@ -239,7 +245,6 @@ public class DispatcherServlet extends HttpServlet {
             }
         }
 
-        // ---------- ③ 读取开关和 URL ----------
         boolean enabled = !"false".equalsIgnoreCase(
                 ConfigLoader.getProperty("server.home.redirect.enabled", "true"));
         if (!enabled) {
@@ -253,7 +258,6 @@ public class DispatcherServlet extends HttpServlet {
         }
         redirectUrl = redirectUrl.trim();
 
-        // ---------- ④ 拼接最终 URL ----------
         String contextPath = req.getContextPath();
         if (contextPath == null) {
             contextPath = "";
@@ -268,7 +272,6 @@ public class DispatcherServlet extends HttpServlet {
             finalUrl = contextPath + (redirectUrl.startsWith("/") ? redirectUrl : "/" + redirectUrl);
         }
 
-        // ---------- ⑤ 执行重定向 ----------
         try {
             log.info("🔄 目录访问自动重定向: {} → {}", uri, finalUrl);
             res.sendRedirect(finalUrl);
@@ -422,6 +425,14 @@ public class DispatcherServlet extends HttpServlet {
                 .replace("\n", "\\n").replace("\r", "\\r");
     }
 
+    // ==================== 静态资源 ====================
+
+    /**
+     * 静态文件服务：
+     *   URI 第一段是 webapp 名（如 demo / agent），后续是子路径。
+     *   依次在 {@link #resolveWebappParentRoots(boolean)} 返回的候选根下
+     *   查找 {@code <candidate>/<webappRoot>/<subPath>}，命中即返回。
+     */
     private boolean serveStaticFile(String uri, HttpServletResponse res) {
         if (uri == null || uri.contains("..") || uri.contains("//")) return false;
         String cleanUri = uri.startsWith("/") ? uri.substring(1) : uri;
@@ -429,19 +440,133 @@ public class DispatcherServlet extends HttpServlet {
         if (firstSlash <= 0) return false;
         String webappRoot = cleanUri.substring(0, firstSlash);
         String subPath = cleanUri.substring(firstSlash + 1);
-        Path base = Paths.get("webapps", webappRoot);
-        Path filePath = base.resolve(subPath).normalize();
-        if (!filePath.startsWith(base)) return false;
-        File file = filePath.toFile();
-        if (!file.exists() || file.isDirectory()) return false;
-        String contentType = getContentType(uri);
-        try (FileInputStream fis = new FileInputStream(file)) {
-            res.sendStatic(fis, contentType, file.length());
-            return true;
-        } catch (Exception e) {
-            log.error("Static file error", e);
+        // 输入防御：webappRoot 不允许含路径分隔符
+        if (webappRoot.contains("\\") || webappRoot.isEmpty()) return false;
+
+        List<Path> parentRoots = resolveWebappParentRoots(false);
+        if (parentRoots.isEmpty()) {
+            log.debug("[static] webapps 候选根为空，uri={}", uri);
             return false;
         }
+
+        for (Path parentRoot : parentRoots) {
+            Path base = parentRoot.resolve(webappRoot).normalize();
+            // 二次防御：确保 base 在 parentRoot 下
+            if (!base.startsWith(parentRoot)) continue;
+            Path filePath = base.resolve(subPath).normalize();
+            if (!filePath.startsWith(base)) continue;
+            File file = filePath.toFile();
+            if (!file.exists() || file.isDirectory()) continue;
+            String contentType = getContentType(uri);
+            try (FileInputStream fis = new FileInputStream(file)) {
+                res.sendStatic(fis, contentType, file.length());
+                log.debug("[static] hit: {}", filePath);
+                return true;
+            } catch (Exception e) {
+                log.error("Static file error: {}", filePath, e);
+            }
+        }
+        log.debug("[static] miss: uri={}, tried roots={}", uri, parentRoots);
+        return false;
+    }
+
+    /**
+     * 解析静态资源 webapps 父目录候选列表。
+     *
+     * <p>来源：</p>
+     * <ol>
+     *   <li>配置 {@code webapps.roots}（逗号分隔），支持 {@code ${user.dir}} 等变量；</li>
+     *   <li>未配置时使用默认候选：{@code user.dir/webapps}、{@code user.dir/omni-bootstrap/webapps}、
+     *       父目录下同名目录；</li>
+     *   <li>jar 位置派生的候选（追加在末尾，仅当 jar 是 fat jar 时有用）。</li>
+     * </ol>
+     *
+     * @param refresh true 强制刷新缓存（用于启动日志打印）
+     */
+    private List<Path> resolveWebappParentRoots(boolean refresh) {
+        long now = System.currentTimeMillis();
+        if (!refresh && cachedWebappParentRoots != null
+                && (now - cachedWebappRootsAt) < WEBAPP_ROOTS_CACHE_MS) {
+            return cachedWebappParentRoots;
+        }
+        synchronized (this) {
+            if (!refresh && cachedWebappParentRoots != null
+                    && (now - cachedWebappRootsAt) < WEBAPP_ROOTS_CACHE_MS) {
+                return cachedWebappParentRoots;
+            }
+            List<Path> roots = new ArrayList<>();
+            try {
+                String cfg = ConfigLoader.getProperty("webapps.roots", "");
+                if (cfg != null && !cfg.trim().isEmpty()) {
+                    for (String s : cfg.split(",")) {
+                        String t = s.trim();
+                        if (t.isEmpty()) continue;
+                        t = expandVars(t);
+                        try {
+                            Path p = Paths.get(t);
+                            if (!p.isAbsolute()) {
+                                p = Paths.get(System.getProperty("user.dir", ".")).resolve(p);
+                            }
+                            addRootDir(roots, p);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                } else {
+                    // 未配置：默认候选
+                    Path userDir = Paths.get(System.getProperty("user.dir", "."))
+                            .toAbsolutePath().normalize();
+                    addRootDir(roots, userDir.resolve("webapps"));
+                    addRootDir(roots, userDir.resolve("omni-bootstrap").resolve("webapps"));
+                    Path parent = userDir.getParent();
+                    if (parent != null) {
+                        addRootDir(roots, parent.resolve("webapps"));
+                        addRootDir(roots, parent.resolve("omni-bootstrap").resolve("webapps"));
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("解析 webapps.roots 失败: {}", e.getMessage());
+            }
+
+            // jar 位置候选（补充，不覆盖）
+            try {
+                URL url = DispatcherServlet.class.getProtectionDomain().getCodeSource().getLocation();
+                if (url != null) {
+                    Path codeSource = Paths.get(url.toURI());
+                    Path jarDir = Files.isDirectory(codeSource) ? codeSource : codeSource.getParent();
+                    if (jarDir != null) {
+                        addRootDir(roots, jarDir.resolve("webapps"));
+                        addRootDir(roots, jarDir.resolve("omni-bootstrap").resolve("webapps"));
+                        Path jarParent = jarDir.getParent();
+                        if (jarParent != null) {
+                            addRootDir(roots, jarParent.resolve("webapps"));
+                            addRootDir(roots, jarParent.resolve("omni-bootstrap").resolve("webapps"));
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+
+            cachedWebappParentRoots = Collections.unmodifiableList(roots);
+            cachedWebappRootsAt = System.currentTimeMillis();
+            return cachedWebappParentRoots;
+        }
+    }
+
+    private void addRootDir(List<Path> list, Path p) {
+        try {
+            Path n = p.toAbsolutePath().normalize();
+            if (Files.isDirectory(n) && !list.contains(n)) {
+                list.add(n);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String expandVars(String s) {
+        if (s == null) return null;
+        return s.replace("${user.dir}", System.getProperty("user.dir", "."))
+                .replace("${user.home}", System.getProperty("user.home", "."))
+                .replace("${java.io.tmpdir}", System.getProperty("java.io.tmpdir", "."));
     }
 
     private String getContentType(String uri) {
@@ -451,6 +576,11 @@ public class DispatcherServlet extends HttpServlet {
         if (uri.endsWith(".json")) return "application/json; charset=utf-8";
         if (uri.endsWith(".png")) return "image/png";
         if (uri.endsWith(".jpg") || uri.endsWith(".jpeg")) return "image/jpeg";
+        if (uri.endsWith(".svg")) return "image/svg+xml";
+        if (uri.endsWith(".ico")) return "image/x-icon";
+        if (uri.endsWith(".woff")) return "font/woff";
+        if (uri.endsWith(".woff2")) return "font/woff2";
+        if (uri.endsWith(".ttf")) return "font/ttf";
         return "application/octet-stream";
     }
 }

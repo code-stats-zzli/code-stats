@@ -38,12 +38,37 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+/**
+ * 代码分析业务服务。
+ *
+ * <p>本次修复：</p>
+ * <ul>
+ *   <li>rootDir 支持"包装目录自动下探"（默认 {@code omni-bootstrap}），
+ *       解决项目多一层目录后，模块识别错乱、合并文件 header 多一层前缀的问题。</li>
+ *   <li>下探层数、包装目录名可通过配置项调整。</li>
+ *   <li>合并文件相对路径基准 = effectiveRoot（下探后的项目根），
+ *       使合并文件可被「代码导入」还原。</li>
+ * </ul>
+ *
+ * <p>配置项（application.properties）：</p>
+ * <pre>
+ *   # 代码分析：需要自动下探的包装目录名（逗号分隔，大小写敏感）
+ *   # 仅当 rootDir 下只有 1 个非 skip 子目录、且该目录名在此列表中时才会下探
+ *   code.analysis.wrapper-dirs=omni-bootstrap
+ *
+ *   # 最多下探层数（防止误伤嵌套结构）
+ *   code.analysis.wrapper-max-depth=3
+ * </pre>
+ */
 @Service
 public class CodeAnalysisService {
     private static final Logger log = LoggerFactory.getLogger(CodeAnalysisService.class);
 
     private final Cache<String, DependencyResult> dependencyCache = CacheFactory.createDefaultCache();
 
+    /**
+     * ★ 产出文件注册表：analyze 生成的合并文件自动加入，download 时命中即放行。
+     */
     private static final Set<String> DOWNLOADABLE_PATHS = ConcurrentHashMap.newKeySet();
     private static final int DOWNLOADABLE_CAP = 1000;
 
@@ -53,17 +78,135 @@ public class CodeAnalysisService {
             "__pycache__", ".venv", "venv", ".pytest_cache", ".next", ".nuxt"
     ));
 
+    /** ★ 根目录直属文件的特殊 module 名 */
     private static final String ROOT_FILES_MODULE = "(根目录文件)";
 
+    /** ★ 注册可下载文件（由 analyze 生成合并文件后调用） */
     public static void registerDownloadable(Path file) {
         if (file == null) return;
         if (DOWNLOADABLE_PATHS.size() >= DOWNLOADABLE_CAP) DOWNLOADABLE_PATHS.clear();
         DOWNLOADABLE_PATHS.add(file.toAbsolutePath().normalize().toString());
     }
 
+    /** ★ 判断文件是否在注册表中 */
     public static boolean isDownloadable(Path file) {
         if (file == null) return false;
         return DOWNLOADABLE_PATHS.contains(file.toAbsolutePath().normalize().toString());
+    }
+
+    // ==================== ★ 包装目录自动下探（配置驱动） ====================
+
+    /**
+     * 加载需要自动下探的包装目录白名单。
+     * 配置项：{@code code.analysis.wrapper-dirs}（逗号分隔），默认 {@code omni-bootstrap}。
+     */
+    private Set<String> loadWrapperDirs() {
+        String cfg = null;
+        try {
+            cfg = ConfigLoader.getProperty("code.analysis.wrapper-dirs", "omni-bootstrap");
+        } catch (Throwable t) {
+            cfg = "omni-bootstrap";
+        }
+        Set<String> set = new LinkedHashSet<>();
+        if (cfg != null) {
+            for (String s : cfg.split(",")) {
+                String t = s.trim();
+                if (!t.isEmpty()) set.add(t);
+            }
+        }
+        if (set.isEmpty()) set.add("omni-bootstrap");
+        return set;
+    }
+
+    /**
+     * 解析有效项目根：按 {@code code.analysis.wrapper-dirs} 白名单循环下探，
+     * 最多 {@code code.analysis.wrapper-max-depth} 层。
+     *
+     * <p>每层下探条件（全部满足）：</p>
+     * <ol>
+     *   <li>当前目录下恰有 1 个非 skip 子目录 A</li>
+     *   <li>A 的名字在 {@code code.analysis.wrapper-dirs} 白名单中</li>
+     *   <li>A 自身含 {@code pom.xml} 或 {@code src}</li>
+     *   <li>A 下含 ≥1 个"类模块"子目录（其下有 {@code pom.xml} 或 {@code src}）</li>
+     *   <li>当前目录自身<b>没有</b> {@code src}</li>
+     * </ol>
+     *
+     * <p>传统多模块项目（rootDir 下 ≥2 个模块子目录，或子目录名不在白名单）不会下探，行为不变。</p>
+     */
+    private Path resolveEffectiveRoot(Path rootDir) {
+        if (rootDir == null) return null;
+        Path current = rootDir.toAbsolutePath().normalize();
+        if (!Files.isDirectory(current)) return current;
+
+        Set<String> wrapperNames = loadWrapperDirs();
+        int maxDepth;
+        try {
+            String d = ConfigLoader.getProperty("code.analysis.wrapper-max-depth", "3");
+            maxDepth = Integer.parseInt(d.trim());
+        } catch (Throwable t) {
+            maxDepth = 3;
+        }
+        if (maxDepth < 0) maxDepth = 0;
+
+        for (int depth = 0; depth < maxDepth; depth++) {
+            Path next = tryDescend(current, wrapperNames);
+            if (next == null) break;
+            log.info("[CodeAnalysis] 自动下探包装目录: {} → {}", current, next);
+            current = next;
+        }
+        return current;
+    }
+
+    /**
+     * 尝试下探一层。返回 null 表示不下探。
+     */
+    private Path tryDescend(Path current, Set<String> wrapperNames) {
+        // 自身已有 src → 已经是项目根，不再下探
+        if (Files.exists(current.resolve("src"))) return null;
+
+        // 收集非 skip 子目录
+        List<Path> subDirs = new ArrayList<>();
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(current)) {
+            for (Path p : ds) {
+                if (!Files.isDirectory(p)) continue;
+                String name = p.getFileName() == null ? "" : p.getFileName().toString();
+                if (name.startsWith(".") || EXTRA_SKIP_DIRS.contains(name)) continue;
+                subDirs.add(p);
+            }
+        } catch (Exception e) {
+            return null;
+        }
+
+        // 必须恰好 1 个
+        if (subDirs.size() != 1) return null;
+
+        Path only = subDirs.get(0);
+        String onlyName = only.getFileName() == null ? "" : only.getFileName().toString();
+
+        // ★ 名字必须在白名单中（避免把只有 1 个子目录的普通项目误判为包装目录）
+        if (!wrapperNames.contains(onlyName)) return null;
+
+        // 该子目录必须看起来像项目
+        boolean looksLikeProject = Files.exists(only.resolve("pom.xml"))
+                || Files.exists(only.resolve("src"));
+        if (!looksLikeProject) return null;
+
+        // 该子目录下必须有 ≥1 个类模块子目录
+        int moduleLikeCount = 0;
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(only)) {
+            for (Path p : ds) {
+                if (!Files.isDirectory(p)) continue;
+                String n = p.getFileName() == null ? "" : p.getFileName().toString();
+                if (n.startsWith(".") || EXTRA_SKIP_DIRS.contains(n)) continue;
+                if (Files.exists(p.resolve("pom.xml")) || Files.exists(p.resolve("src"))) {
+                    moduleLikeCount++;
+                }
+            }
+        } catch (Exception e) {
+            return null;
+        }
+
+        return moduleLikeCount >= 1 ? only : null;
     }
 
     // ==================== 代码统计 ====================
@@ -92,12 +235,13 @@ public class CodeAnalysisService {
         return JsonUtil.toJson(getDefaultConfig());
     }
 
-    // ==================== 模块列表（保持原有逻辑） ====================
+    // ==================== 模块列表（基于 effectiveRoot） ====================
 
     public List<Map<String, Object>> getModules(Map<String, String> params) {
         try {
             Config config = buildConfig(params);
-            Path rootDir = config.getRootDir().toAbsolutePath().normalize();
+            // ★ 用 effectiveRoot（自动下探包装目录）
+            Path rootDir = resolveEffectiveRoot(config.getRootDir());
             if (!Files.isDirectory(rootDir)) return new ArrayList<>();
 
             List<String> extensions = config.getExtensions();
@@ -205,20 +349,23 @@ public class CodeAnalysisService {
         return new int[]{count[0], (int) Math.min(bytes[0], Integer.MAX_VALUE)};
     }
 
-    // ==================== ★ analyze() 已修复：传 rootDir 给 MergeFilesStage ====================
+    // ==================== ★ analyze：用 effectiveRoot ====================
 
     public String analyze(Map<String, String> params) {
         try {
             Config config = buildConfig(params);
+            // ★ 用 effectiveRoot（自动下探包装目录）
+            Path effectiveRoot = resolveEffectiveRoot(config.getRootDir());
             long startTime = System.currentTimeMillis();
 
-            CompositeFilter filterChain = buildFilterChain(config);
-            List<Path> files = new CollectStage(filterChain).process(config.getRootDir());
+            CompositeFilter filterChain = buildFilterChain(config, effectiveRoot);
+            List<Path> files = new CollectStage(filterChain).process(effectiveRoot);
             files = appendExtraFiles(files, params.get("extraPaths"));
 
+            // modules 过滤
             String modulesParam = params.get("modules");
             if (modulesParam != null && !modulesParam.trim().isEmpty()) {
-                files = filterByModules(files, modulesParam, config.getRootDir());
+                files = filterByModules(files, modulesParam, effectiveRoot);
             }
 
             ParallelAnalyzeStage analyzeStage = new ParallelAnalyzeStage(
@@ -243,30 +390,25 @@ public class CodeAnalysisService {
             if (mergeEnabled && mergeOutputFile != null && !mergeOutputFile.isEmpty()) {
                 try {
                     Path mergePath = Paths.get(mergeOutputFile).toAbsolutePath().normalize();
-                    // ★ 关键修复：把 rootDir / extraPathDirs 传给 MergeFilesStage，
-                    //   使其写入相对路径，从而可被「代码导入」还原
+                    // ★ 用 effectiveRoot 作为相对路径基准
                     List<Path> extraDirs = collectExtraDirs(params.get("extraPaths"));
-                    new MergeFilesStage(config.getRootDir(), extraDirs, mergePath).process(files);
+                    new MergeFilesStage(effectiveRoot, extraDirs, mergePath).process(files);
                     registerDownloadable(mergePath);
                     mergeOutputFile = mergePath.toString();
-                    log.info("合并文件已生成（相对路径模式）: {}", mergeOutputFile);
+                    log.info("合并文件已生成（相对路径基准: {}）: {}", effectiveRoot, mergeOutputFile);
                 } catch (Exception e) {
                     log.error("合并文件失败: {}", mergeOutputFile, e);
                     mergeOutputFile = null;
                 }
             }
 
-            return buildResponseJson(fileInfos, result, mergeEnabled, mergeOutputFile);
+            return buildResponseJson(fileInfos, result, effectiveRoot, mergeEnabled, mergeOutputFile);
         } catch (Exception e) {
             log.error("代码分析失败", e);
             return errorJson(e);
         }
     }
 
-    /**
-     * ★ 新增：把 extraPaths 中的「目录」收集起来，用于合并文件相对路径计算。
-     * 单文件 extraPath 不纳入 base（会用文件名兜底，保证可导入）。
-     */
     private List<Path> collectExtraDirs(String extraPathsStr) {
         List<Path> dirs = new ArrayList<>();
         if (extraPathsStr == null || extraPathsStr.trim().isEmpty()) return dirs;
@@ -318,7 +460,7 @@ public class CodeAnalysisService {
                 .collect(Collectors.toList());
     }
 
-    // ==================== 依赖分析（保持原有逻辑） ====================
+    // ==================== 依赖分析（用 effectiveRoot） ====================
 
     private String generateDependencyCacheKey(Map<String, String> params) {
         StringBuilder sb = new StringBuilder();
@@ -364,9 +506,10 @@ public class CodeAnalysisService {
 
     private DependencyResult doAnalyzeDependencies(Map<String, String> params) throws Exception {
         Config config = buildConfigForDependency(params);
-        CompositeFilter filterChain = buildFilterChain(config);
+        Path effectiveRoot = resolveEffectiveRoot(config.getRootDir());
+        CompositeFilter filterChain = buildFilterChain(config, effectiveRoot);
 
-        List<Path> files = new CollectStage(filterChain).process(config.getRootDir());
+        List<Path> files = new CollectStage(filterChain).process(effectiveRoot);
         files = appendExtraFiles(files, params.get("extraPaths"));
 
         if (files.isEmpty()) {
@@ -378,6 +521,13 @@ public class CodeAnalysisService {
     }
 
     private CompositeFilter buildFilterChain(Config config) {
+        return buildFilterChain(config, config.getRootDir());
+    }
+
+    /**
+     * 用 effectiveRoot 覆盖 GitIgnoreFilter 的基准目录。
+     */
+    private CompositeFilter buildFilterChain(Config config, Path effectiveRoot) {
         CompositeFilter filterChain = new CompositeFilter();
         if (config.getExtensions() != null && !config.getExtensions().isEmpty()) {
             filterChain.add(new ExtensionFilter(config.getExtensions()));
@@ -386,7 +536,8 @@ public class CodeAnalysisService {
             filterChain.add(new ExcludePathFilter(config.getExcludePaths()));
         }
         if (config.isUseGitIgnore()) {
-            filterChain.add(new GitIgnoreFilter(config.getRootDir()));
+            Path gitBase = effectiveRoot != null ? effectiveRoot : config.getRootDir();
+            filterChain.add(new GitIgnoreFilter(gitBase));
         }
         return filterChain;
     }
@@ -424,7 +575,7 @@ public class CodeAnalysisService {
         return new ArrayList<>(merged);
     }
 
-    // ==================== 响应序列化（保持原有逻辑） ====================
+    // ==================== 响应序列化 ====================
 
     private String buildDependencyResponseJson(DependencyResult result, long elapsedMs) {
         Map<String, Object> response = new LinkedHashMap<>();
@@ -461,7 +612,7 @@ public class CodeAnalysisService {
     }
 
     private String buildResponseJson(List<FileInfo> fileInfos, StatisticsResult result,
-                                     boolean mergeEnabled, String mergeOutputFile) {
+                                     Path effectiveRoot, boolean mergeEnabled, String mergeOutputFile) {
         Map<String, Object> response = new LinkedHashMap<>();
         List<Map<String, Object>> fileList = fileInfos.stream().map(info -> {
             Map<String, Object> fileMap = new LinkedHashMap<>();
@@ -499,6 +650,10 @@ public class CodeAnalysisService {
         if (mergeEnabled && mergeOutputFile != null && !mergeOutputFile.isEmpty()) {
             response.put("mergeOutput", mergeOutputFile);
         }
+        // ★ 返回 effectiveRoot，供前端提示用户"导入 targetRoot 应该是这个"
+        if (effectiveRoot != null) {
+            response.put("effectiveRoot", effectiveRoot.toString());
+        }
         return JsonUtil.toJson(response);
     }
 
@@ -511,7 +666,7 @@ public class CodeAnalysisService {
         return JsonUtil.toJson(err);
     }
 
-    // ==================== 外部查询接口（保持原有逻辑） ====================
+    // ==================== 外部查询接口 ====================
 
     public DependencyResult getDependencyResult(Map<String, String> params) throws Exception {
         String cacheKey = generateDependencyCacheKey(params);
@@ -565,7 +720,7 @@ public class CodeAnalysisService {
         return graphData;
     }
 
-    // ==================== 配置构建（保持原有逻辑） ====================
+    // ==================== 配置构建 ====================
 
     private Config buildConfig(Map<String, String> params) {
         Config.Builder builder = new Config.Builder();

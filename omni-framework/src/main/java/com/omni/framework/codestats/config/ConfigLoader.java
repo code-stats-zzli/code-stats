@@ -15,6 +15,25 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * CodeStats 专用配置加载器。
+ *
+ * <p>原有职责：加载 {@code config.yaml}（线程、扩展名、排序、GitIgnore 等代码分析配置），
+ * 通过 {@link #load(String[])} 返回 {@link Config} 对象，通过 {@link #getModuleConfig(String)}
+ * 按模块读取嵌套配置。</p>
+ *
+ * <p><b>本次新增：</b></p>
+ * <ul>
+ *   <li>{@link #getProperty(String)} / {@link #getProperty(String, String)}：
+ *       直接转发到 {@code com.omni.framework.spring.config.ConfigLoader}（全局 spring 配置，
+ *       即 {@code application.properties} + {@code system-params.json}）。</li>
+ *   <li>目的：让 codestats 子模块（如 {@code CodeAnalysisService}）不用为了读全局配置
+ *       而再 import 一个同名类，避免 {@code com.omni.framework.spring.config.ConfigLoader}
+ *       与 {@code com.omni.framework.codestats.config.ConfigLoader} 混淆。</li>
+ *   <li>两者职责不冲突：本类依然是 yaml 加载器；转发方法仅用于读取全局 properties 项，
+ *       如 {@code code.analysis.wrapper-dirs} 这类代码分析相关配置。</li>
+ * </ul>
+ */
 public class ConfigLoader {
     private static final Logger log = LoggerFactory.getLogger(ConfigLoader.class);
 
@@ -30,6 +49,31 @@ public class ConfigLoader {
             yamlRootMap = new HashMap<>();
         }
     }
+
+    // ==================== 新增：转发到 spring 全局配置 ====================
+
+    /**
+     * 读取全局配置项（application.properties + system-params.json）。
+     * 直接转发到 {@code com.omni.framework.spring.config.ConfigLoader}。
+     *
+     * @return 配置值，不存在返回 {@code null}
+     */
+    public static String getProperty(String key) {
+        return com.omni.framework.spring.config.ConfigLoader.getProperty(key);
+    }
+
+    /**
+     * 读取全局配置项，不存在时返回默认值。
+     *
+     * @param key          配置键
+     * @param defaultValue 默认值（可为 null）
+     * @return 配置值
+     */
+    public static String getProperty(String key, String defaultValue) {
+        return com.omni.framework.spring.config.ConfigLoader.getProperty(key, defaultValue);
+    }
+
+    // ==================== 原有：yaml 加载 / 解析 ====================
 
     public static Config load(String[] args) {
         Config.Builder builder = new Config.Builder();

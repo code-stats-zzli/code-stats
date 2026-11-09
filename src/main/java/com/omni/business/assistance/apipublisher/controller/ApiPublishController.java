@@ -2,11 +2,7 @@ package com.omni.business.assistance.apipublisher.controller;
 
 import com.omni.business.assistance.apipublisher.model.ApiDefinition;
 import com.omni.business.assistance.apipublisher.service.ApiPublishService;
-import com.omni.framework.spring.annotation.Autowired;
-import com.omni.framework.spring.annotation.Controller;
-import com.omni.framework.spring.annotation.RequestBody;
-import com.omni.framework.spring.annotation.RequestMapping;
-import com.omni.framework.spring.annotation.ResponseBody;
+import com.omni.framework.spring.annotation.*;
 import com.omni.framework.util.JsonUtil;
 
 import java.util.HashMap;
@@ -37,7 +33,7 @@ public class ApiPublishController {
 
     @RequestMapping("/get")
     @ResponseBody
-    public String get(String id) {
+    public String get(@RequestParam("id") String id) {
         try {
             ApiDefinition def = service.getById(id);
             Map<String, Object> out = new LinkedHashMap<>();

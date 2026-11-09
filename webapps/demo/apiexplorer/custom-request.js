@@ -202,6 +202,10 @@
     }
     if (sendCustomBtn) sendCustomBtn.addEventListener('click', sendCustomRequest);
 
+    /* ================================================================
+     * ============= 发布 API（发布表单） =============================
+     * ================================================================ */
+
     const pubName          = document.getElementById('pubName');
     const pubPath          = document.getElementById('pubPath');
     const pubMethod        = document.getElementById('pubMethod');
@@ -444,6 +448,10 @@
     }
     resetPublishBtn.addEventListener('click', resetPublishForm);
 
+    /* ================================================================
+     * ============= 已发布 API 列表 ==================================
+     * ================================================================ */
+
     const publishedApiList = document.getElementById('publishedApiList');
     const refreshPublishedBtn = document.getElementById('refreshPublishedBtn');
 
@@ -499,27 +507,11 @@
 
     async function handlePublishedAction(act, id) {
         if (act === 'test') {
-            const paramsStr = prompt('输入 JSON 参数（可留空）：', '{\n  "page": 1,\n  "pageSize": 20\n}');
-            if (paramsStr === null) return;
-            let params = {};
-            if (paramsStr.trim()) {
-                try { params = JSON.parse(paramsStr); }
-                catch (e) { alert('JSON 格式错误：' + e.message); return; }
-            }
-            try {
-                const resp = await fetch(window.apiUrl('/api/gateway/execute'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-                    body: JSON.stringify({ apiId: id, params: params })
-                });
-                const text = await resp.text();
-                let pretty = text;
-                try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
-                alert('测试结果：\n\n' + pretty);
-            } catch (e) {
-                alert('请求异常：' + e.message);
-            }
-        } else if (act === 'edit') {
+            openTestModal(id);
+            return;
+        }
+
+        if (act === 'edit') {
             await editPublishedApi(id);
         } else if (act === 'toggle') {
             try {
@@ -536,7 +528,7 @@
             } catch (e) { alert('请求异常：' + e.message); }
         } else if (act === 'copy') {
             const example =
-`POST ${window.apiUrl('/api/gateway/execute')}
+                `POST ${window.apiUrl('/api/gateway/execute')}
 Content-Type: application/json
 
 {
@@ -628,6 +620,273 @@ Content-Type: application/json
     }
 
     refreshPublishedBtn.addEventListener('click', loadPublishedApis);
+
+    /* ================================================================
+     * ============= ★ 新增：API 测试弹窗 ==============================
+     * ================================================================ */
+
+    let currentTestApiId = null;
+
+    function safeId(s) {
+        return String(s || '').replace(/[^A-Za-z0-9_]/g, '_');
+    }
+
+    /**
+     * 打开测试弹窗。
+     * - 拉取 API 详情（含 inputs / outputs）
+     * - 根据 inputs 渲染表单（必填打 *）
+     * - 结果区域清空
+     */
+    async function openTestModal(id) {
+        currentTestApiId = id;
+
+        const modal        = document.getElementById('apiTestModal');
+        const title        = document.getElementById('apiTestModalTitle');
+        const meta         = document.getElementById('apiTestMeta');
+        const form         = document.getElementById('apiTestForm');
+        const resultWrap   = document.getElementById('apiTestResultWrap');
+        const resultContent= document.getElementById('apiTestResultContent');
+        const resultStatus = document.getElementById('apiTestResultStatus');
+        const invokeBtn    = document.getElementById('apiTestInvokeBtn');
+
+        if (!modal) {
+            alert('测试弹窗未找到，请确认 index.html 中已包含 #apiTestModal');
+            return;
+        }
+
+        form.innerHTML = '<div class="empty-tip">加载中...</div>';
+        meta.innerHTML = '';
+        resultWrap.style.display = 'none';
+        resultContent.textContent = '';
+        resultStatus.textContent = '';
+        resultStatus.className = 'api-test-result-status';
+        invokeBtn.disabled = true;
+        invokeBtn.textContent = '🚀 调用';
+        modal.style.display = 'flex';
+
+        try {
+            const r = await (await fetch(window.apiUrl('/api/publish/api/get?id=' + encodeURIComponent(id)))).json();
+            if (!r.success) throw new Error(r.error || '加载失败');
+            const def = r.data || {};
+
+            title.textContent = `⚡ 测试 API：${def.name || def.path || ''}`;
+
+            const inputs = def.inputs || [];
+            const outputs = def.outputs || [];
+
+            meta.innerHTML = `
+                <div><b>方法：</b>${escapeHtml(def.method || 'POST')}
+                     &nbsp;·&nbsp;<b>路径：</b>${escapeHtml(def.path || '')}</div>
+                <div><b>数据源：</b>${escapeHtml(def.datasourceId || '-')}
+                     &nbsp;·&nbsp;<b>库：</b>${escapeHtml(def.database || '-')}
+                     &nbsp;·&nbsp;<b>表：</b>${escapeHtml(def.table || '-')}</div>
+                <div><b>入参：</b>${inputs.length} 个
+                     &nbsp;·&nbsp;<b>出参：</b>${outputs.length} 个</div>
+            `;
+
+            if (!inputs.length) {
+                form.innerHTML = '<div class="empty-tip">该 API 没有入参，直接点击下方「调用」即可</div>';
+            } else {
+                form.innerHTML = inputs.map((p, idx) => renderTestField(p, idx)).join('');
+                // 自动填充默认值
+                inputs.forEach((p, idx) => {
+                    const el = document.getElementById('apiTestField_' + idx);
+                    if (!el) return;
+                    if (el.type === 'checkbox') {
+                        const isTrue = (p.defaultValue === 'true' || p.defaultValue === '1');
+                        el.checked = isTrue;
+                    } else if (p.defaultValue != null && p.defaultValue !== '') {
+                        el.value = p.defaultValue;
+                    }
+                });
+            }
+
+            invokeBtn.disabled = false;
+        } catch (e) {
+            form.innerHTML = `<div style="color:#dc2626;padding:12px;">❌ ${escapeHtml(e.message)}</div>`;
+            meta.innerHTML = '';
+        }
+    }
+
+    function renderTestField(p, idx) {
+        const fieldId = 'apiTestField_' + idx;
+        const name = p.name || '';
+        const type = (p.type || 'string').toLowerCase();
+        const required = !!p.required;
+        const inLoc = p.in || 'query';
+        const requiredMark = required ? '<span class="required-mark">*</span>' : '';
+        const typeBadge = `<span class="field-type-badge">${escapeHtml(type)}</span>`;
+        const inBadge   = `<span class="field-in-badge">${escapeHtml(inLoc)}</span>`;
+        const hint = p.description
+            ? `<div class="api-test-field-hint">${escapeHtml(p.description)}</div>`
+            : '';
+
+        let inputHtml;
+        if (type === 'boolean') {
+            inputHtml = `
+                <div class="api-test-checkbox-wrap">
+                    <input type="checkbox" id="${fieldId}"
+                           data-name="${escapeAttr(name)}"
+                           data-type="boolean">
+                    <label for="${fieldId}" style="font-size:12px;color:var(--text-muted);cursor:pointer;">
+                        勾选为 true
+                    </label>
+                </div>`;
+        } else if (type === 'number' || type === 'integer') {
+            inputHtml = `<input type="number" class="api-test-input" id="${fieldId}"
+                               data-name="${escapeAttr(name)}"
+                               data-type="${escapeAttr(type)}"
+                               data-required="${required ? '1' : '0'}"
+                               placeholder="${escapeAttr(p.defaultValue || '')}">`;
+        } else {
+            inputHtml = `<input type="text" class="api-test-input" id="${fieldId}"
+                               data-name="${escapeAttr(name)}"
+                               data-type="string"
+                               data-required="${required ? '1' : '0'}"
+                               placeholder="${escapeAttr(p.defaultValue || '')}">`;
+        }
+
+        return `
+            <div class="api-test-field" data-field="${escapeAttr(name)}">
+                <div class="api-test-field-label">
+                    ${requiredMark}
+                    <span>${escapeHtml(name)}</span>
+                    ${typeBadge}
+                    ${inBadge}
+                </div>
+                ${inputHtml}
+                ${hint}
+            </div>
+        `;
+    }
+
+    /**
+     * 收集弹窗表单参数。
+     * 返回 { params, missing }：
+     * - params: 有效值对象（空值、非必填的会被忽略）
+     * - missing: 必填但未填/格式错误的参数名列表
+     */
+    function collectTestParams() {
+        const form = document.getElementById('apiTestForm');
+        if (!form) return { params: {}, missing: [] };
+
+        const params = {};
+        const missing = [];
+
+        form.querySelectorAll('[data-name]').forEach(el => {
+            const name = el.dataset.name;
+            const type = (el.dataset.type || 'string').toLowerCase();
+            const required = el.dataset.required === '1';
+
+            // checkbox 永远有效
+            if (el.type === 'checkbox') {
+                params[name] = el.checked;
+                return;
+            }
+
+            const raw = el.value;
+            const isEmpty = (raw == null || raw === '');
+
+            if (isEmpty) {
+                el.classList.add('error');
+                if (required) missing.push(name);
+                return;
+            }
+            el.classList.remove('error');
+
+            if (type === 'number' || type === 'integer') {
+                const n = Number(raw);
+                if (Number.isNaN(n)) {
+                    el.classList.add('error');
+                    if (required) missing.push(name + '（非数字）');
+                    return;
+                }
+                params[name] = n;
+            } else {
+                params[name] = raw;
+            }
+        });
+
+        return { params, missing };
+    }
+
+    async function invokeTestApi() {
+        if (!currentTestApiId) return;
+
+        const invokeBtn    = document.getElementById('apiTestInvokeBtn');
+        const resultWrap   = document.getElementById('apiTestResultWrap');
+        const resultContent= document.getElementById('apiTestResultContent');
+        const resultStatus = document.getElementById('apiTestResultStatus');
+
+        const { params, missing } = collectTestParams();
+        if (missing.length) {
+            resultWrap.style.display = 'block';
+            resultStatus.textContent = '⚠ 参数校验未通过';
+            resultStatus.className = 'api-test-result-status err';
+            resultContent.textContent = '以下必填参数未填写或格式错误：\n  • ' + missing.join('\n  • ');
+            return;
+        }
+
+        invokeBtn.disabled = true;
+        invokeBtn.textContent = '⏳ 调用中...';
+        resultWrap.style.display = 'block';
+        resultStatus.textContent = '调用中...';
+        resultStatus.className = 'api-test-result-status';
+        resultContent.textContent = '请求发送中，请稍候...';
+
+        const t0 = Date.now();
+        try {
+            const resp = await fetch(window.apiUrl('/api/gateway/execute'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+                body: JSON.stringify({ apiId: currentTestApiId, params })
+            });
+            const text = await resp.text();
+            let pretty = text;
+            try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+
+            const elapsed = Date.now() - t0;
+            resultStatus.textContent = `HTTP ${resp.status} · ${elapsed} ms`;
+            resultStatus.className = 'api-test-result-status ' + (resp.ok ? 'ok' : 'err');
+            resultContent.textContent = pretty || '(空响应)';
+        } catch (e) {
+            resultStatus.textContent = '请求异常';
+            resultStatus.className = 'api-test-result-status err';
+            resultContent.textContent = e.message || String(e);
+        } finally {
+            invokeBtn.disabled = false;
+            invokeBtn.textContent = '🚀 调用';
+        }
+    }
+
+    function closeTestModal() {
+        const modal = document.getElementById('apiTestModal');
+        if (modal) modal.style.display = 'none';
+        currentTestApiId = null;
+    }
+
+    /* ============ 弹窗事件绑定 ============ */
+    document.getElementById('apiTestModalClose')
+        ?.addEventListener('click', closeTestModal);
+    document.getElementById('apiTestCancelBtn')
+        ?.addEventListener('click', closeTestModal);
+    document.getElementById('apiTestInvokeBtn')
+        ?.addEventListener('click', invokeTestApi);
+    document.getElementById('apiTestModal')
+        ?.addEventListener('click', (e) => {
+            if (e.target && e.target.id === 'apiTestModal') closeTestModal();
+        });
+    // 支持 ESC 关闭
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('apiTestModal');
+            if (modal && modal.style.display === 'flex') closeTestModal();
+        }
+    });
+
+    /* ================================================================
+     * ============= 初始化 ===========================================
+     * ================================================================ */
 
     addInputRow('', 'string', 'query', false, '', '');
     ensureDataSourcesLoaded();

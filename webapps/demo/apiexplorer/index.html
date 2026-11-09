@@ -187,6 +187,34 @@
         </div>
     </main>
 </div>
+
+<!-- ============ ★ 新增：API 测试弹窗 ============ -->
+<div id="apiTestModal" class="api-test-modal" style="display:none;">
+    <div class="api-test-modal-content">
+        <div class="api-test-modal-header">
+            <span id="apiTestModalTitle">⚡ 测试 API</span>
+            <span class="api-test-modal-close" id="apiTestModalClose">×</span>
+        </div>
+        <div class="api-test-modal-body">
+            <div id="apiTestMeta" class="api-test-meta"></div>
+            <div id="apiTestForm" class="api-test-form">
+                <div class="empty-tip">加载中...</div>
+            </div>
+            <div id="apiTestResultWrap" class="api-test-result-wrap" style="display:none;">
+                <div class="api-test-result-header">
+                    <span>📤 调用结果</span>
+                    <span id="apiTestResultStatus" class="api-test-result-status"></span>
+                </div>
+                <pre id="apiTestResultContent" class="api-test-result-content"></pre>
+            </div>
+        </div>
+        <div class="api-test-modal-footer">
+            <button id="apiTestInvokeBtn" class="send-btn" disabled>🚀 调用</button>
+            <button id="apiTestCancelBtn" class="btn-secondary">关闭</button>
+        </div>
+    </div>
+</div>
+
 <script src="apiexplorer.js"></script>
 <script src="custom-request.js"></script>
 </body>

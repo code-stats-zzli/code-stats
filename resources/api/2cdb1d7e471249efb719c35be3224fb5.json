@@ -1,0 +1,43 @@
+{
+  "id" : "2cdb1d7e471249efb719c35be3224fb5",
+  "name" : "查询用户列表",
+  "description" : "",
+  "path" : "/custom/api/user/list",
+  "method" : "POST",
+  "sourceType" : "table",
+  "datasourceId" : "7935db2b54e111f1bdc120c19b3da5e4",
+  "database" : "demo",
+  "table" : "user",
+  "backendUrl" : null,
+  "inputs" : [ ],
+  "outputs" : [ {
+    "name" : "id",
+    "type" : "string",
+    "in" : "query",
+    "required" : false,
+    "defaultValue" : null,
+    "description" : null,
+    "mapTo" : "id"
+  }, {
+    "name" : "name",
+    "type" : "string",
+    "in" : "query",
+    "required" : false,
+    "defaultValue" : null,
+    "description" : null,
+    "mapTo" : "name"
+  }, {
+    "name" : "age",
+    "type" : "string",
+    "in" : "query",
+    "required" : false,
+    "defaultValue" : null,
+    "description" : null,
+    "mapTo" : "age"
+  } ],
+  "pageEnabled" : 1,
+  "pageSize" : 20,
+  "status" : 1,
+  "createTime" : "2026-11-09 17:10:27",
+  "updateTime" : "2026-11-09 17:10:27"
+}

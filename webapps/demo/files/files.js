@@ -3,7 +3,6 @@
 
     const API_BASE = window.apiUrl ? window.apiUrl('/files/api') : '/files/api';
 
-    // ==================== 常量 ====================
     const ALLOWED_DB_TYPES = ['mysql', 'oracle', 'sqlserver', 'postgresql'];
     const DB_TYPE_LABELS = {
         mysql: 'MySQL',
@@ -19,18 +18,16 @@
         sql: '🗃️',
         attachments: '📎',
         drivers: '🔌',
-        // ★ 新增：项目部署
         deploy: '🚀',
+        api: '📡',
         others: '📦'
     };
     function getTypeIcon(type) { return TYPE_ICONS[type] || '📦'; }
 
-    // ==================== 状态 ====================
     let currentType = 'images';
     let currentSubPath = '';
     let resourceTypes = {};
 
-    // ==================== DOM 引用 ====================
     const resourceTypeList    = document.getElementById('resourceTypeList');
     const resourceTitle       = document.getElementById('resourceTitle');
     const breadcrumb          = document.getElementById('breadcrumb');
@@ -40,7 +37,6 @@
     const newSubDirBtn        = document.getElementById('newSubDirBtn');
     const resourceFileInput   = document.getElementById('resourceFileInput');
 
-    // 驱动弹窗
     const driverUploadModal       = document.getElementById('driverUploadModal');
     const closeDriverUploadModal  = document.getElementById('closeDriverUploadModal');
     const driverJarFile           = document.getElementById('driverJarFile');
@@ -58,7 +54,6 @@
         driverUploadDbType && driverUploadVersion && driverUploadConfirmBtn
     );
 
-    // ==================== 工具 ====================
     function escapeHtml(str) {
         if (str == null) return '';
         return String(str).replace(/[&<>"]/g, m => ({
@@ -91,7 +86,6 @@
         return m ? m[1] : null;
     }
 
-    // ==================== 加载类型列表 ====================
     async function loadResourceTypes() {
         if (!resourceTypeList) {
             console.warn('[files.js] #resourceTypeList 不存在');
@@ -153,7 +147,6 @@
         refreshList();
     }
 
-    // ==================== 面包屑 ====================
     function renderBreadcrumb() {
         if (!breadcrumb) return;
         const typeLabel = resourceTypes[currentType] || currentType;
@@ -173,7 +166,6 @@
         });
     }
 
-    // ==================== 列表 ====================
     async function refreshList() {
         if (!resourceListPanel) return;
         renderBreadcrumb();
@@ -219,8 +211,9 @@
             } else if (currentType === 'drivers') {
                 thumbHtml = `<div class="res-thumb-fallback" style="color:#7c3aed;">🔌</div>`;
             } else if (currentType === 'deploy') {
-                // ★ 新增：项目部署专用缩略图
                 thumbHtml = `<div class="res-thumb-fallback" style="color:#ef4444;font-size:36px;">🚀</div>`;
+            } else if (currentType === 'api') {
+                thumbHtml = `<div class="res-thumb-fallback" style="color:#7c3aed;font-size:36px;">📡</div>`;
             } else {
                 thumbHtml = `<div class="res-thumb-fallback">${getTypeIcon(currentType)}</div>`;
             }
@@ -233,6 +226,8 @@
                     + `${formatSize(item.size)}`;
             } else if (currentType === 'deploy' && !isDir) {
                 metaLine = `<span style="color:#ef4444;font-weight:600;">JAR</span> · ${formatSize(item.size)} · ${item.modified || ''}`;
+            } else if (currentType === 'api' && !isDir) {
+                metaLine = `<span style="color:#7c3aed;font-weight:600;">API JSON</span> · ${formatSize(item.size)} · ${item.modified || ''}`;
             } else {
                 metaLine = isDir ? '目录' : formatSize(item.size) + ' · ' + (item.modified || '');
             }
@@ -293,7 +288,6 @@
         const name = fullPath.split('/').pop();
         const ext = getFileExt(name);
 
-        // ★ jar 文件直接下载（deploy 类型或任何 jar）
         if (ext === 'jar') {
             downloadResource(fullPath);
             return;
@@ -310,7 +304,7 @@
             );
             return;
         }
-        if (['html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'pdf'].includes(ext)) {
+        if (['html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'pdf', 'json'].includes(ext)) {
             window.open(
                 `${API_BASE}/resources/preview?type=${encodeURIComponent(currentType)}&path=${encodeURIComponent(fullPath)}`,
                 '_blank'
@@ -367,11 +361,9 @@
         } catch (err) { showMsg(err.message); }
     }
 
-    // ==================== 非驱动/部署类型上传 ====================
     async function uploadGenericResources(files) {
         if (!files || files.length === 0) return;
 
-        // ★ 新增：项目部署类型只允许 .jar
         if (currentType === 'deploy') {
             const invalid = files.filter(f => !f.name.toLowerCase().endsWith('.jar'));
             if (invalid.length > 0) {
@@ -404,7 +396,6 @@
         highlightType(currentType);
     }
 
-    // ==================== 驱动上传弹窗 ====================
     function setDriverBanner(kind, html) {
         if (!driverDetectBanner) return;
         driverDetectBanner.className = 'detect-banner ' + kind;
@@ -483,7 +474,6 @@
         }
     }
 
-    // ==================== 驱动弹窗事件绑定 ====================
     if (driverFilePicker && driverJarFile) {
         driverFilePicker.addEventListener('click', () => driverJarFile.click());
     }
@@ -535,7 +525,6 @@
         });
     }
 
-    // ==================== 主按钮事件 ====================
     if (uploadResourceBtn) {
         uploadResourceBtn.addEventListener('click', () => {
             if (currentType === 'drivers') {
@@ -562,6 +551,5 @@
         });
     }
 
-    // ==================== 启动 ====================
     loadResourceTypes();
 })();

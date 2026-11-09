@@ -29,8 +29,8 @@ public class DirectoryService {
     public static final String RES_TYPE_SQL         = "sql";
     public static final String RES_TYPE_ATTACHMENTS = "attachments";
     public static final String RES_TYPE_DRIVERS     = "drivers";
-    // ★ 新增：项目部署目录（用于管理项目 jar）
     public static final String RES_TYPE_DEPLOY      = "deploy";
+    public static final String RES_TYPE_API         = "api";
     public static final String RES_TYPE_OTHERS      = "others";
 
     private static final Map<String, String> RESOURCE_TYPES = new LinkedHashMap<>();
@@ -40,14 +40,13 @@ public class DirectoryService {
         RESOURCE_TYPES.put(RES_TYPE_SQL,         "SQL管理");
         RESOURCE_TYPES.put(RES_TYPE_ATTACHMENTS, "附件");
         RESOURCE_TYPES.put(RES_TYPE_DRIVERS,     "驱动管理");
-        // ★ 新增
         RESOURCE_TYPES.put(RES_TYPE_DEPLOY,      "项目部署");
+        RESOURCE_TYPES.put(RES_TYPE_API,         "API 资源");
         RESOURCE_TYPES.put(RES_TYPE_OTHERS,      "其他");
     }
 
     private static final String UUID_REGEX = "[0-9a-f]{12,32}";
 
-    /** 驱动存储名反解：{dbType}_{version}_{原始文件名}.jar */
     private static final Pattern DRIVER_STORAGE_PATTERN = Pattern.compile(
             "^([a-z]+)_(.+?)_(.+\\.jar)$", Pattern.CASE_INSENSITIVE);
 
@@ -65,10 +64,11 @@ public class DirectoryService {
         for (String type : RESOURCE_TYPES.keySet()) {
             ensureRootExists(resourcesRoot.resolve(type));
         }
-        log.info("资源管理根目录已就绪: {}, 驱动目录: {}, 部署目录: {}",
+        log.info("资源管理根目录已就绪: {}, 驱动目录: {}, 部署目录: {}, API 目录: {}",
                 resourcesRoot,
                 resourcesRoot.resolve(RES_TYPE_DRIVERS),
-                resourcesRoot.resolve(RES_TYPE_DEPLOY));
+                resourcesRoot.resolve(RES_TYPE_DEPLOY),
+                resourcesRoot.resolve(RES_TYPE_API));
     }
 
     private void ensureRootExists(Path root) {
@@ -77,8 +77,6 @@ public class DirectoryService {
             catch (IOException e) { throw new RuntimeException("无法创建目录: " + root, e); }
         }
     }
-
-    // ==================== 本地目录（保持不变） ====================
 
     public Path getRootPath(String rootType) {
         return ROOT_TYPE_RESOURCES.equals(rootType) ? resourcesRoot : localRoot;
@@ -185,8 +183,6 @@ public class DirectoryService {
         }
     }
 
-    // ==================== 资源管理 ====================
-
     public Map<String, String> getResourceTypes() { return new LinkedHashMap<>(RESOURCE_TYPES); }
 
     public Path getResourceTypePath(String type) {
@@ -203,7 +199,6 @@ public class DirectoryService {
         return target;
     }
 
-    /** 通用 UUID 命名（非驱动/部署类型使用） */
     private String generateStoredName(String originalName) {
         String baseName = originalName;
         String ext = "";
@@ -215,8 +210,6 @@ public class DirectoryService {
         String uuid = UUID.randomUUID().toString().replace("-", "");
         return baseName + "_" + uuid + ext;
     }
-
-    // ==================== 驱动存储名反解 ====================
 
     private String[] parseDriverStorageName(String storedName) {
         Matcher m = DRIVER_STORAGE_PATTERN.matcher(storedName);
@@ -232,11 +225,9 @@ public class DirectoryService {
             String[] parts = parseDriverStorageName(storedName);
             return parts != null ? parts[2] : storedName;
         }
-        // ★ 部署类型保留原文件名（不做 uuid 剥离），因为存储时未加 uuid 后缀
         if (RES_TYPE_DEPLOY.equals(type)) {
             return storedName;
         }
-        // 保留原有逻辑，供其他类型使用
         int dotIdx = storedName.lastIndexOf('.');
         String baseName = dotIdx > 0 ? storedName.substring(0, dotIdx) : storedName;
         String ext = dotIdx > 0 ? storedName.substring(dotIdx) : "";
@@ -273,7 +264,6 @@ public class DirectoryService {
                 item.put("size", isDir ? 0 : Files.size(p));
                 item.put("modified", sdf.format(Files.getLastModifiedTime(p).toMillis()));
 
-                // 驱动类型额外反解 dbType / version
                 if (!isDir && RES_TYPE_DRIVERS.equals(type)) {
                     String[] parts = parseDriverStorageName(name);
                     if (parts != null) {
@@ -314,8 +304,6 @@ public class DirectoryService {
         return result;
     }
 
-    // ==================== 上传（核心改造） ====================
-
     public Map<String, Object> uploadResource(String type, String subPath,
                                               String originalName, byte[] content) throws IOException {
         return uploadResource(type, subPath, originalName, content, null, null);
@@ -326,14 +314,12 @@ public class DirectoryService {
         if (RES_TYPE_DRIVERS.equals(type)) {
             return uploadDriverResource(subPath, originalName, content, dbType, version);
         }
-        // ★ 新增：项目部署类型走专用上传（只收 .jar，保留原名，同名拒绝）
         if (RES_TYPE_DEPLOY.equals(type)) {
             return uploadDeployResource(subPath, originalName, content);
         }
         return uploadGenericResource(type, subPath, originalName, content);
     }
 
-    /** 驱动专用上传 */
     private Map<String, Object> uploadDriverResource(String subPath, String originalName,
                                                      byte[] content,
                                                      String dbType, String version) throws IOException {
@@ -379,14 +365,6 @@ public class DirectoryService {
         return result;
     }
 
-    // ★ ==================== 项目部署专用上传 ====================
-    /**
-     * 项目部署上传：
-     *  - 只允许 .jar
-     *  - 保留原始文件名（部署时可直接 java -jar xxx.jar）
-     *  - 同名文件已存在则拒绝（避免误覆盖已部署的包）
-     *  - 支持子目录
-     */
     private Map<String, Object> uploadDeployResource(String subPath, String originalName,
                                                      byte[] content) throws IOException {
         if (originalName == null || originalName.trim().isEmpty())
@@ -396,7 +374,6 @@ public class DirectoryService {
         if (!cleanName.toLowerCase().endsWith(".jar"))
             throw new IllegalArgumentException("项目部署目录只允许上传 .jar 文件");
 
-        // 路径穿越 / 非法字符校验
         if (cleanName.contains("/") || cleanName.contains("\\")
                 || cleanName.contains("..") || cleanName.contains("\u0000"))
             throw new IllegalArgumentException("非法文件名: " + originalName);
@@ -428,7 +405,6 @@ public class DirectoryService {
         return result;
     }
 
-    /** 通用上传（其他类型） */
     private Map<String, Object> uploadGenericResource(String type, String subPath,
                                                       String originalName, byte[] content) throws IOException {
         Path dir = resolveResourcePath(type, subPath);
@@ -450,8 +426,6 @@ public class DirectoryService {
                 type, subPath, originalName, storedName, content.length);
         return result;
     }
-
-    // ==================== 删除 / 读取（保持兼容） ====================
 
     public void deleteResource(String type, String fullRelPath) throws IOException {
         Path target = resolveResourcePath(type, fullRelPath);

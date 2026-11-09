@@ -3,192 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API Explorer - 接口调试 / 自定义 / 发布</title>
+    <title>API Explorer - 接口调试 / 自定义 API</title>
     <link rel="stylesheet" href="../global-tech.css">
     <link rel="stylesheet" href="apiexplorer.css">
     <script src="../global.js"></script>
 </head>
 <body>
-<div class="api-container">
-    <aside class="api-sidebar">
-        <div class="sidebar-header">
-            <h3>📡 API Explorer</h3>
-            <div class="search-box">
-                <input type="text" id="apiSearch" placeholder="搜索接口...">
-            </div>
-        </div>
-        <div class="api-tree-wrapper">
-            <ul class="api-tree" id="apiTree">
-                <li class="loading">加载中...</li>
-            </ul>
-        </div>
-    </aside>
+<div class="apiexplorer-wrap">
 
-    <main class="api-content">
-        <div class="api-tabs">
-            <div class="tab-bar">
-                <button class="tab-button active" data-tab="api-debug">🔧 接口调试</button>
-                <button class="tab-button" data-tab="custom-request">✨ 自定义 / 发布 API</button>
-            </div>
+    <!-- ============ 顶级 Tab 栏 ============ -->
+    <div class="top-tab-bar">
+        <button class="top-tab active" data-top-tab="debug">
+            <span class="tab-icon">🔧</span><span>接口调试</span>
+        </button>
+        <button class="top-tab" data-top-tab="custom">
+            <span class="tab-icon">📚</span><span>自定义 API</span>
+        </button>
+    </div>
 
-            <div class="tab-pane active" id="apiDebugPane">
-                <div id="apiDetail" class="api-detail">
-                    <div class="empty-state">
-                        <span class="empty-icon">🔍</span>
-                        <p>从左侧选择一个接口</p>
-                    </div>
+    <!-- ============ 接口调试面板（原有逻辑） ============ -->
+    <div class="top-tab-pane active" id="paneDebug">
+        <aside class="api-sidebar">
+            <div class="sidebar-header">
+                <h3>📡 API 列表</h3>
+                <div class="search-box">
+                    <input type="text" id="apiSearch" placeholder="搜索接口...">
                 </div>
             </div>
-
-            <div class="tab-pane" id="customRequestPane">
-                <div class="custom-request-wrap">
-
-                    <div class="subtab-bar">
-                        <button class="subtab-btn active" data-subtab="temp">⚡ 临时调试</button>
-                        <button class="subtab-btn" data-subtab="publish">📤 发布 API</button>
-                        <button class="subtab-btn" data-subtab="published">📚 已发布 API</button>
-                    </div>
-
-                    <div class="subtab-pane active" id="subTempPane">
-                        <div class="custom-request-container">
-                            <div class="form-group">
-                                <label>🌐 请求地址 (URL)</label>
-                                <input type="text" id="customApiUrl"
-                                       placeholder="https://api.example.com/endpoint"
-                                       value="https://jsonplaceholder.typicode.com/posts">
-                            </div>
-                            <div class="form-group">
-                                <label>⚙️ 请求方法</label>
-                                <select id="customApiMethod">
-                                    <option value="GET">GET</option>
-                                    <option value="POST">POST</option>
-                                    <option value="PUT">PUT</option>
-                                    <option value="DELETE">DELETE</option>
-                                    <option value="PATCH">PATCH</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>📄 参数格式</label>
-                                <select id="bodyFormatSelect">
-                                    <option value="json">JSON (application/json)</option>
-                                    <option value="form">表单 (application/x-www-form-urlencoded)</option>
-                                    <option value="text">纯文本 (text/plain)</option>
-                                </select>
-                            </div>
-                            <div class="form-group" id="customBodyContainer">
-                                <label>📦 请求 Body</label>
-                                <div id="bodyEditor"></div>
-                            </div>
-                            <button id="sendCustomRequestBtn" class="send-btn">🚀 发送自定义请求</button>
-                            <div id="customResponseArea" class="response-area" style="display:none;"></div>
-                        </div>
-                    </div>
-
-                    <div class="subtab-pane" id="subPublishPane">
-                        <div class="publish-container">
-                            <h3 style="color:var(--accent-primary);margin-bottom:16px;">📤 发布新 API</h3>
-
-                            <div class="form-row">
-                                <div class="form-group" style="flex:2;">
-                                    <label>API 名称 *</label>
-                                    <input type="text" id="pubName" placeholder="如：查询用户列表">
-                                </div>
-                                <div class="form-group" style="flex:2;">
-                                    <label>API 路径 *</label>
-                                    <input type="text" id="pubPath" placeholder="/custom/api/user/list">
-                                </div>
-                                <div class="form-group" style="flex:0 0 120px;">
-                                    <label>方法</label>
-                                    <select id="pubMethod">
-                                        <option value="GET">GET</option>
-                                        <option value="POST" selected>POST</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label>描述</label>
-                                <input type="text" id="pubDesc" placeholder="可选，一句话说明">
-                            </div>
-
-                            <h4 style="color:var(--accent-primary);margin:20px 0 12px;">📊 数据源配置</h4>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>数据源 *</label>
-                                    <select id="pubDs"><option value="">加载中...</option></select>
-                                </div>
-                                <div class="form-group">
-                                    <label>数据库 *</label>
-                                    <select id="pubDb" disabled><option value="">-- 先选数据源 --</option></select>
-                                </div>
-                                <div class="form-group">
-                                    <label>数据表 *</label>
-                                    <select id="pubTable" disabled><option value="">-- 先选数据库 --</option></select>
-                                </div>
-                                <div class="form-group" style="flex:0 0 110px;">
-                                    <label>分页</label>
-                                    <select id="pubPageEnabled">
-                                        <option value="0">关闭</option>
-                                        <option value="1">开启</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <h4 style="color:var(--accent-primary);margin:20px 0 12px;">📥 入参定义</h4>
-                            <p class="hint-tip">所有入参最终都会作为 WHERE 条件（字段名取自参数名或映射列），未填值自动忽略；page / pageSize 由系统自动识别。</p>
-                            <div class="param-table-wrap">
-                                <table class="param-table" id="pubInputTable">
-                                    <thead><tr>
-                                        <th style="min-width:120px;">参数名</th>
-                                        <th style="min-width:100px;">类型</th>
-                                        <th style="min-width:100px;">位置</th>
-                                        <th style="min-width:60px;">必填</th>
-                                        <th style="min-width:100px;">默认值</th>
-                                        <th style="min-width:140px;">描述</th>
-                                        <th style="min-width:60px;">操作</th>
-                                    </tr></thead>
-                                    <tbody id="pubInputTableBody"></tbody>
-                                </table>
-                            </div>
-                            <button class="btn-secondary btn-sm" id="addInputBtn" style="margin-top:8px;">+ 添加入参</button>
-
-                            <h4 style="color:var(--accent-primary);margin:20px 0 12px;">📤 出参定义（勾选要返回的字段）</h4>
-                            <div class="output-fields" id="pubOutputFields">
-                                <div class="empty-tip">请先选择数据表</div>
-                            </div>
-
-                            <div class="action-row" style="margin-top:24px;">
-                                <button class="send-btn" id="publishApiBtn">📤 发布 API</button>
-                                <button class="btn-secondary" id="saveDraftBtn">💾 保存草稿</button>
-                                <button class="btn-secondary" id="resetPublishBtn">🗑 重置</button>
-                            </div>
-
-                            <div id="publishResult" class="response-area" style="display:none;margin-top:16px;"></div>
-                        </div>
-                    </div>
-
-                    <div class="subtab-pane" id="subPublishedPane">
-                        <div class="published-container">
-                            <div class="published-header-bar">
-                                <h3 style="color:var(--accent-primary);">📚 已发布 API</h3>
-                                <div style="display:flex;gap:8px;align-items:center;">
-                                    <button class="btn-secondary btn-sm" id="refreshPublishedBtn">🔄 刷新</button>
-                                    <span class="hint-tip">调用入口：POST /api/gateway/execute</span>
-                                </div>
-                            </div>
-                            <div id="publishedApiList" class="published-list">
-                                <div class="empty-tip">加载中...</div>
-                            </div>
-                        </div>
-                    </div>
-
+            <div class="api-tree-wrapper">
+                <ul class="api-tree" id="apiTree">
+                    <li class="loading">加载中...</li>
+                </ul>
+            </div>
+        </aside>
+        <main class="api-content">
+            <div id="apiDetail" class="api-detail">
+                <div class="empty-state">
+                    <span class="empty-icon">🔍</span>
+                    <p>从左侧选择一个接口</p>
                 </div>
             </div>
-        </div>
-    </main>
+        </main>
+    </div>
+
+    <!-- ============ 自定义 API 面板（新增） ============ -->
+    <div class="top-tab-pane" id="paneCustom">
+        <aside class="custom-sidebar">
+            <div class="custom-sidebar-header">
+                <h3>📚 已发布 API</h3>
+                <button id="newApiBtn" class="btn-primary btn-sm">＋ 发布新 API</button>
+            </div>
+            <div class="custom-api-list" id="customApiList">
+                <div class="loading">加载中...</div>
+            </div>
+        </aside>
+        <main class="custom-main" id="customMain">
+            <div class="empty-state">
+                <span class="empty-icon">📝</span>
+                <p>点击左侧「+ 发布新 API」开始，或选择已发布 API 查看详情</p>
+            </div>
+        </main>
+    </div>
 </div>
 
-<!-- ============ ★ 新增：API 测试弹窗 ============ -->
+<!-- ============ API 测试弹窗（保留） ============ -->
 <div id="apiTestModal" class="api-test-modal" style="display:none;">
     <div class="api-test-modal-content">
         <div class="api-test-modal-header">

@@ -1,5 +1,32 @@
-(function() {
-    // ---------- API 调试核心逻辑 ----------
+(function () {
+    'use strict';
+
+    /* ============================================================
+     * ★ 顶级 Tab 切换
+     * ============================================================ */
+    const topTabs = document.querySelectorAll('.top-tab');
+    const panes = {
+        debug: document.getElementById('paneDebug'),
+        custom: document.getElementById('paneCustom')
+    };
+
+    function switchTopTab(id) {
+        topTabs.forEach(t => t.classList.toggle('active', t.dataset.topTab === id));
+        Object.keys(panes).forEach(k => {
+            if (panes[k]) panes[k].classList.toggle('active', k === id);
+        });
+        if (id === 'custom' && window.CustomApi && window.CustomApi.onShow) {
+            window.CustomApi.onShow();
+        }
+    }
+
+    topTabs.forEach(tab => {
+        tab.addEventListener('click', () => switchTopTab(tab.dataset.topTab));
+    });
+
+    /* ============================================================
+     * ★ 接口调试面板（原有逻辑保留）
+     * ============================================================ */
     let modules = [];
     let currentApi = null;
     let allApis = [];
@@ -8,9 +35,8 @@
     const apiDetailDiv = document.getElementById('apiDetail');
     const searchInput = document.getElementById('apiSearch');
 
-    // 辅助函数：根据参数名智能生成示例值
-    function getDefaultParamValue(name, typeHint = 'string') {
-        const lowerName = name.toLowerCase();
+    function getDefaultParamValue(name, typeHint) {
+        const lowerName = (name || '').toLowerCase();
         if (lowerName.includes('id')) return '1';
         if (lowerName.includes('name')) return 'example_name';
         if (lowerName.includes('page')) return '1';
@@ -22,46 +48,29 @@
         return 'value';
     }
 
-    // 格式化 JSON 字符串
-    function formatJsonString(jsonStr) {
-        try {
-            const parsed = JSON.parse(jsonStr);
-            return JSON.stringify(parsed, null, 2);
-        } catch (e) {
-            return null;
-        }
+    function formatJsonString(s) {
+        try { return JSON.stringify(JSON.parse(s), null, 2); } catch (e) { return null; }
     }
 
     function fillParamExamples() {
-        const inputs = document.querySelectorAll('.param-input');
-        inputs.forEach(input => {
+        document.querySelectorAll('.param-input').forEach(input => {
             const name = input.dataset.name;
             const typeSelect = input.closest('tr')?.querySelector('.param-type-select');
             const typeHint = typeSelect ? typeSelect.value : 'string';
-            if (!input.value || input.value === '') {
-                input.value = getDefaultParamValue(name, typeHint);
-            }
+            if (!input.value) input.value = getDefaultParamValue(name, typeHint);
         });
     }
 
     function fillExampleJson() {
-        const bodyTextarea = document.getElementById('requestBody');
-        if (bodyTextarea) {
-            const example = { example: "value", id: 1, name: "sample" };
-            bodyTextarea.value = JSON.stringify(example, null, 2);
-        }
+        const ta = document.getElementById('requestBody');
+        if (ta) ta.value = JSON.stringify({ example: "value", id: 1, name: "sample" }, null, 2);
     }
 
     function beautifyRequestBody() {
-        const bodyTextarea = document.getElementById('requestBody');
-        if (bodyTextarea) {
-            const formatted = formatJsonString(bodyTextarea.value);
-            if (formatted) {
-                bodyTextarea.value = formatted;
-            } else {
-                alert('当前内容不是合法的 JSON，无法格式化');
-            }
-        }
+        const ta = document.getElementById('requestBody');
+        if (!ta) return;
+        const f = formatJsonString(ta.value);
+        if (f) ta.value = f; else alert('当前内容不是合法的 JSON，无法格式化');
     }
 
     async function loadModules() {
@@ -70,89 +79,61 @@
             if (!resp.ok) throw new Error('加载失败');
             modules = await resp.json();
             allApis = [];
-            modules.forEach(module => {
-                module.apis.forEach(api => {
-                    api.moduleName = module.moduleName;
-                    allApis.push(api);
-                });
-            });
+            modules.forEach(m => m.apis.forEach(a => { a.moduleName = m.moduleName; allApis.push(a); }));
             renderTree(modules);
         } catch (err) {
             apiTree.innerHTML = `<li class="loading" style="color:red;">❌ ${err.message}</li>`;
         }
     }
 
-    function renderTree(modulesData) {
-        if (!modulesData.length) {
-            apiTree.innerHTML = '<li class="loading">暂无接口</li>';
-            return;
-        }
+    function escapeHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+    }
 
-        const treeHtml = modulesData.map(module => {
-            const apiItems = module.apis.map(api => `
-                <li class="tree-node api-node" data-id="${api.id}" data-path="${api.path}" data-method="${api.method}">
-                    <div class="tree-item api">
-                        <span class="toggle-placeholder" style="width:20px;"></span>
-                        <span class="icon">📄</span>
-                        <span class="api-method-badge ${api.method.toLowerCase()}">${api.method}</span>
-                        <span class="name">${escapeHtml(api.summary || api.path)}</span>
-                    </div>
-                </li>
-            `).join('');
+    function renderTree(mods) {
+        if (!mods.length) { apiTree.innerHTML = '<li class="loading">暂无接口</li>'; return; }
+        apiTree.innerHTML = mods.map(m => `
+            <li class="tree-node module-node">
+                <div class="tree-item module">
+                    <span class="toggle toggle-collapsed">▶</span>
+                    <span class="icon">📁</span>
+                    <span class="name">${escapeHtml(m.moduleName)}</span>
+                    <span class="badge">${m.apis.length}</span>
+                </div>
+                <ul class="tree-children">
+                    ${m.apis.map(a => `
+                        <li class="tree-node api-node" data-id="${a.id}" data-path="${escapeHtml(a.path)}" data-method="${a.method}">
+                            <div class="tree-item api">
+                                <span class="toggle-placeholder" style="width:20px;"></span>
+                                <span class="icon">📄</span>
+                                <span class="api-method-badge ${a.method.toLowerCase()}">${a.method}</span>
+                                <span class="name">${escapeHtml(a.summary || a.path)}</span>
+                            </div>
+                        </li>
+                    `).join('')}
+                </ul>
+            </li>
+        `).join('');
 
-            return `
-                <li class="tree-node module-node" data-module="${escapeHtml(module.moduleName)}">
-                    <div class="tree-item module">
-                        <span class="toggle toggle-collapsed">▶</span>
-                        <span class="icon">📁</span>
-                        <span class="name">${escapeHtml(module.moduleName)}</span>
-                        <span class="badge">${module.apis.length}</span>
-                    </div>
-                    <ul class="tree-children">${apiItems}</ul>
-                </li>
-            `;
-        }).join('');
-
-        apiTree.innerHTML = treeHtml;
-
-        document.querySelectorAll('.module-node > .tree-item.module .toggle').forEach(toggle => {
-            toggle.addEventListener('click', (e) => {
+        apiTree.querySelectorAll('.module-node > .tree-item.module .toggle').forEach(toggle => {
+            toggle.addEventListener('click', e => {
                 e.stopPropagation();
-                const moduleNode = toggle.closest('.module-node');
-                const childrenUl = moduleNode.querySelector(':scope > .tree-children');
-                if (childrenUl) {
-                    const isOpen = childrenUl.classList.contains('open');
-                    if (isOpen) {
-                        childrenUl.classList.remove('open');
-                        toggle.textContent = '▶';
-                    } else {
-                        childrenUl.classList.add('open');
-                        toggle.textContent = '▼';
-                    }
-                }
+                const ul = toggle.closest('.module-node').querySelector(':scope > .tree-children');
+                const open = ul.classList.toggle('open');
+                toggle.textContent = open ? '▼' : '▶';
             });
         });
-
-        document.querySelectorAll('.api-node').forEach(node => {
-            node.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const id = node.dataset.id;
-                selectApi(id);
-            });
+        apiTree.querySelectorAll('.api-node').forEach(node => {
+            node.addEventListener('click', e => { e.stopPropagation(); selectApi(node.dataset.id); });
         });
-
-        const firstModule = document.querySelector('.module-node');
-        if (firstModule) {
-            const toggle = firstModule.querySelector('.toggle');
-            const childrenUl = firstModule.querySelector(':scope > .tree-children');
-            if (childrenUl) {
-                childrenUl.classList.add('open');
-                if (toggle) toggle.textContent = '▼';
-            }
-            const firstApi = firstModule.querySelector('.api-node');
-            if (firstApi) {
-                selectApi(firstApi.dataset.id);
-            }
+        const first = apiTree.querySelector('.module-node');
+        if (first) {
+            const toggle = first.querySelector('.toggle');
+            const ul = first.querySelector(':scope > .tree-children');
+            if (ul) { ul.classList.add('open'); if (toggle) toggle.textContent = '▼'; }
+            const firstApi = first.querySelector('.api-node');
+            if (firstApi) selectApi(firstApi.dataset.id);
         }
     }
 
@@ -160,11 +141,7 @@
         const api = allApis.find(a => a.id === id);
         if (!api) return;
         currentApi = api;
-
-        document.querySelectorAll('.api-node').forEach(node => {
-            node.classList.toggle('active', node.dataset.id === id);
-        });
-
+        document.querySelectorAll('.api-node').forEach(n => n.classList.toggle('active', n.dataset.id === id));
         renderApiDetail(api);
     }
 
@@ -173,9 +150,9 @@
         if (api.parameters && api.parameters.length) {
             paramsHtml = `
                 <div class="params-section">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                         <h4>📌 请求参数</h4>
-                        <button id="fillParamsBtn" class="btn-secondary" style="padding: 4px 12px; font-size:12px;">⚡ 一键填充示例参数</button>
+                        <button id="fillParamsBtn" class="btn-secondary" style="padding:4px 12px;font-size:12px;">⚡ 填充示例</button>
                     </div>
                     <table class="params-table">
                         <thead><tr><th>参数名</th><th>位置</th><th>类型</th><th>必填</th><th>值</th></tr></thead>
@@ -185,7 +162,7 @@
                                     <td>${escapeHtml(p.name)}</td>
                                     <td>${p.in}</td>
                                     <td>
-                                        <select class="param-type-select" data-name="${p.name}" data-in="${p.in}">
+                                        <select class="param-type-select" data-name="${p.name}">
                                             <option value="string">string</option>
                                             <option value="number">number</option>
                                             <option value="boolean">boolean</option>
@@ -193,40 +170,25 @@
                                         </select>
                                     </td>
                                     <td>${p.required ? '是' : '否'}</td>
-                                    <td><input type="text" class="param-input" data-name="${p.name}" data-in="${p.in}" placeholder="输入值"></td>
+                                    <td><input type="text" class="param-input" data-name="${p.name}" data-in="${p.in}" placeholder="值"></td>
                                 </tr>
                             `).join('')}
                         </tbody>
                     </table>
-                </div>
-            `;
+                </div>`;
         }
-
         let bodyHtml = '';
         if (api.requestBody) {
             bodyHtml = `
                 <div class="request-body">
-                    <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 8px;">
-                        <h4>📦 请求 Body (JSON)</h4>
-                        <button id="beautifyJsonBtn" class="btn-secondary" style="padding: 4px 12px; font-size:12px;">🎨 JSON 格式化</button>
-                        <button id="exampleJsonBtn" class="btn-secondary" style="padding: 4px 12px; font-size:12px;">📋 示例 JSON</button>
+                    <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
+                        <h4>📦 Body (JSON)</h4>
+                        <button id="beautifyJsonBtn" class="btn-secondary" style="padding:4px 12px;font-size:12px;">🎨 格式化</button>
+                        <button id="exampleJsonBtn" class="btn-secondary" style="padding:4px 12px;font-size:12px;">📋 示例</button>
                     </div>
-                    <textarea id="requestBody" placeholder='{"key": "value"}'></textarea>
-                </div>
-            `;
+                    <textarea id="requestBody" placeholder='{"key":"value"}'></textarea>
+                </div>`;
         }
-
-        let responseHtml = '';
-        if (api.responseContentType) {
-            responseHtml = `
-                <div class="response-section">
-                    <h4>📤 响应格式</h4>
-                    <div class="response-content-type">${escapeHtml(api.responseContentType)}</div>
-                    ${api.responseExample ? `<div class="response-example">${escapeHtml(api.responseExample)}</div>` : ''}
-                </div>
-            `;
-        }
-
         apiDetailDiv.innerHTML = `
             <div class="detail-header">
                 <div class="detail-path">${api.method} ${escapeHtml(api.path)}</div>
@@ -234,169 +196,77 @@
             </div>
             ${paramsHtml}
             ${bodyHtml}
-            ${responseHtml}
             <button id="sendRequestBtn" class="send-btn">🚀 发送请求</button>
             <div id="responseArea" class="response-area" style="display:none;"></div>
         `;
-
         document.getElementById('sendRequestBtn').addEventListener('click', () => sendRequest(api));
-
-        if (api.requestBody) {
-            document.getElementById('beautifyJsonBtn')?.addEventListener('click', beautifyRequestBody);
-            document.getElementById('exampleJsonBtn')?.addEventListener('click', fillExampleJson);
-        }
-        if (api.parameters && api.parameters.length) {
-            document.getElementById('fillParamsBtn')?.addEventListener('click', fillParamExamples);
-            const inputs = document.querySelectorAll('.param-input');
-            inputs.forEach(input => {
-                const name = input.dataset.name;
-                const typeSelect = input.closest('tr')?.querySelector('.param-type-select');
-                const typeHint = typeSelect ? typeSelect.value : 'string';
-                if (!input.value) {
-                    input.placeholder = `例如: ${getDefaultParamValue(name, typeHint)}`;
-                }
-            });
-        }
+        document.getElementById('beautifyJsonBtn')?.addEventListener('click', beautifyRequestBody);
+        document.getElementById('exampleJsonBtn')?.addEventListener('click', fillExampleJson);
+        document.getElementById('fillParamsBtn')?.addEventListener('click', fillParamExamples);
     }
 
     async function sendRequest(api) {
         let url = window.apiUrl(api.path);
         const queryParams = [];
         const pathParams = {};
-
         if (api.parameters) {
-            const inputs = document.querySelectorAll('.param-input');
-            inputs.forEach(input => {
+            document.querySelectorAll('.param-input').forEach(input => {
                 const name = input.dataset.name;
-                const value = input.value.trim();
-                const location = input.dataset.in;
-                if (value) {
-                    if (location === 'query') {
-                        queryParams.push(`${encodeURIComponent(name)}=${encodeURIComponent(value)}`);
-                    } else if (location === 'path') {
-                        pathParams[name] = value;
-                    }
+                const val = input.value.trim();
+                const loc = input.dataset.in;
+                if (val) {
+                    if (loc === 'query') queryParams.push(`${encodeURIComponent(name)}=${encodeURIComponent(val)}`);
+                    else if (loc === 'path') pathParams[name] = val;
                 }
             });
         }
-
         let finalPath = api.path;
-        for (const [key, val] of Object.entries(pathParams)) {
-            finalPath = finalPath.replace(`{${key}}`, encodeURIComponent(val));
-        }
+        for (const [k, v] of Object.entries(pathParams)) finalPath = finalPath.replace(`{${k}}`, encodeURIComponent(v));
         url = window.apiUrl(finalPath);
-
-        if (queryParams.length) {
-            url += '?' + queryParams.join('&');
-        }
+        if (queryParams.length) url += '?' + queryParams.join('&');
 
         let body = null;
         let contentType = 'application/json';
         if (api.requestBody) {
-            const bodyText = document.getElementById('requestBody')?.value;
-            if (bodyText && bodyText.trim()) {
-                try {
-                    JSON.parse(bodyText);
-                    body = bodyText;
-                } catch (e) {
-                    body = bodyText;
-                    contentType = 'text/plain';
-                }
+            const ta = document.getElementById('requestBody');
+            if (ta && ta.value.trim()) {
+                try { JSON.parse(ta.value); body = ta.value; }
+                catch (e) { body = ta.value; contentType = 'text/plain'; }
             }
         }
-
-        const responseDiv = document.getElementById('responseArea');
-        responseDiv.style.display = 'block';
-        responseDiv.innerHTML = '<div class="loading">⏳ 请求中...</div>';
-
+        const respDiv = document.getElementById('responseArea');
+        respDiv.style.display = 'block';
+        respDiv.innerHTML = '<div class="loading">⏳ 请求中...</div>';
         try {
-            const options = {
-                method: api.method,
-                headers: { 'Content-Type': contentType }
-            };
-            if (body) {
-                options.body = body;
-            }
+            const options = { method: api.method, headers: { 'Content-Type': contentType } };
+            if (body) options.body = body;
             const resp = await fetch(url, options);
-            const responseText = await resp.text();
-            let formatted = responseText;
-            try {
-                const json = JSON.parse(responseText);
-                formatted = JSON.stringify(json, null, 2);
-            } catch (e) {}
-            responseDiv.innerHTML = `
-                <div style="margin-bottom: 8px; color: ${resp.ok ? '#10b981' : '#ef4444'}">
+            const text = await resp.text();
+            let formatted = text;
+            try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+            respDiv.innerHTML = `
+                <div style="margin-bottom:8px;color:${resp.ok ? '#10b981' : '#ef4444'}">
                     <strong>状态码: ${resp.status} ${resp.statusText}</strong>
                 </div>
-                <pre style="margin:0; white-space:pre-wrap;">${escapeHtml(formatted)}</pre>
-            `;
+                <pre style="margin:0;white-space:pre-wrap;">${escapeHtml(formatted)}</pre>`;
         } catch (err) {
-            responseDiv.innerHTML = `<div style="color:#ef4444;">❌ 请求失败: ${err.message}</div>`;
+            respDiv.innerHTML = `<div style="color:#ef4444;">❌ 请求失败: ${err.message}</div>`;
         }
     }
 
-    searchInput.addEventListener('input', (e) => {
-        const keyword = e.target.value.toLowerCase();
-        if (!keyword) {
-            renderTree(modules);
-            return;
-        }
-        const filteredModules = [];
-        modules.forEach(module => {
-            const filteredApis = module.apis.filter(api =>
-                api.path.toLowerCase().includes(keyword) ||
-                (api.summary && api.summary.toLowerCase().includes(keyword))
-            );
-            if (filteredApis.length) {
-                filteredModules.push({
-                    moduleName: module.moduleName,
-                    moduleDescription: module.moduleDescription,
-                    apis: filteredApis
-                });
-            }
-        });
-        renderTree(filteredModules);
-        document.querySelectorAll('.module-node > .tree-item.module .toggle').forEach(toggle => {
-            const childrenUl = toggle.closest('.module-node').querySelector(':scope > .tree-children');
-            if (childrenUl && !childrenUl.classList.contains('open')) {
-                childrenUl.classList.add('open');
-                toggle.textContent = '▼';
-            }
-        });
-    });
-
-    function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
-    }
-
-    // 双 Tab 切换逻辑
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const panes = document.querySelectorAll('.tab-pane');
-
-    function switchTab(tabId) {
-        tabButtons.forEach(btn => {
-            const target = btn.getAttribute('data-tab');
-            if (target === tabId) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-        });
-        panes.forEach(pane => {
-            if ((tabId === 'api-debug' && pane.id === 'apiDebugPane') ||
-                (tabId === 'custom-request' && pane.id === 'customRequestPane')) {
-                pane.classList.add('active');
-            } else {
-                pane.classList.remove('active');
-            }
-        });
-    }
-
-    tabButtons.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const tabId = btn.getAttribute('data-tab');
-            if (tabId) switchTab(tabId);
+    searchInput.addEventListener('input', e => {
+        const kw = e.target.value.toLowerCase();
+        if (!kw) { renderTree(modules); return; }
+        const filtered = modules.map(m => ({
+            moduleName: m.moduleName,
+            apis: m.apis.filter(a =>
+                a.path.toLowerCase().includes(kw)
+                || (a.summary && a.summary.toLowerCase().includes(kw)))
+        })).filter(m => m.apis.length);
+        renderTree(filtered);
+        apiTree.querySelectorAll('.module-node > .tree-item.module .toggle').forEach(t => {
+            const ul = t.closest('.module-node').querySelector(':scope > .tree-children');
+            if (ul) { ul.classList.add('open'); t.textContent = '▼'; }
         });
     });
 
